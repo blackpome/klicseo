@@ -4,7 +4,7 @@ import Services from "@/components/Services";
 import HowItWorks from "@/components/HowItWorks";
 import Pricing from "@/components/Pricing";
 import Testimonials from "@/components/Testimonials";
-import BookingCTA from "@/components/BookingCTA";
+import BookingTeaser from "@/components/BookingTeaser";
 import Footer from "@/components/Footer";
 
 export default function Home() {
@@ -16,7 +16,7 @@ export default function Home() {
       <HowItWorks />
       <Pricing />
       <Testimonials />
-      <BookingCTA />
+      <BookingTeaser />
       <Footer />
     </main>
   );

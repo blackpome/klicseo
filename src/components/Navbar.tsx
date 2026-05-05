@@ -67,8 +67,8 @@ export default function Navbar() {
 
           {/* CTA + mobile menu */}
           <div className="flex items-center gap-3">
-            <a
-              href="tel:+1234567890"
+            <Link
+              href="/booking"
               className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold text-[#050E21] transition-all duration-300 hover:scale-105 hover:shadow-[0_4px_20px_rgba(201,168,76,0.4)]"
               style={{
                 background: "linear-gradient(135deg, #9C7A2A, #C9A84C, #E8CC7A)",
@@ -76,7 +76,7 @@ export default function Navbar() {
             >
               <Phone size={14} />
               Book Now
-            </a>
+            </Link>
 
             <button
               className="md:hidden p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors"
@@ -106,16 +106,17 @@ export default function Navbar() {
               {link.label}
             </a>
           ))}
-          <a
-            href="tel:+1234567890"
+          <Link
+            href="/booking"
             className="flex items-center justify-center gap-2 mt-3 py-3 px-4 rounded-lg font-semibold text-[#050E21]"
             style={{
               background: "linear-gradient(135deg, #9C7A2A, #C9A84C, #E8CC7A)",
             }}
+            onClick={() => setIsOpen(false)}
           >
             <Phone size={16} />
             Book Now
-          </a>
+          </Link>
         </div>
       </div>
     </header>
