@@ -78,8 +78,8 @@ export default function StepPackage({ data, update, onNext }: Props) {
       </h2>
       <p className="text-white/45 text-sm mb-3">Monthly doorstep car wash — we come to you.</p>
 
-      {/* Car showcase */}
-      <CarShowcase pkg={data.pkg} />
+      {/* Car showcase — model updates with the vehicle type toggle below */}
+      <CarShowcase pkg={data.pkg} vehicleType={vehicleOptions[vehicleIdx].label} />
 
       {/* Vehicle type selector — updates prices live */}
       <div className="mt-3 mb-4">

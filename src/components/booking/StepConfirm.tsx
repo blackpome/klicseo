@@ -94,7 +94,7 @@ export default function StepConfirm({ data, onBack }: Props) {
         </p>
 
         <div className="mt-6 w-full">
-          <CarShowcase pkg={data.pkg} />
+          <CarShowcase pkg={data.pkg} vehicleType={data.vehicleType} />
         </div>
       </motion.div>
     );
@@ -107,7 +107,7 @@ export default function StepConfirm({ data, onBack }: Props) {
       </h2>
       <p className="text-white/45 text-sm mb-4">Everything look right?</p>
 
-      <CarShowcase pkg={data.pkg} />
+      <CarShowcase pkg={data.pkg} vehicleType={data.vehicleType} />
 
       {/* Summary */}
       <div className="glass-card rounded-2xl px-3 py-0.5 mb-4 mt-3">

@@ -4,22 +4,51 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Menu, X, Phone } from "lucide-react";
+import { motion, useScroll, useSpring } from "framer-motion";
 
 const navLinks = [
-  { label: "Services", href: "#services" },
-  { label: "How It Works", href: "#how-it-works" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "Testimonials", href: "#testimonials" },
+  { label: "Services",     href: "#services",     id: "services"     },
+  { label: "How It Works", href: "#how-it-works", id: "how-it-works" },
+  { label: "Pricing",      href: "#pricing",      id: "pricing"      },
+  { label: "Testimonials", href: "#testimonials", id: "testimonials" },
 ];
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Page-scroll progress bar (top of viewport)
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 28, mass: 0.3 });
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
-    window.addEventListener("scroll", onScroll);
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // IntersectionObserver for active section
+  useEffect(() => {
+    const sections = navLinks
+      .map((l) => document.getElementById(l.id))
+      .filter((el): el is HTMLElement => Boolean(el));
+
+    if (!sections.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Pick the entry most in view
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visible) setActiveId(visible.target.id);
+      },
+      { rootMargin: "-30% 0px -55% 0px", threshold: [0, 0.25, 0.5, 0.75, 1] },
+    );
+
+    sections.forEach((s) => observer.observe(s));
+    return () => observer.disconnect();
   }, []);
 
   return (
@@ -30,19 +59,34 @@ export default function Navbar() {
           : "bg-transparent"
       }`}
     >
+      {/* Scroll progress strip */}
+      <motion.div
+        className="absolute left-0 right-0 top-0 h-[2px] origin-left"
+        style={{
+          scaleX,
+          background: "linear-gradient(90deg, #9C7A2A 0%, #C9A84C 50%, #E8CC7A 100%)",
+          boxShadow: "0 0 10px rgba(201,168,76,0.6)",
+        }}
+      />
+
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden ring-2 ring-[#1A5FD4]/40 group-hover:ring-[#C9A84C]/60 transition-all duration-300">
+            <motion.div
+              whileHover={{ rotate: 8, scale: 1.06 }}
+              transition={{ type: "spring", stiffness: 320, damping: 18 }}
+              className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden ring-2 ring-[#1A5FD4]/40 group-hover:ring-[#C9A84C]/60 transition-shadow duration-300"
+            >
               <Image
                 src="/Logo.png"
                 alt="Klicseo Logo"
                 fill
                 className="object-cover"
                 priority
+                sizes="(max-width: 640px) 40px, 48px"
               />
-            </div>
+            </motion.div>
             <span
               className="text-lg sm:text-xl font-bold tracking-wide text-white group-hover:text-[#C9A84C] transition-colors duration-300"
               style={{ fontFamily: "var(--font-playfair)" }}
@@ -52,31 +96,50 @@ export default function Navbar() {
           </Link>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => (
-              <a
-                key={link.label}
-                href={link.href}
-                className="text-sm font-medium text-white/70 hover:text-white transition-colors duration-200 relative group"
-              >
-                {link.label}
-                <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-[#C9A84C] group-hover:w-full transition-all duration-300" />
-              </a>
-            ))}
+          <nav className="hidden md:flex items-center gap-2">
+            {navLinks.map((link) => {
+              const active = activeId === link.id;
+              return (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  className={`relative px-3 py-2 text-sm font-medium transition-colors duration-200 ${
+                    active ? "text-white" : "text-white/65 hover:text-white"
+                  }`}
+                >
+                  {/* Active pill — slides between links */}
+                  {active && (
+                    <motion.span
+                      layoutId="nav-active-pill"
+                      className="absolute inset-0 rounded-md bg-[#1A5FD4]/15 border border-[#1A5FD4]/30"
+                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    />
+                  )}
+                  <span className="relative">{link.label}</span>
+                  <span
+                    className={`absolute -bottom-0.5 left-3 right-3 h-px bg-[#C9A84C] transition-transform duration-300 origin-left ${
+                      active ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"
+                    }`}
+                  />
+                </a>
+              );
+            })}
           </nav>
 
           {/* CTA + mobile menu */}
           <div className="flex items-center gap-3">
-            <Link
-              href="/booking"
-              className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold text-[#050E21] transition-all duration-300 hover:scale-105 hover:shadow-[0_4px_20px_rgba(201,168,76,0.4)]"
-              style={{
-                background: "linear-gradient(135deg, #9C7A2A, #C9A84C, #E8CC7A)",
-              }}
-            >
-              <Phone size={14} />
-              Book Now
-            </Link>
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.96 }}>
+              <Link
+                href="/booking"
+                className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold text-[#050E21] shadow-[0_4px_20px_rgba(201,168,76,0.4)] hover:shadow-[0_8px_28px_rgba(201,168,76,0.6)] transition-shadow duration-300"
+                style={{
+                  background: "linear-gradient(135deg, #9C7A2A, #C9A84C, #E8CC7A)",
+                }}
+              >
+                <Phone size={14} />
+                Book Now
+              </Link>
+            </motion.div>
 
             <button
               className="md:hidden p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors"
@@ -96,15 +159,18 @@ export default function Navbar() {
         }`}
       >
         <div className="bg-[#071F4A]/95 backdrop-blur-md border-t border-[#1A5FD4]/20 px-4 py-4 space-y-1">
-          {navLinks.map((link) => (
-            <a
+          {navLinks.map((link, i) => (
+            <motion.a
               key={link.label}
               href={link.href}
               onClick={() => setIsOpen(false)}
+              initial={false}
+              animate={isOpen ? { opacity: 1, x: 0 } : { opacity: 0, x: -8 }}
+              transition={{ duration: 0.25, delay: isOpen ? i * 0.04 : 0 }}
               className="block py-3 px-4 text-white/80 hover:text-white hover:bg-[#1A5FD4]/20 rounded-lg transition-colors font-medium"
             >
               {link.label}
-            </a>
+            </motion.a>
           ))}
           <Link
             href="/booking"
