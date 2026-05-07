@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { motion, useAnimationControls } from "framer-motion";
 
@@ -8,6 +8,13 @@ const Car3DViewer = dynamic(() => import("./Car3DViewer"), {
   ssr: false,
   loading: () => <div className="h-[260px] sm:h-[320px]" />,
 });
+
+// Slide-in transition in BookingWizard runs ~300ms; wait a touch longer so
+// the parent step is settled (no transform, no opacity ramp) before the
+// Canvas mounts. Bounds.fit() runs once on mount, and a translated/scaling
+// parent at that moment is what pinned the car to the bottom-right corner
+// when re-entering this step.
+const VIEWER_MOUNT_DELAY_MS = 360;
 
 type Pkg = "Daily" | "TriWeekly" | "OneTime" | null;
 
@@ -44,7 +51,7 @@ const configs = {
     model:     "/models/bmw.glb",
     rimColor:  "#9CA8B8",
     glowColor: "rgba(192,200,212,0.3)",
-    label:     "One-Time Demo Wash",
+    label:     "One-Time Wash",
     particles: false,
     shimmer:   false,
     sparkles:  false,
@@ -100,6 +107,16 @@ export default function CarShowcase({ pkg, vehicleType }: Props) {
     });
   }, [pkg, cineCtrls]);
 
+  // Defer mounting the Canvas until after the parent step's slide-in has
+  // settled. Without this, navigating Step 4 → 3 → 4 would mount the Canvas
+  // mid-transform; with the GLB already cached, Bounds.fit() runs before the
+  // canvas is sized, leaving the car offset to the bottom-right.
+  const [viewerReady, setViewerReady] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setViewerReady(true), VIEWER_MOUNT_DELAY_MS);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <div className="relative flex flex-col items-center justify-center py-2">
       {/* Package glow */}
@@ -125,11 +142,15 @@ export default function CarShowcase({ pkg, vehicleType }: Props) {
         style={{ transformOrigin: "center center" }}
         className="relative w-full"
       >
-        <Car3DViewer
-          model={model}
-          rimColor={rimColor}
-          vehicleType={vehicleType}
-        />
+        {viewerReady ? (
+          <Car3DViewer
+            model={model}
+            rimColor={rimColor}
+            vehicleType={vehicleType}
+          />
+        ) : (
+          <div className="h-[260px] sm:h-[320px]" />
+        )}
 
         {/* Water drops for Daily & TriWeekly */}
         {cfg?.particles && (

@@ -10,7 +10,11 @@ import StepContact from "./StepContact";
 import StepLocation from "./StepLocation";
 import StepConfirm from "./StepConfirm";
 
+export type ServiceCategory = "CarWash" | "CarDetailing" | "OneTimeCarWash";
+
 export interface BookingData {
+  service: ServiceCategory | null;
+  serviceOption: string;
   pkg: "Daily" | "TriWeekly" | "OneTime" | null;
   vehicleType: string;
   carModel: string;
@@ -38,6 +42,8 @@ export default function BookingWizard() {
   const [step, setStep] = useState(1);
   const [dir, setDir] = useState(1);
   const [data, setData] = useState<BookingData>({
+    service: null,
+    serviceOption: "",
     pkg: null,
     vehicleType: "",
     carModel: "",
@@ -94,10 +100,10 @@ export default function BookingWizard() {
             transition={{ duration: 0.3, ease: "easeInOut" }}
             className="glass-card rounded-2xl sm:rounded-3xl p-5 sm:p-8"
           >
-            {step === 1 && <StepPackage data={data} update={update} onNext={next} />}
-            {step === 2 && <StepVehicle data={data} update={update} onNext={next} onBack={back} />}
-            {step === 3 && <StepContact data={data} update={update} onNext={next} onBack={back} />}
-            {step === 4 && <StepLocation data={data} update={update} onNext={next} onBack={back} />}
+            {step === 1 && <StepContact data={data} update={update} onNext={next} />}
+            {step === 2 && <StepLocation data={data} update={update} onNext={next} onBack={back} />}
+            {step === 3 && <StepVehicle data={data} update={update} onNext={next} onBack={back} />}
+            {step === 4 && <StepPackage data={data} update={update} onNext={next} onBack={back} />}
             {step === 5 && <StepConfirm data={data} onBack={back} />}
           </motion.div>
         </AnimatePresence>

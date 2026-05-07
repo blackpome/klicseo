@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle, Car, User, MapPin, Package, Calendar } from "lucide-react";
+import { CheckCircle, Car, User, MapPin, Package, Calendar, Sparkles } from "lucide-react";
 import CarShowcase from "./CarShowcase";
 import type { BookingData } from "./BookingWizard";
 
@@ -20,7 +20,13 @@ const prices: Record<string, { hatchback: number; sedan: number; suv: number }> 
 const pkgLabel: Record<string, string> = {
   Daily:     "Package 1 — Daily (Mon–Sat)",
   TriWeekly: "Package 2 — Tri-Weekly",
-  OneTime:   "One-Time / Demo Wash",
+  OneTime:   "One-Time Wash",
+};
+
+const serviceLabel: Record<string, string> = {
+  CarWash:        "Car Wash",
+  CarDetailing:   "Car Detailing",
+  OneTimeCarWash: "One-Time Car Wash",
 };
 
 function vehicleTier(type: string): "hatchback" | "sedan" | "suv" {
@@ -29,7 +35,7 @@ function vehicleTier(type: string): "hatchback" | "sedan" | "suv" {
   return "hatchback";
 }
 
-function Row({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+function Row({ icon: Icon, label, value }: { icon: React.ComponentType<{ size?: number; className?: string }>; label: string; value: string }) {
   return (
     <div className="flex items-start gap-3 py-2.5 border-b border-white/5 last:border-0">
       <div className="w-7 h-7 rounded-lg bg-[#1A5FD4]/15 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -111,6 +117,13 @@ export default function StepConfirm({ data, onBack }: Props) {
 
       {/* Summary */}
       <div className="glass-card rounded-2xl px-3 py-0.5 mb-4 mt-3">
+        {data.service && (
+          <Row
+            icon={Sparkles}
+            label="Service"
+            value={[serviceLabel[data.service], data.serviceOption].filter(Boolean).join(" · ")}
+          />
+        )}
         <Row icon={Package} label="Package" value={data.pkg ? pkgLabel[data.pkg] : "—"} />
         <Row
           icon={Car}

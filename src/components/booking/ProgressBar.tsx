@@ -3,10 +3,10 @@
 import { motion } from "framer-motion";
 
 const STEPS = [
-  { full: "Package",  short: "Pkg"  },
-  { full: "Vehicle",  short: "Car"  },
   { full: "Contact",  short: "OTP"  },
   { full: "Location", short: "Addr" },
+  { full: "Vehicle",  short: "Car"  },
+  { full: "Package",  short: "Pkg"  },
   { full: "Confirm",  short: "Done" },
 ];
 

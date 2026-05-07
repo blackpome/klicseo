@@ -2,17 +2,64 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Phone, User, CheckCircle, RefreshCw } from "lucide-react";
-import type { BookingData } from "./BookingWizard";
+import { Phone, User, CheckCircle, RefreshCw, Sparkles, Droplets, Wrench } from "lucide-react";
+import type { BookingData, ServiceCategory } from "./BookingWizard";
 
 interface Props {
   data: BookingData;
   update: (d: Partial<BookingData>) => void;
   onNext: () => void;
-  onBack: () => void;
 }
 
-export default function StepContact({ data, update, onNext, onBack }: Props) {
+// Service hierarchy used at the very first step. Picking a category narrows
+// the options shown beneath; both must be set before Continue is enabled.
+const services: {
+  id: ServiceCategory;
+  label: string;
+  blurb: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  options: string[];
+  // Picking this category implies a downstream `pkg` for the existing pricing
+  // step. Detailing has no implied pkg (different flow).
+  defaultPkg: BookingData["pkg"];
+}[] = [
+  {
+    id: "CarWash",
+    label: "Car Wash",
+    blurb: "Subscription doorstep wash",
+    icon: Droplets,
+    options: ["Monthly", "Weekly Thrice", "One-Time"],
+    defaultPkg: "Daily",
+  },
+  {
+    id: "CarDetailing",
+    label: "Car Detailing",
+    blurb: "Premium paint & finish",
+    icon: Sparkles,
+    options: ["Ceramic Sealant Coating", "Powershine Treatment"],
+    defaultPkg: null,
+  },
+  {
+    id: "OneTimeCarWash",
+    label: "One-Time Car Wash",
+    blurb: "Single visit, no commitment",
+    icon: Wrench,
+    options: ["Manual", "Machine"],
+    defaultPkg: "OneTime",
+  },
+];
+
+// When the user picks a sub-option that maps cleanly onto an existing package,
+// pre-fill `pkg` so StepPackage doesn't ask again.
+const optionToPkg: Record<string, BookingData["pkg"]> = {
+  "Monthly":       "Daily",
+  "Weekly Thrice": "TriWeekly",
+  "One-Time":      "OneTime",
+  "Manual":        "OneTime",
+  "Machine":       "OneTime",
+};
+
+export default function StepContact({ data, update, onNext }: Props) {
   const [otpSent, setOtpSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -22,7 +69,23 @@ export default function StepContact({ data, update, onNext, onBack }: Props) {
   const phoneValid = data.phone.trim().length >= 8;
   const nameValid  = data.name.trim().length >= 2;
   const otpComplete = otp.join("").length === 6;
-  const canProceed  = nameValid && phoneValid && data.otpVerified;
+  const serviceValid = !!data.service && data.serviceOption.length > 0;
+  const canProceed  = serviceValid && nameValid && phoneValid && data.otpVerified;
+
+  const activeService = services.find((s) => s.id === data.service);
+
+  function selectServiceCategory(s: (typeof services)[number]) {
+    if (s.id === data.service) return;
+    update({ service: s.id, serviceOption: "", pkg: s.defaultPkg });
+  }
+
+  function selectServiceOption(option: string) {
+    const mapped = optionToPkg[option];
+    update({
+      serviceOption: option,
+      ...(mapped !== undefined ? { pkg: mapped } : {}),
+    });
+  }
 
   useEffect(() => {
     if (countdown <= 0) return;
@@ -64,6 +127,88 @@ export default function StepContact({ data, update, onNext, onBack }: Props) {
         Contact Details
       </h2>
       <p className="text-white/45 text-sm mb-5">We&apos;ll use this to confirm your booking.</p>
+
+      {/* Service required */}
+      <div className="mb-5">
+        <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
+          Service Required *
+        </p>
+        <div className="grid grid-cols-1 gap-2">
+          {services.map((s) => {
+            const selected = data.service === s.id;
+            const Icon = s.icon;
+            return (
+              <motion.button
+                key={s.id}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => selectServiceCategory(s)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all duration-200 min-h-[48px] ${
+                  selected
+                    ? "border-[#C9A84C] shadow-[0_0_14px_rgba(201,168,76,0.2)]"
+                    : "glass-card hover:border-[#1A5FD4]/40"
+                }`}
+                style={selected ? { background: "rgba(201,168,76,0.08)" } : {}}
+              >
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: selected
+                      ? "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)"
+                      : "rgba(26,95,212,0.15)",
+                  }}
+                >
+                  <Icon size={14} className={selected ? "text-[#050E21]" : "text-[#C9A84C]"} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white leading-tight">{s.label}</p>
+                  <p className="text-[11px] text-white/45 mt-0.5">{s.blurb}</p>
+                </div>
+                {selected && (
+                  <div
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" }}
+                  />
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
+
+        <AnimatePresence>
+          {activeService && (
+            <motion.div
+              key={activeService.id}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mt-3 mb-2">
+                Choose Option
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {activeService.options.map((opt) => {
+                  const sel = data.serviceOption === opt;
+                  return (
+                    <button
+                      key={opt}
+                      onClick={() => selectServiceOption(opt)}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all duration-200 min-h-[40px] ${
+                        sel
+                          ? "text-[#050E21] border-[#C9A84C]"
+                          : "glass-card text-white/70 hover:text-white hover:border-[#C9A84C]/40 active:scale-95"
+                      }`}
+                      style={sel ? { background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" } : {}}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Name */}
       <div className="mb-4">
@@ -169,22 +314,14 @@ export default function StepContact({ data, update, onNext, onBack }: Props) {
         )}
       </AnimatePresence>
 
-      <div className="flex gap-3 mt-5">
-        <button
-          onClick={onBack}
-          className="flex-1 py-4 rounded-xl font-semibold text-sm text-white/60 glass-card hover:text-white active:scale-95 transition-all"
-        >
-          ← Back
-        </button>
-        <button
-          onClick={onNext}
-          disabled={!canProceed}
-          className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
-          style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
-        >
-          Continue →
-        </button>
-      </div>
+      <button
+        onClick={onNext}
+        disabled={!canProceed}
+        className="w-full mt-5 py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
+        style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
+      >
+        Continue →
+      </button>
     </div>
   );
 }

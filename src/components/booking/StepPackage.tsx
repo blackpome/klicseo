@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { Check, Clock, AlertCircle } from "lucide-react";
 import CarShowcase from "./CarShowcase";
@@ -37,7 +36,7 @@ const packages = [
   },
   {
     id: "OneTime" as const,
-    label: "One-Time / Demo",
+    label: "One-Time Wash",
     price: { hatchback: 299, sedan: 349, suv: 399 },
     tagline: "Single manual wash",
     badge: null as string | null,
@@ -45,7 +44,7 @@ const packages = [
       "Full exterior hand wash",
       "Window & glass cleaning",
       "No commitment required",
-      "Great way to try us out",
+      "Single visit, no subscription",
     ],
     highlight: false,
   },
@@ -53,23 +52,24 @@ const packages = [
 
 type PriceTier = "hatchback" | "sedan" | "suv";
 
-const vehicleOptions: { label: string; tier: PriceTier }[] = [
-  { label: "Hatchback",   tier: "hatchback" },
-  { label: "Sedan",       tier: "sedan"     },
-  { label: "Compact SUV", tier: "sedan"     },
-  { label: "SUV",         tier: "suv"       },
-  { label: "XUV / Large", tier: "suv"       },
-];
+// Map the vehicle type chosen in StepVehicle → price tier.
+const tierByVehicleType: Record<string, PriceTier> = {
+  "Hatchback":         "hatchback",
+  "Sedan":             "sedan",
+  "Compact SUV":       "sedan",
+  "SUV":               "suv",
+  "XUV & Large SUV":   "suv",
+};
 
 interface Props {
   data: BookingData;
   update: (d: Partial<BookingData>) => void;
   onNext: () => void;
+  onBack: () => void;
 }
 
-export default function StepPackage({ data, update, onNext }: Props) {
-  const [vehicleIdx, setVehicleIdx] = useState(0);
-  const tier = vehicleOptions[vehicleIdx].tier;
+export default function StepPackage({ data, update, onNext, onBack }: Props) {
+  const tier: PriceTier = tierByVehicleType[data.vehicleType] ?? "sedan";
 
   return (
     <div>
@@ -78,29 +78,20 @@ export default function StepPackage({ data, update, onNext }: Props) {
       </h2>
       <p className="text-white/45 text-sm mb-3">Monthly doorstep car wash — we come to you.</p>
 
-      {/* Car showcase — model updates with the vehicle type toggle below */}
-      <CarShowcase pkg={data.pkg} vehicleType={vehicleOptions[vehicleIdx].label} />
+      {/* Car showcase — model is driven by the vehicle type chosen in StepVehicle */}
+      <CarShowcase pkg={data.pkg} vehicleType={data.vehicleType} />
 
-      {/* Vehicle type selector — updates prices live */}
-      <div className="mt-3 mb-4">
-        <p className="text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-2 text-center">
-          Select your vehicle type to see exact price
-        </p>
-        <div className="flex flex-wrap justify-center gap-1.5 glass-card rounded-xl p-1.5">
-          {vehicleOptions.map((v, i) => (
-            <button
-              key={v.label}
-              onClick={() => setVehicleIdx(i)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 whitespace-nowrap active:scale-95 ${
-                vehicleIdx === i ? "text-[#050E21]" : "text-white/50 hover:text-white"
-              }`}
-              style={vehicleIdx === i ? { background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" } : {}}
-            >
-              {v.label}
-            </button>
-          ))}
+      {/* Vehicle summary — already chosen in the previous step */}
+      {data.vehicleType && (
+        <div className="mt-3 mb-4 flex items-center justify-center gap-2 text-[11px] text-white/55">
+          <span>Pricing for</span>
+          <span className="px-2.5 py-1 rounded-md font-semibold text-[#050E21]"
+                style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}>
+            {data.vehicleType}
+          </span>
+          {data.carModel && <span className="text-white/40">· {data.carModel}</span>}
         </div>
-      </div>
+      )}
 
       {/* Package cards */}
       <div className="grid grid-cols-1 gap-3 mb-5 mt-2">
@@ -179,14 +170,22 @@ export default function StepPackage({ data, update, onNext }: Props) {
         })}
       </div>
 
-      <button
-        onClick={onNext}
-        disabled={!data.pkg}
-        className="w-full py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
-        style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
-      >
-        Continue →
-      </button>
+      <div className="flex gap-3">
+        <button
+          onClick={onBack}
+          className="flex-1 py-4 rounded-xl font-semibold text-sm text-white/60 glass-card hover:text-white active:scale-95 transition-all"
+        >
+          ← Back
+        </button>
+        <button
+          onClick={onNext}
+          disabled={!data.pkg}
+          className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
+          style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
+        >
+          Review Booking →
+        </button>
+      </div>
     </div>
   );
 }

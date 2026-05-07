@@ -43,7 +43,7 @@ const plans = [
   },
   {
     id: "OneTime",
-    name: "One-Time / Demo",
+    name: "One-Time Wash",
     fromPrice: 299,
     billing: "one time",
     tagline: "Single manual wash, no commitment",
@@ -54,10 +54,10 @@ const plans = [
       "Tire & wheel clean",
       "Air freshener",
       "No subscription needed",
-      "Great way to try us first",
+      "Single visit, no long-term plan",
     ],
     highlight: false,
-    cta: "Book a Demo Wash",
+    cta: "Book One-Time Wash",
   },
 ];
 
