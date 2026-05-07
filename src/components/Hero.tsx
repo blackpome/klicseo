@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { ChevronDown, Star, Shield, Clock } from "lucide-react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import BubbleParticles from "./BubbleParticles";
 
 const stats = [
@@ -12,7 +12,16 @@ const stats = [
   { value: "100%", label: "Satisfaction" },
 ];
 
+// Hero background plays these in sequence, looping back to the first when the
+// last finishes. Files live in /public.
+const HERO_VIDEOS = ["/car-detail-1.mp4", "/car-detail-2.mp4"];
+
 export default function Hero() {
+  // Cycle through HERO_VIDEOS — the active one is the only `<video>` in the
+  // DOM. We swap by changing key + src so the new clip auto-plays cleanly.
+  const [vIndex, setVIndex] = useState(0);
+  const advanceVideo = () => setVIndex((i) => (i + 1) % HERO_VIDEOS.length);
+
   // Mouse parallax — drives logo & orbs with subtle depth
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
@@ -45,22 +54,32 @@ export default function Hero() {
       {/* Backgrounds */}
       <div className="absolute inset-0 bg-[#050E21]" />
 
-      {/* Cinematic detailing video — sits above the solid color, dimmed enough
-          for the headline to stay legible. preload="auto" because we want it
-          rolling the moment the hero is visible. */}
-      <motion.video
+      {/* Cinematic detailing video — cycles through HERO_VIDEOS in order.
+          The wrapper handles the one-time fade-in so swapping the inner
+          <video> on advance doesn't make it pulse. preload="auto" + the
+          hidden preloader below keep handoff between clips snappy. */}
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 0.55 }}
         transition={{ duration: 1.4, ease: "easeOut" }}
-        src="/car-detail.mp4"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="auto"
-        aria-hidden
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-      />
+        className="absolute inset-0 pointer-events-none"
+      >
+        <video
+          key={vIndex}
+          src={HERO_VIDEOS[vIndex]}
+          autoPlay
+          muted
+          playsInline
+          preload="auto"
+          onEnded={advanceVideo}
+          aria-hidden
+          className="w-full h-full object-cover"
+        />
+      </motion.div>
+
+      {/* Silent preloader for the next clip in the loop, so the swap above
+          plays from a warm browser cache. Never rendered visibly. */}
+      <link rel="preload" as="video" href={HERO_VIDEOS[(vIndex + 1) % HERO_VIDEOS.length]} />
 
       {/* Top + bottom vignette so content (headline, CTAs, stats) stays readable
           regardless of which frame of the video is on screen. */}
