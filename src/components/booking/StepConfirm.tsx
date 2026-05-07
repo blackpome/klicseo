@@ -2,38 +2,21 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle, Car, User, MapPin, Package, Calendar, Sparkles } from "lucide-react";
+import { CheckCircle, Car, User, MapPin, Calendar, Sparkles } from "lucide-react";
 import CarShowcase from "./CarShowcase";
 import type { BookingData } from "./BookingWizard";
+import { SERVICE_OPTIONS, isServiceOptionId, priceFor, tierLabel, tierForVehicleType, inr } from "@/lib/pricing";
 
 interface Props {
   data: BookingData;
   onBack: () => void;
 }
 
-const prices: Record<string, { hatchback: number; sedan: number; suv: number }> = {
-  Daily:     { hatchback: 1000, sedan: 1099, suv: 1199 },
-  TriWeekly: { hatchback: 649,  sedan: 699,  suv: 749  },
-  OneTime:   { hatchback: 299,  sedan: 349,  suv: 399  },
-};
-
-const pkgLabel: Record<string, string> = {
-  Daily:     "Package 1 — Daily (Mon–Sat)",
-  TriWeekly: "Package 2 — Tri-Weekly",
-  OneTime:   "One-Time Wash",
-};
-
 const serviceLabel: Record<string, string> = {
   CarWash:        "Car Wash",
   CarDetailing:   "Car Detailing",
   OneTimeCarWash: "One-Time Car Wash",
 };
-
-function vehicleTier(type: string): "hatchback" | "sedan" | "suv" {
-  if (type === "Sedan" || type === "Compact SUV") return "sedan";
-  if (type === "SUV" || type === "XUV & Large SUV") return "suv";
-  return "hatchback";
-}
 
 function Row({ icon: Icon, label, value }: { icon: React.ComponentType<{ size?: number; className?: string }>; label: string; value: string }) {
   return (
@@ -53,9 +36,11 @@ export default function StepConfirm({ data, onBack }: Props) {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const tier = vehicleTier(data.vehicleType);
-  const price = data.pkg ? prices[data.pkg]?.[tier] ?? 0 : 0;
-  const isMonthly = data.pkg !== "OneTime";
+  const tier = tierForVehicleType(data.vehicleType);
+  const optionDef = isServiceOptionId(data.serviceOption) ? SERVICE_OPTIONS[data.serviceOption] : null;
+  const priced = priceFor(data.serviceOption, data.vehicleType, data.interiorAddOn);
+  const total = priced?.total ?? 0;
+  const isMonthly = optionDef?.recurring === "monthly";
 
   async function handleSubmit() {
     setLoading(true);
@@ -63,7 +48,7 @@ export default function StepConfirm({ data, onBack }: Props) {
       await fetch("/api/booking", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, price }),
+        body: JSON.stringify({ ...data, price: total }),
       });
     } catch {
       // backend not connected yet — still show success
@@ -121,10 +106,13 @@ export default function StepConfirm({ data, onBack }: Props) {
           <Row
             icon={Sparkles}
             label="Service"
-            value={[serviceLabel[data.service], data.serviceOption].filter(Boolean).join(" · ")}
+            value={[
+              serviceLabel[data.service],
+              optionDef?.label,
+              data.interiorAddOn && optionDef?.addOn ? `+ ${optionDef.addOn.label}` : "",
+            ].filter(Boolean).join(" · ")}
           />
         )}
-        <Row icon={Package} label="Package" value={data.pkg ? pkgLabel[data.pkg] : "—"} />
         <Row
           icon={Car}
           label="Vehicle"
@@ -144,10 +132,12 @@ export default function StepConfirm({ data, onBack }: Props) {
       >
         <div>
           <p className="text-white/60 text-sm leading-none">Total</p>
-          <p className="text-white/35 text-[10px] mt-0.5">{isMonthly ? "per month" : "one time"}</p>
+          <p className="text-white/35 text-[10px] mt-0.5">
+            {isMonthly ? "per month" : "one time"} · {tierLabel[tier]}
+          </p>
         </div>
         <span className="text-2xl font-bold gold-shimmer" style={{ fontFamily: "var(--font-playfair)" }}>
-          ₹{price.toLocaleString("en-IN")}
+          {inr(total)}
         </span>
       </div>
 

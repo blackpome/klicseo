@@ -4,60 +4,65 @@ import { Check } from "lucide-react";
 import { useRef, useState, MouseEvent } from "react";
 import { motion, useSpring } from "framer-motion";
 
+// "From" prices reflect the Hatchback tier; the booking flow charges the
+// vehicle-tier-specific price from the same source (src/lib/pricing.ts).
 const plans = [
   {
-    id: "Daily",
-    name: "Package 1 — Daily",
-    fromPrice: 1000,
-    billing: "per month",
-    tagline: "Mon – Sat, full month service",
+    id: "CarWash",
+    name: "Car Wash",
+    fromPrice: 649,
+    billing: "mo, starting from",
+    tagline: "Doorstep wash subscriptions",
     badge: null as string | null,
     features: [
-      "Exterior hand wash every weekday",
-      "Monthly once free interior cleaning",
-      "Doorstep — we come to you",
+      "Daily Monthly Plan from ₹1,000/mo (Mon–Sat)",
+      "Weekly Thrice Plan from ₹649/mo",
+      "Free monthly interior cleaning on Daily plan",
       "Trained & insured professionals",
-      "Flexible scheduling, 6 days",
-      "Guaranteed satisfaction",
-    ],
-    highlight: true,
-    cta: "Book Daily Plan",
-  },
-  {
-    id: "TriWeekly",
-    name: "Package 2 — Tri-Weekly",
-    fromPrice: 649,
-    billing: "per month",
-    tagline: "3× per week, outer wash only",
-    badge: "Offer closes soon" as string | null,
-    features: [
-      "Exterior hand wash 3× a week",
-      "Full month service",
-      "Outer body & glass cleaning",
-      "Doorstep — we come to you",
-      "Flexible scheduling",
-      "No contract required",
+      "Doorstep service — we come to you",
+      "Cancel anytime, no contract",
     ],
     highlight: false,
-    cta: "Book Tri-Weekly",
+    cta: "Book Car Wash",
+    href: "/booking?service=CarWash",
   },
   {
-    id: "OneTime",
-    name: "One-Time Wash",
-    fromPrice: 299,
-    billing: "one time",
-    tagline: "Single manual wash, no commitment",
+    id: "CarDetailing",
+    name: "Car Detailing",
+    fromPrice: 1999,
+    billing: "starting from",
+    tagline: "Premium paint & interior care",
     badge: null as string | null,
     features: [
-      "Full exterior hand wash",
-      "Window & glass cleaning",
-      "Tire & wheel clean",
-      "Air freshener",
+      "Power Shine Treatment from ₹2,999",
+      "Ceramic Sealant Coating from ₹4,999",
+      "Optional Interior Detailing add-on from ₹1,999",
+      "Deep gloss & hydrophobic finish",
+      "Hand-applied by certified detailers",
+      "By appointment at your location",
+    ],
+    highlight: true,
+    cta: "Book Detailing",
+    href: "/booking?service=CarDetailing",
+  },
+  {
+    id: "OneTimeCarWash",
+    name: "One-Time Wash",
+    fromPrice: 249,
+    billing: "starting from",
+    tagline: "Single visit, no commitment",
+    badge: null as string | null,
+    features: [
+      "Manual hand wash from ₹249",
+      "Machine pressure wash from ₹399",
+      "Optional interior cleaning add-on (from ₹149)",
+      "Window, glass, tire & wheel clean",
       "No subscription needed",
-      "Single visit, no long-term plan",
+      "Great if you want to try us first",
     ],
     highlight: false,
     cta: "Book One-Time Wash",
+    href: "/booking?service=OneTimeCarWash",
   },
 ];
 
@@ -180,13 +185,13 @@ export default function Pricing() {
             Choose Your Plan
           </h2>
           <p className="text-white/50 max-w-xl mx-auto text-sm sm:text-base">
-            Monthly doorstep car wash — no hidden fees, no contracts. Final price
-            is calculated by your vehicle type at checkout.
+            Pick a service — final price varies by vehicle type and is confirmed
+            at checkout. No hidden fees, no contracts.
           </p>
           <div className="divider-gold w-24 mx-auto mt-6" />
         </motion.div>
 
-        {/* Pricing cards — top padding leaves room for the floating badges */}
+        {/* Pricing cards — three services */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pt-5">
           {plans.map((plan, i) => (
             <motion.div
@@ -273,7 +278,7 @@ export default function Pricing() {
                 </ul>
 
                 <a
-                  href={`/booking?package=${plan.id}`}
+                  href={plan.href}
                   className="w-full py-3.5 rounded-xl font-semibold text-sm text-center transition-all duration-300 hover:scale-[1.02] text-[#050E21] shadow-[0_4px_20px_rgba(201,168,76,0.3)] hover:shadow-[0_8px_32px_rgba(201,168,76,0.55)]"
                   style={{
                     background:

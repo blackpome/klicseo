@@ -9,12 +9,19 @@ import StepVehicle from "./StepVehicle";
 import StepContact from "./StepContact";
 import StepLocation from "./StepLocation";
 import StepConfirm from "./StepConfirm";
+import type { ServiceCategory } from "@/lib/pricing";
 
-export type ServiceCategory = "CarWash" | "CarDetailing" | "OneTimeCarWash";
+export type { ServiceCategory } from "@/lib/pricing";
 
 export interface BookingData {
   service: ServiceCategory | null;
+  // Canonical ServiceOptionId from src/lib/pricing.ts (e.g. "Monthly",
+  // "OneTimeManual", "PowerShine"). "" until the user picks one on Step 1.
   serviceOption: string;
+  // Only meaningful for OneTimeManual today.
+  interiorAddOn: boolean;
+  // Visual hint only — drives CarShowcase styling. Derived from serviceOption
+  // by StepContact / deep-link handler; not used for pricing.
   pkg: "Daily" | "TriWeekly" | "OneTime" | null;
   vehicleType: string;
   carModel: string;
@@ -44,6 +51,7 @@ export default function BookingWizard() {
   const [data, setData] = useState<BookingData>({
     service: null,
     serviceOption: "",
+    interiorAddOn: false,
     pkg: null,
     vehicleType: "",
     carModel: "",
@@ -58,9 +66,25 @@ export default function BookingWizard() {
   });
 
   useEffect(() => {
+    // Legacy ?package= deep-link from older marketing links. Map to the new
+    // serviceOption + service category model so the rest of the flow works.
     const pkg = searchParams.get("package");
-    if (pkg === "Daily" || pkg === "TriWeekly" || pkg === "OneTime") {
-      setData((d) => ({ ...d, pkg }));
+    if (pkg === "Daily") {
+      setData((d) => ({ ...d, pkg, service: "CarWash", serviceOption: "Monthly" }));
+    } else if (pkg === "TriWeekly") {
+      setData((d) => ({ ...d, pkg, service: "CarWash", serviceOption: "WeeklyThrice" }));
+    } else if (pkg === "OneTime") {
+      setData((d) => ({ ...d, pkg, service: "OneTimeCarWash", serviceOption: "OneTimeManual" }));
+    }
+    // Service deep-link from the home Pricing CTAs. Sets the category but not
+    // the sub-option — the user picks that on Step 1.
+    const svc = searchParams.get("service");
+    if (svc === "CarWash") {
+      setData((d) => ({ ...d, service: "CarWash", pkg: d.pkg ?? "Daily" }));
+    } else if (svc === "CarDetailing") {
+      setData((d) => ({ ...d, service: "CarDetailing" }));
+    } else if (svc === "OneTimeCarWash") {
+      setData((d) => ({ ...d, service: "OneTimeCarWash", pkg: "OneTime" }));
     }
   }, [searchParams]);
 

@@ -1,64 +1,26 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Check, Clock, AlertCircle } from "lucide-react";
+import { Check, AlertCircle } from "lucide-react";
 import CarShowcase from "./CarShowcase";
 import type { BookingData } from "./BookingWizard";
+import {
+  OPTIONS_BY_CATEGORY,
+  SERVICE_OPTIONS,
+  priceFor,
+  tierForVehicleType,
+  tierLabel,
+  inr,
+} from "@/lib/pricing";
 
-const packages = [
-  {
-    id: "Daily" as const,
-    label: "Package 1 — Daily",
-    price: { hatchback: 1000, sedan: 1099, suv: 1199 },
-    tagline: "Mon – Sat, full month",
-    badge: null as string | null,
-    features: [
-      "Exterior hand wash every weekday",
-      "Monthly once free interior cleaning",
-      "Doorstep service at your location",
-      "Trained & insured professionals",
-    ],
-    highlight: true,
-  },
-  {
-    id: "TriWeekly" as const,
-    label: "Package 2 — Tri-Weekly",
-    price: { hatchback: 649, sedan: 699, suv: 749 },
-    tagline: "3× per week, full month",
-    badge: "Offer closes soon" as string | null,
-    features: [
-      "Exterior wash 3 days a week",
-      "Full month service",
-      "Outer body & glass only",
-      "Doorstep service at your location",
-    ],
-    highlight: false,
-  },
-  {
-    id: "OneTime" as const,
-    label: "One-Time Wash",
-    price: { hatchback: 299, sedan: 349, suv: 399 },
-    tagline: "Single manual wash",
-    badge: null as string | null,
-    features: [
-      "Full exterior hand wash",
-      "Window & glass cleaning",
-      "No commitment required",
-      "Single visit, no subscription",
-    ],
-    highlight: false,
-  },
-];
-
-type PriceTier = "hatchback" | "sedan" | "suv";
-
-// Map the vehicle type chosen in StepVehicle → price tier.
-const tierByVehicleType: Record<string, PriceTier> = {
-  "Hatchback":         "hatchback",
-  "Sedan":             "sedan",
-  "Compact SUV":       "sedan",
-  "SUV":               "suv",
-  "XUV & Large SUV":   "suv",
+const optionToPkg: Record<string, BookingData["pkg"]> = {
+  Monthly:           "Daily",
+  WeeklyThrice:      "TriWeekly",
+  OneTimeManual:     "OneTime",
+  OneTimeMachine:    "OneTime",
+  PowerShine:        null,
+  CeramicSealant:    null,
+  InteriorDetailing: null,
 };
 
 interface Props {
@@ -69,16 +31,32 @@ interface Props {
 }
 
 export default function StepPackage({ data, update, onNext, onBack }: Props) {
-  const tier: PriceTier = tierByVehicleType[data.vehicleType] ?? "sedan";
+  const tier = tierForVehicleType(data.vehicleType);
+  const category = data.service;
+  const optionIds = category ? OPTIONS_BY_CATEGORY[category] : [];
+  const selectedOption = data.serviceOption;
+  const selectedDef = selectedOption ? SERVICE_OPTIONS[selectedOption as keyof typeof SERVICE_OPTIONS] : undefined;
+
+  function selectOption(id: string) {
+    if (id === selectedOption) return;
+    update({
+      serviceOption: id,
+      pkg: optionToPkg[id] ?? null,
+      interiorAddOn: false,
+    });
+  }
+
+  function toggleAddOn() {
+    update({ interiorAddOn: !data.interiorAddOn });
+  }
 
   return (
     <div>
       <h2 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
-        Choose Your Package
+        Your Package
       </h2>
-      <p className="text-white/45 text-sm mb-3">Monthly doorstep car wash — we come to you.</p>
+      <p className="text-white/45 text-sm mb-3">Pricing for your {tierLabel[tier]}.</p>
 
-      {/* Car showcase — model is driven by the vehicle type chosen in StepVehicle */}
       <CarShowcase pkg={data.pkg} vehicleType={data.vehicleType} />
 
       {/* Vehicle summary — already chosen in the previous step */}
@@ -93,45 +71,41 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
         </div>
       )}
 
-      {/* Package cards */}
-      <div className="grid grid-cols-1 gap-3 mb-5 mt-2">
-        {packages.map((pkg) => {
-          const selected = data.pkg === pkg.id;
+      {/* Empty-state — no service category yet */}
+      {!category && (
+        <div className="rounded-xl border border-amber-300/30 bg-amber-300/5 p-3 text-[12px] text-amber-200/90 mb-4 flex items-start gap-2">
+          <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+          <span>Pick a service on the contact step to see prices.</span>
+        </div>
+      )}
+
+      {/* Option cards for the chosen category */}
+      <div className="grid grid-cols-1 gap-3 mb-4 mt-2">
+        {optionIds.map((id) => {
+          const opt = SERVICE_OPTIONS[id];
+          const selected = selectedOption === id;
+          const p = priceFor(id, data.vehicleType, false);
           return (
             <motion.button
-              key={pkg.id}
+              key={id}
               whileTap={{ scale: 0.985 }}
-              onClick={() => update({ pkg: pkg.id })}
+              onClick={() => selectOption(id)}
               className={`relative text-left rounded-xl p-4 border transition-all duration-300 ${
                 selected
                   ? "border-[#C9A84C] shadow-[0_0_20px_rgba(201,168,76,0.25)]"
-                  : pkg.highlight
-                  ? "border-[#1A5FD4]/40 hover:border-[#1A5FD4]/60"
                   : "glass-card hover:border-[#1A5FD4]/40"
               }`}
               style={
                 selected
                   ? { background: "linear-gradient(145deg,rgba(201,168,76,0.1),rgba(5,14,33,0.9))" }
-                  : pkg.highlight
-                  ? { background: "linear-gradient(145deg,rgba(26,95,212,0.08),rgba(5,14,33,0.8))" }
                   : {}
               }
             >
-              {pkg.badge && (
-                <span
-                  className="absolute -top-2.5 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wide uppercase text-white whitespace-nowrap"
-                  style={{ background: "rgba(239,68,68,0.9)" }}
-                >
-                  <AlertCircle size={8} className="inline" /> {pkg.badge}
-                </span>
-              )}
-
               <div className="flex items-start justify-between gap-3">
-                {/* Left: title + tagline + features */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                     <span className="text-sm font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>
-                      {pkg.label}
+                      {opt.label}
                     </span>
                     {selected && (
                       <div
@@ -142,33 +116,84 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Clock size={9} className="text-white/40 flex-shrink-0" />
-                    <p className="text-white/40 text-[11px]">{pkg.tagline}</p>
-                  </div>
-                  {/* Single column on mobile, 2 cols on sm+ */}
-                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
-                    {pkg.features.map((f) => (
-                      <li key={f} className="flex items-start gap-1.5 text-[11px] text-white/50">
-                        <Check size={9} className="text-[#C9A84C] mt-0.5 flex-shrink-0" strokeWidth={3} />
-                        <span>{f}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="text-white/40 text-[11px] mb-1">{opt.blurb}</p>
+                  {opt.addOn && (
+                    <p className="text-[10px] text-white/35">
+                      {opt.addOn.label}: +{inr(opt.addOn.price[tier])}
+                    </p>
+                  )}
                 </div>
 
-                {/* Right: exact price for selected vehicle type */}
                 <div className="text-right flex-shrink-0 ml-1">
                   <div className="text-lg sm:text-xl font-bold gold-shimmer" style={{ fontFamily: "var(--font-playfair)" }}>
-                    ₹{pkg.price[tier].toLocaleString("en-IN")}
+                    {p ? inr(p.base) : "—"}
                   </div>
-                  <div className="text-white/35 text-[10px]">{pkg.id === "OneTime" ? "one time" : "/mo"}</div>
+                  <div className="text-white/35 text-[10px]">
+                    {opt.recurring === "monthly" ? "/mo" : "one time"}
+                  </div>
                 </div>
               </div>
             </motion.button>
           );
         })}
       </div>
+
+      {/* Interior add-on — Power Shine / Ceramic Sealant / One-Time Manual */}
+      {selectedDef?.addOn && (
+        <button
+          onClick={toggleAddOn}
+          className={`w-full flex items-center justify-between gap-3 px-3 py-3 rounded-xl border text-left mb-4 transition-all ${
+            data.interiorAddOn
+              ? "border-[#C9A84C] bg-[rgba(201,168,76,0.08)]"
+              : "glass-card hover:border-[#1A5FD4]/40"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border ${
+                data.interiorAddOn
+                  ? "border-[#C9A84C]"
+                  : "border-white/25"
+              }`}
+              style={data.interiorAddOn ? { background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" } : {}}
+            >
+              {data.interiorAddOn && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white leading-tight">{selectedDef.addOn.label}</p>
+              <p className="text-[11px] text-white/45 mt-0.5">
+                {selectedDef.category === "CarDetailing"
+                  ? `Pair full interior detailing with ${selectedDef.shortLabel}`
+                  : "Add interior cleaning to this visit"}
+              </p>
+            </div>
+          </div>
+          <span className="text-sm font-bold text-[#C9A84C] whitespace-nowrap">
+            +{inr(selectedDef.addOn.price[tier])}
+          </span>
+        </button>
+      )}
+
+      {/* Total preview */}
+      {selectedDef && (
+        <div
+          className="flex items-center justify-between px-4 py-3 rounded-xl mb-5"
+          style={{ background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)" }}
+        >
+          <div>
+            <p className="text-white/60 text-sm leading-none">Estimated total</p>
+            <p className="text-white/35 text-[10px] mt-0.5">
+              {selectedDef.recurring === "monthly" ? "per month" : "one time"} · {tierLabel[tier]}
+            </p>
+          </div>
+          <span className="text-2xl font-bold gold-shimmer" style={{ fontFamily: "var(--font-playfair)" }}>
+            {(() => {
+              const p = priceFor(selectedOption, data.vehicleType, data.interiorAddOn);
+              return p ? inr(p.total) : "—";
+            })()}
+          </span>
+        </div>
+      )}
 
       <div className="flex gap-3">
         <button
@@ -179,7 +204,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
         </button>
         <button
           onClick={onNext}
-          disabled={!data.pkg}
+          disabled={!selectedDef}
           className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
           style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
         >

@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Phone, User, CheckCircle, RefreshCw, Sparkles, Droplets, Wrench } from "lucide-react";
+import { Phone, User, CheckCircle, RefreshCw, Sparkles, Droplets, Wrench, Check } from "lucide-react";
 import type { BookingData, ServiceCategory } from "./BookingWizard";
+import { OPTIONS_BY_CATEGORY, SERVICE_OPTIONS, fromPrice, inr, isServiceOptionId } from "@/lib/pricing";
 
 interface Props {
   data: BookingData;
@@ -11,52 +12,31 @@ interface Props {
   onNext: () => void;
 }
 
-// Service hierarchy used at the very first step. Picking a category narrows
-// the options shown beneath; both must be set before Continue is enabled.
-const services: {
+// Service categories shown as cards. Sub-options are pulled from OPTIONS_BY_CATEGORY
+// in src/lib/pricing.ts so labels and prices stay in sync everywhere.
+const categories: {
   id: ServiceCategory;
   label: string;
   blurb: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
-  options: string[];
-  // Picking this category implies a downstream `pkg` for the existing pricing
-  // step. Detailing has no implied pkg (different flow).
+  // Visual `pkg` used by CarShowcase when the category is chosen but no
+  // sub-option yet. Nullable for detailing.
   defaultPkg: BookingData["pkg"];
 }[] = [
-  {
-    id: "CarWash",
-    label: "Car Wash",
-    blurb: "Subscription doorstep wash",
-    icon: Droplets,
-    options: ["Monthly", "Weekly Thrice", "One-Time"],
-    defaultPkg: "Daily",
-  },
-  {
-    id: "CarDetailing",
-    label: "Car Detailing",
-    blurb: "Premium paint & finish",
-    icon: Sparkles,
-    options: ["Ceramic Sealant Coating", "Powershine Treatment"],
-    defaultPkg: null,
-  },
-  {
-    id: "OneTimeCarWash",
-    label: "One-Time Car Wash",
-    blurb: "Single visit, no commitment",
-    icon: Wrench,
-    options: ["Manual", "Machine"],
-    defaultPkg: "OneTime",
-  },
+  { id: "CarWash",        label: "Car Wash",          blurb: "Subscription doorstep wash",         icon: Droplets, defaultPkg: "Daily"   },
+  { id: "OneTimeCarWash", label: "One-Time Car Wash", blurb: "Single visit, no commitment",        icon: Wrench,   defaultPkg: "OneTime" },
+  { id: "CarDetailing",   label: "Car Detailing",     blurb: "Premium paint & interior care",      icon: Sparkles, defaultPkg: null      },
 ];
 
-// When the user picks a sub-option that maps cleanly onto an existing package,
-// pre-fill `pkg` so StepPackage doesn't ask again.
+// CarShowcase visual hint derived from the chosen sub-option.
 const optionToPkg: Record<string, BookingData["pkg"]> = {
-  "Monthly":       "Daily",
-  "Weekly Thrice": "TriWeekly",
-  "One-Time":      "OneTime",
-  "Manual":        "OneTime",
-  "Machine":       "OneTime",
+  Monthly:           "Daily",
+  WeeklyThrice:      "TriWeekly",
+  OneTimeManual:     "OneTime",
+  OneTimeMachine:    "OneTime",
+  PowerShine:        null,
+  CeramicSealant:    null,
+  InteriorDetailing: null,
 };
 
 export default function StepContact({ data, update, onNext }: Props) {
@@ -72,18 +52,26 @@ export default function StepContact({ data, update, onNext }: Props) {
   const serviceValid = !!data.service && data.serviceOption.length > 0;
   const canProceed  = serviceValid && nameValid && phoneValid && data.otpVerified;
 
-  const activeService = services.find((s) => s.id === data.service);
+  const activeCategory = categories.find((c) => c.id === data.service);
+  const activeOptionIds = activeCategory ? OPTIONS_BY_CATEGORY[activeCategory.id] : [];
+  const selectedOptionDef = isServiceOptionId(data.serviceOption) ? SERVICE_OPTIONS[data.serviceOption] : null;
+  const addOn = selectedOptionDef?.addOn;
 
-  function selectServiceCategory(s: (typeof services)[number]) {
-    if (s.id === data.service) return;
-    update({ service: s.id, serviceOption: "", pkg: s.defaultPkg });
+  function selectServiceCategory(c: (typeof categories)[number]) {
+    if (c.id === data.service) return;
+    update({
+      service: c.id,
+      serviceOption: "",
+      interiorAddOn: false,
+      pkg: c.defaultPkg,
+    });
   }
 
-  function selectServiceOption(option: string) {
-    const mapped = optionToPkg[option];
+  function selectServiceOption(optionId: string) {
     update({
-      serviceOption: option,
-      ...(mapped !== undefined ? { pkg: mapped } : {}),
+      serviceOption: optionId,
+      pkg: optionToPkg[optionId] ?? null,
+      interiorAddOn: false,
     });
   }
 
@@ -134,14 +122,14 @@ export default function StepContact({ data, update, onNext }: Props) {
           Service Required *
         </p>
         <div className="grid grid-cols-1 gap-2">
-          {services.map((s) => {
-            const selected = data.service === s.id;
-            const Icon = s.icon;
+          {categories.map((c) => {
+            const selected = data.service === c.id;
+            const Icon = c.icon;
             return (
               <motion.button
-                key={s.id}
+                key={c.id}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => selectServiceCategory(s)}
+                onClick={() => selectServiceCategory(c)}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all duration-200 min-h-[48px] ${
                   selected
                     ? "border-[#C9A84C] shadow-[0_0_14px_rgba(201,168,76,0.2)]"
@@ -160,8 +148,8 @@ export default function StepContact({ data, update, onNext }: Props) {
                   <Icon size={14} className={selected ? "text-[#050E21]" : "text-[#C9A84C]"} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white leading-tight">{s.label}</p>
-                  <p className="text-[11px] text-white/45 mt-0.5">{s.blurb}</p>
+                  <p className="text-sm font-semibold text-white leading-tight">{c.label}</p>
+                  <p className="text-[11px] text-white/45 mt-0.5">{c.blurb}</p>
                 </div>
                 {selected && (
                   <div
@@ -175,9 +163,9 @@ export default function StepContact({ data, update, onNext }: Props) {
         </div>
 
         <AnimatePresence>
-          {activeService && (
+          {activeCategory && (
             <motion.div
-              key={activeService.id}
+              key={activeCategory.id}
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
@@ -186,25 +174,69 @@ export default function StepContact({ data, update, onNext }: Props) {
               <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mt-3 mb-2">
                 Choose Option
               </p>
-              <div className="flex flex-wrap gap-2">
-                {activeService.options.map((opt) => {
-                  const sel = data.serviceOption === opt;
+              <div className="flex flex-col gap-2">
+                {activeOptionIds.map((id) => {
+                  const opt = SERVICE_OPTIONS[id];
+                  const sel = data.serviceOption === id;
                   return (
                     <button
-                      key={opt}
-                      onClick={() => selectServiceOption(opt)}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all duration-200 min-h-[40px] ${
+                      key={id}
+                      onClick={() => selectServiceOption(id)}
+                      className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 ${
                         sel
                           ? "text-[#050E21] border-[#C9A84C]"
-                          : "glass-card text-white/70 hover:text-white hover:border-[#C9A84C]/40 active:scale-95"
+                          : "glass-card text-white/70 hover:text-white hover:border-[#C9A84C]/40 active:scale-[0.99]"
                       }`}
                       style={sel ? { background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" } : {}}
                     >
-                      {opt}
+                      <span className="text-left leading-tight">
+                        <span className="block font-semibold">{opt.label}</span>
+                        <span className={`block text-[11px] mt-0.5 ${sel ? "text-[#050E21]/70" : "text-white/40"}`}>
+                          {opt.blurb}
+                        </span>
+                      </span>
+                      <span className={`text-xs font-semibold whitespace-nowrap ${sel ? "text-[#050E21]" : "text-[#C9A84C]"}`}>
+                        from {inr(fromPrice(id))}
+                        {opt.recurring === "monthly" ? "/mo" : ""}
+                      </span>
                     </button>
                   );
                 })}
               </div>
+
+              {addOn && (
+                <button
+                  type="button"
+                  onClick={() => update({ interiorAddOn: !data.interiorAddOn })}
+                  className={`mt-2 w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                    data.interiorAddOn
+                      ? "border-[#C9A84C] bg-[rgba(201,168,76,0.08)]"
+                      : "glass-card hover:border-[#1A5FD4]/40"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border ${
+                        data.interiorAddOn ? "border-[#C9A84C]" : "border-white/25"
+                      }`}
+                      style={data.interiorAddOn ? { background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" } : {}}
+                    >
+                      {data.interiorAddOn && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white leading-tight">{addOn.label}</p>
+                      <p className="text-[11px] text-white/45 mt-0.5">
+                        {selectedOptionDef?.category === "CarDetailing"
+                          ? `Pair full interior detailing with ${selectedOptionDef.shortLabel}`
+                          : "Add interior cleaning to this visit"}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-[#C9A84C] whitespace-nowrap">
+                    +{inr(Math.min(...Object.values(addOn.price)))}
+                  </span>
+                </button>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
