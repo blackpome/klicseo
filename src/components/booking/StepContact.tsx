@@ -23,9 +23,9 @@ const categories: {
   // sub-option yet. Nullable for detailing.
   defaultPkg: BookingData["pkg"];
 }[] = [
-  { id: "CarWash",        label: "Car Wash",          blurb: "Subscription doorstep wash",         icon: Droplets, defaultPkg: "Daily"   },
-  { id: "OneTimeCarWash", label: "One-Time Car Wash", blurb: "Single visit, no commitment",        icon: Wrench,   defaultPkg: "OneTime" },
   { id: "CarDetailing",   label: "Car Detailing",     blurb: "Premium paint & interior care",      icon: Sparkles, defaultPkg: null      },
+  { id: "OneTimeCarWash", label: "One-Time Car Wash", blurb: "Single visit, no commitment",        icon: Wrench,   defaultPkg: "OneTime" },
+  { id: "CarWash",        label: "Car Wash",          blurb: "Subscription doorstep wash",         icon: Droplets, defaultPkg: "Daily"   },
 ];
 
 // CarShowcase visual hint derived from the chosen sub-option.
@@ -34,7 +34,6 @@ const optionToPkg: Record<string, BookingData["pkg"]> = {
   WeeklyThrice:      "TriWeekly",
   OneTimeManual:     "OneTime",
   OneTimeMachine:    "OneTime",
-  PowerShine:        null,
   CeramicSealant:    null,
   InteriorDetailing: null,
 };
@@ -44,6 +43,7 @@ export default function StepContact({ data, update, onNext }: Props) {
   const [sending, setSending] = useState(false);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [countdown, setCountdown] = useState(0);
+  const [attempted, setAttempted] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const phoneValid = data.phone.trim().length >= 8;
@@ -51,6 +51,21 @@ export default function StepContact({ data, update, onNext }: Props) {
   const otpComplete = otp.join("").length === 6;
   const serviceValid = !!data.service && data.serviceOption.length > 0;
   const canProceed  = serviceValid && nameValid && phoneValid && data.otpVerified;
+
+  const errCategory = attempted && !data.service;
+  const errOption   = attempted && !!data.service && !data.serviceOption;
+  const errName     = attempted && !nameValid;
+  const errPhone    = attempted && !phoneValid;
+  const errOtp      = attempted && phoneValid && !data.otpVerified;
+
+  function handleContinue() {
+    if (canProceed) {
+      setAttempted(false);
+      onNext();
+    } else {
+      setAttempted(true);
+    }
+  }
 
   const activeCategory = categories.find((c) => c.id === data.service);
   const activeOptionIds = activeCategory ? OPTIONS_BY_CATEGORY[activeCategory.id] : [];
@@ -121,125 +136,157 @@ export default function StepContact({ data, update, onNext }: Props) {
         <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
           Service Required *
         </p>
-        <div className="grid grid-cols-1 gap-2">
+        <div
+          className={`flex flex-col gap-2 ${
+            errCategory ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""
+          }`}
+        >
           {categories.map((c) => {
             const selected = data.service === c.id;
             const Icon = c.icon;
             return (
-              <motion.button
-                key={c.id}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => selectServiceCategory(c)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all duration-200 min-h-[48px] ${
-                  selected
-                    ? "border-[#C9A84C] shadow-[0_0_14px_rgba(201,168,76,0.2)]"
-                    : "glass-card hover:border-[#1A5FD4]/40"
-                }`}
-                style={selected ? { background: "rgba(201,168,76,0.08)" } : {}}
-              >
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{
-                    background: selected
-                      ? "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)"
-                      : "rgba(26,95,212,0.15)",
-                  }}
+              <div key={c.id}>
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => selectServiceCategory(c)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 min-h-[48px] ${
+                    selected
+                      ? "rounded-t-xl rounded-b-none border-2 border-b-0 border-[#C9A84C] shadow-[0_0_18px_rgba(201,168,76,0.25)]"
+                      : "rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#C9A84C]/40 hover:bg-white/[0.05]"
+                  }`}
+                  style={selected ? { background: "rgba(201,168,76,0.10)" } : {}}
                 >
-                  <Icon size={14} className={selected ? "text-[#050E21]" : "text-[#C9A84C]"} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white leading-tight">{c.label}</p>
-                  <p className="text-[11px] text-white/45 mt-0.5">{c.blurb}</p>
-                </div>
-                {selected && (
                   <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" }}
-                  />
-                )}
-              </motion.button>
+                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{
+                      background: selected
+                        ? "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)"
+                        : "rgba(26,95,212,0.15)",
+                    }}
+                  >
+                    <Icon size={14} className={selected ? "text-[#050E21]" : "text-[#C9A84C]"} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold leading-tight ${selected ? "text-white" : "text-white/85"}`}>
+                      {c.label}
+                    </p>
+                    <p className="text-[11px] text-white/45 mt-0.5">{c.blurb}</p>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-widest flex-shrink-0 px-2 py-1 rounded-md ${
+                      selected ? "text-[#050E21]" : "text-white/30 border border-white/10"
+                    }`}
+                    style={selected ? { background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" } : {}}
+                  >
+                    {selected ? "Selected" : "Select"}
+                  </span>
+                </motion.button>
+
+                <AnimatePresence initial={false}>
+                  {selected && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div
+                        className={`rounded-b-xl border-2 border-t-0 px-3 pt-3 pb-3 ${
+                          errOption ? "border-red-400/70" : "border-[#C9A84C]"
+                        }`}
+                        style={{ background: "rgba(201,168,76,0.05)" }}
+                      >
+                        <p className={`text-[10px] font-semibold uppercase tracking-widest mb-2 ${
+                          errOption ? "text-red-300" : "text-[#C9A84C]/80"
+                        }`}>
+                          Choose Option *
+                        </p>
+                        {errOption && (
+                          <p className="text-[11px] text-red-300 mb-2">Please pick one option below.</p>
+                        )}
+                        <div className="flex flex-col gap-2">
+                          {activeOptionIds.map((id) => {
+                            const opt = SERVICE_OPTIONS[id];
+                            const sel = data.serviceOption === id;
+                            return (
+                              <button
+                                key={id}
+                                onClick={() => selectServiceOption(id)}
+                                className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 ${
+                                  sel
+                                    ? "text-[#050E21] border-[#C9A84C]"
+                                    : "border-white/10 bg-white/[0.04] text-white/75 hover:text-white hover:border-[#C9A84C]/40 active:scale-[0.99]"
+                                }`}
+                                style={sel ? { background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" } : {}}
+                              >
+                                <span className="flex items-center gap-2 text-left leading-tight">
+                                  <span
+                                    className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center border-2 ${
+                                      sel ? "border-[#050E21] bg-white/30" : "border-white/30"
+                                    }`}
+                                  >
+                                    {sel && <span className="w-1.5 h-1.5 rounded-full bg-[#050E21]" />}
+                                  </span>
+                                  <span>
+                                    <span className="block font-semibold">{opt.label}</span>
+                                    <span className={`block text-[11px] mt-0.5 ${sel ? "text-[#050E21]/70" : "text-white/40"}`}>
+                                      {opt.blurb}
+                                    </span>
+                                  </span>
+                                </span>
+                                <span className={`text-xs font-semibold whitespace-nowrap ${sel ? "text-[#050E21]" : "text-[#C9A84C]"}`}>
+                                  from {inr(fromPrice(id))}
+                                  {opt.recurring === "monthly" ? "/mo" : ""}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {addOn && (
+                          <button
+                            type="button"
+                            onClick={() => update({ interiorAddOn: !data.interiorAddOn })}
+                            className={`mt-2 w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                              data.interiorAddOn
+                                ? "border-[#C9A84C] bg-[rgba(201,168,76,0.08)]"
+                                : "border-white/10 bg-white/[0.04] hover:border-[#1A5FD4]/40"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border ${
+                                  data.interiorAddOn ? "border-[#C9A84C]" : "border-white/25"
+                                }`}
+                                style={data.interiorAddOn ? { background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" } : {}}
+                              >
+                                {data.interiorAddOn && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-white leading-tight">{addOn.label}</p>
+                                <p className="text-[11px] text-white/45 mt-0.5">
+                                  {selectedOptionDef?.category === "CarDetailing"
+                                    ? `Pair full interior detailing with ${selectedOptionDef.shortLabel}`
+                                    : "Add interior cleaning to this visit"}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-xs font-semibold text-[#C9A84C] whitespace-nowrap">
+                              +{inr(Math.min(...Object.values(addOn.price)))}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             );
           })}
         </div>
-
-        <AnimatePresence>
-          {activeCategory && (
-            <motion.div
-              key={activeCategory.id}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
-            >
-              <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mt-3 mb-2">
-                Choose Option
-              </p>
-              <div className="flex flex-col gap-2">
-                {activeOptionIds.map((id) => {
-                  const opt = SERVICE_OPTIONS[id];
-                  const sel = data.serviceOption === id;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => selectServiceOption(id)}
-                      className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 ${
-                        sel
-                          ? "text-[#050E21] border-[#C9A84C]"
-                          : "glass-card text-white/70 hover:text-white hover:border-[#C9A84C]/40 active:scale-[0.99]"
-                      }`}
-                      style={sel ? { background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" } : {}}
-                    >
-                      <span className="text-left leading-tight">
-                        <span className="block font-semibold">{opt.label}</span>
-                        <span className={`block text-[11px] mt-0.5 ${sel ? "text-[#050E21]/70" : "text-white/40"}`}>
-                          {opt.blurb}
-                        </span>
-                      </span>
-                      <span className={`text-xs font-semibold whitespace-nowrap ${sel ? "text-[#050E21]" : "text-[#C9A84C]"}`}>
-                        from {inr(fromPrice(id))}
-                        {opt.recurring === "monthly" ? "/mo" : ""}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {addOn && (
-                <button
-                  type="button"
-                  onClick={() => update({ interiorAddOn: !data.interiorAddOn })}
-                  className={`mt-2 w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${
-                    data.interiorAddOn
-                      ? "border-[#C9A84C] bg-[rgba(201,168,76,0.08)]"
-                      : "glass-card hover:border-[#1A5FD4]/40"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border ${
-                        data.interiorAddOn ? "border-[#C9A84C]" : "border-white/25"
-                      }`}
-                      style={data.interiorAddOn ? { background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" } : {}}
-                    >
-                      {data.interiorAddOn && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-white leading-tight">{addOn.label}</p>
-                      <p className="text-[11px] text-white/45 mt-0.5">
-                        {selectedOptionDef?.category === "CarDetailing"
-                          ? `Pair full interior detailing with ${selectedOptionDef.shortLabel}`
-                          : "Add interior cleaning to this visit"}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-[#C9A84C] whitespace-nowrap">
-                    +{inr(Math.min(...Object.values(addOn.price)))}
-                  </span>
-                </button>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {errCategory && (
+          <p className="text-[11px] text-red-300 mt-2">Please select a service to continue.</p>
+        )}
       </div>
 
       {/* Name */}
@@ -252,8 +299,13 @@ export default function StepContact({ data, update, onNext }: Props) {
           placeholder="Your full name"
           value={data.name}
           onChange={(e) => update({ name: e.target.value })}
-          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors"
+          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors ${
+            errName ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
+          }`}
         />
+        {errName && (
+          <p className="text-[11px] text-red-300 mt-1">Enter your full name (at least 2 characters).</p>
+        )}
       </div>
 
       {/* Phone + Send OTP */}
@@ -273,13 +325,17 @@ export default function StepContact({ data, update, onNext }: Props) {
               setOtp(["", "", "", "", "", ""]);
             }}
             disabled={data.otpVerified}
-            className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-3 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors disabled:opacity-60"
+            className={`flex-1 min-w-0 bg-white/5 border rounded-xl px-3 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors disabled:opacity-60 ${
+              errPhone ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
+            }`}
           />
           {!data.otpVerified && (
             <button
               onClick={sendOtp}
               disabled={!phoneValid || sending || countdown > 0}
-              className="flex-shrink-0 px-3 py-3.5 rounded-xl text-xs font-bold text-[#050E21] disabled:opacity-40 transition-all active:scale-95 whitespace-nowrap"
+              className={`flex-shrink-0 px-3 py-3.5 rounded-xl text-xs font-bold text-[#050E21] disabled:opacity-40 transition-all active:scale-95 whitespace-nowrap ${
+                errOtp && !otpSent ? "ring-2 ring-red-400/60" : ""
+              }`}
               style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)", minWidth: 80 }}
             >
               {sending ? (
@@ -294,6 +350,14 @@ export default function StepContact({ data, update, onNext }: Props) {
             </button>
           )}
         </div>
+        {errPhone && (
+          <p className="text-[11px] text-red-300 mt-1">Enter a valid phone number.</p>
+        )}
+        {errOtp && (
+          <p className="text-[11px] text-red-300 mt-1">
+            {otpSent ? "Enter the 6-digit code we sent to verify your phone." : "Verify your phone with OTP to continue."}
+          </p>
+        )}
       </div>
 
       {/* OTP boxes — responsive sizing to fit all 6 on 320px */}
@@ -319,7 +383,9 @@ export default function StepContact({ data, update, onNext }: Props) {
                   value={d}
                   onChange={(e) => handleOtpChange(e.target.value, i)}
                   onKeyDown={(e) => handleOtpKey(e, i)}
-                  className="flex-1 aspect-square text-center text-base sm:text-lg font-bold text-white bg-white/5 border border-white/15 rounded-xl focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors"
+                  className={`flex-1 aspect-square text-center text-base sm:text-lg font-bold text-white bg-white/5 border rounded-xl focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors ${
+                    errOtp ? "border-red-400/70" : "border-white/15"
+                  }`}
                   style={{ maxWidth: 52, minWidth: 36 }}
                 />
               ))}
@@ -346,10 +412,15 @@ export default function StepContact({ data, update, onNext }: Props) {
         )}
       </AnimatePresence>
 
+      {attempted && !canProceed && (
+        <p className="text-[12px] text-red-300 text-center mt-4">
+          Please complete the highlighted fields above.
+        </p>
+      )}
+
       <button
-        onClick={onNext}
-        disabled={!canProceed}
-        className="w-full mt-5 py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
+        onClick={handleContinue}
+        className="w-full mt-3 py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
         style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
       >
         Continue →

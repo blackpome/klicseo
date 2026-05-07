@@ -2,7 +2,7 @@
 // section, the booking wizard's package step, and the confirmation step.
 //
 // Price grid (per vehicle tier):
-//   Daily Monthly | Weekly Thrice | Manual + Interior add-on | Machine | Power Shine | Ceramic Sealant | Interior Detailing
+//   Daily Monthly | Weekly Thrice | Manual + Interior add-on | Machine | Ceramic Sealant | Interior Detailing
 // matches the spec sheet provided by the business.
 
 export type PriceTier = "hatchback" | "sedan" | "compactSUV" | "suv" | "xuv";
@@ -35,7 +35,6 @@ export type ServiceOptionId =
   | "WeeklyThrice"
   | "OneTimeManual"
   | "OneTimeMachine"
-  | "PowerShine"
   | "CeramicSealant"
   | "InteriorDetailing";
 
@@ -102,20 +101,6 @@ export const SERVICE_OPTIONS: Record<ServiceOptionId, ServiceOptionDef> = {
       price: { hatchback: 149, sedan: 249, compactSUV: 299, suv: 399, xuv: 499 },
     },
   },
-  PowerShine: {
-    id: "PowerShine",
-    label: "Power Shine Treatment",
-    shortLabel: "Power Shine",
-    blurb: "Glossy paint enhancement",
-    recurring: "one-time",
-    category: "CarDetailing",
-    price: { hatchback: 2999, sedan: 3999, compactSUV: 4999, suv: 5999, xuv: 6999 },
-    addOn: {
-      id: "InteriorDetailing",
-      label: "Add interior detailing",
-      price: { hatchback: 1999, sedan: 2299, compactSUV: 2499, suv: 2799, xuv: 3000 },
-    },
-  },
   CeramicSealant: {
     id: "CeramicSealant",
     label: "Ceramic Sealant Coating",
@@ -131,9 +116,9 @@ export const SERVICE_OPTIONS: Record<ServiceOptionId, ServiceOptionDef> = {
     },
   },
   // Interior detailing isn't sold standalone — it's only a paired add-on to
-  // Power Shine or Ceramic Sealant (and a separate small add-on to One-Time
-  // Manual). Kept here so the canonical price grid lives in one file; not
-  // exposed via OPTIONS_BY_CATEGORY.
+  // Ceramic Sealant (and a separate small add-on to One-Time Manual). Kept
+  // here so the canonical price grid lives in one file; not exposed via
+  // OPTIONS_BY_CATEGORY.
   InteriorDetailing: {
     id: "InteriorDetailing",
     label: "Interior Detailing",
@@ -148,7 +133,7 @@ export const SERVICE_OPTIONS: Record<ServiceOptionId, ServiceOptionDef> = {
 export const OPTIONS_BY_CATEGORY: Record<ServiceCategory, ServiceOptionId[]> = {
   CarWash:        ["Monthly", "WeeklyThrice"],
   OneTimeCarWash: ["OneTimeManual", "OneTimeMachine"],
-  CarDetailing:   ["PowerShine", "CeramicSealant"],
+  CarDetailing:   ["CeramicSealant"],
 };
 
 export function isServiceOptionId(v: unknown): v is ServiceOptionId {

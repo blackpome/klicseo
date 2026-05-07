@@ -16,7 +16,7 @@ export type { ServiceCategory } from "@/lib/pricing";
 export interface BookingData {
   service: ServiceCategory | null;
   // Canonical ServiceOptionId from src/lib/pricing.ts (e.g. "Monthly",
-  // "OneTimeManual", "PowerShine"). "" until the user picks one on Step 1.
+  // "OneTimeManual", "CeramicSealant"). "" until the user picks one on Step 1.
   serviceOption: string;
   // Only meaningful for OneTimeManual today.
   interiorAddOn: boolean;

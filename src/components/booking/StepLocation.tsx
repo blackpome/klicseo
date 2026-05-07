@@ -37,6 +37,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
   const [check, setCheck] = useState<CheckState>({ status: "idle" });
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
 
   function useMyLocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -74,13 +75,30 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
   // never-attempted check leaves them unable to continue. Outside-radius is
   // still allowed (we ask them to call us, but the form proceeds).
   const locationChecked = check.status === "done" || geoError !== null;
+  const addressValid = data.address.trim().length >= 8;
   const valid =
     pinLooksComplete &&
-    data.address.trim().length >= 8 &&
+    addressValid &&
     locationChecked &&
     data.parkingLocation !== "" &&
     data.gateAccessConsent &&
     data.date.length > 0;
+
+  const errLocation = attempted && !locationChecked;
+  const errPin      = attempted && !pinLooksComplete;
+  const errAddress  = attempted && !addressValid;
+  const errParking  = attempted && data.parkingLocation === "";
+  const errGate     = attempted && !data.gateAccessConsent;
+  const errDate     = attempted && data.date.length === 0;
+
+  function handleContinue() {
+    if (valid) {
+      setAttempted(false);
+      onNext();
+    } else {
+      setAttempted(true);
+    }
+  }
 
   return (
     <div>
@@ -97,7 +115,9 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         type="button"
         onClick={useMyLocation}
         disabled={geoLoading}
-        className="w-full py-3 rounded-xl text-sm font-semibold text-white border border-[#C9A84C]/40 bg-[#C9A84C]/5 hover:bg-[#C9A84C]/10 hover:border-[#C9A84C]/70 disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+        className={`w-full py-3 rounded-xl text-sm font-semibold text-white border bg-[#C9A84C]/5 hover:bg-[#C9A84C]/10 hover:border-[#C9A84C]/70 disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
+          errLocation ? "border-red-400/70 ring-1 ring-red-400/30" : "border-[#C9A84C]/40"
+        }`}
       >
         {geoLoading ? (
           <Loader2 size={14} className="animate-spin" />
@@ -111,7 +131,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           : "Re-check using my location"}
       </button>
       {!locationChecked && !geoLoading && (
-        <p className="text-[11px] text-white/40 mt-2">
+        <p className={`text-[11px] mt-2 ${errLocation ? "text-red-300" : "text-white/40"}`}>
           Tap above to confirm we serve your area before continuing.
         </p>
       )}
@@ -158,8 +178,11 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           placeholder="e.g. 600001"
           value={data.pincode}
           onChange={(e) => update({ pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
-          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors"
+          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors ${
+            errPin ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
+          }`}
         />
+        {errPin && <p className="text-[11px] text-red-300 mt-1">Enter a 6-digit pincode.</p>}
       </div>
 
       {/* Address */}
@@ -172,8 +195,11 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           placeholder="Flat no, Building, Street, Area, City"
           value={data.address}
           onChange={(e) => update({ address: e.target.value })}
-          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors resize-none"
+          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors resize-none ${
+            errAddress ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
+          }`}
         />
+        {errAddress && <p className="text-[11px] text-red-300 mt-1">Please enter your full address (at least 8 characters).</p>}
       </div>
 
       {/* Parking — Inside / Outside */}
@@ -181,7 +207,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
           Where is the car parked? *
         </p>
-        <div className="grid grid-cols-2 gap-2">
+        <div className={`grid grid-cols-2 gap-2 ${errParking ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
           {([
             { id: "inside",  label: "Inside",  blurb: "Garage / basement", Icon: Home  },
             { id: "outside", label: "Outside", blurb: "Driveway / open",   Icon: Trees },
@@ -212,6 +238,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
             );
           })}
         </div>
+        {errParking && <p className="text-[11px] text-red-300 mt-2">Pick where the car will be parked.</p>}
       </div>
 
       {/* Gate / access consent */}
@@ -221,6 +248,8 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl border text-left mb-4 transition-all ${
           data.gateAccessConsent
             ? "border-[#C9A84C] bg-[rgba(201,168,76,0.08)]"
+            : errGate
+            ? "border-red-400/70 ring-1 ring-red-400/30 bg-white/[0.04]"
             : "glass-card hover:border-[#1A5FD4]/40"
         }`}
       >
@@ -241,6 +270,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
             8 PM – 10 AM service window. If the gate is locked or restricted at the time of
             visit, the booking may be rescheduled.
           </p>
+          {errGate && <p className="text-[11px] text-red-300 mt-2">Tick this box to confirm gate access.</p>}
         </div>
       </button>
 
@@ -255,8 +285,11 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
             value={data.date}
             min={new Date().toISOString().split("T")[0]}
             onChange={(e) => update({ date: e.target.value })}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors [color-scheme:dark]"
+            className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors [color-scheme:dark] ${
+              errDate ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
+            }`}
           />
+          {errDate && <p className="text-[11px] text-red-300 mt-1">Pick a date.</p>}
         </div>
         <div>
           <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
@@ -274,6 +307,12 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         </div>
       </div>
 
+      {attempted && !valid && (
+        <p className="text-[12px] text-red-300 text-center mb-3">
+          Please complete the highlighted fields above.
+        </p>
+      )}
+
       <div className="flex gap-3">
         <button
           onClick={onBack}
@@ -282,9 +321,8 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           ← Back
         </button>
         <button
-          onClick={onNext}
-          disabled={!valid}
-          className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
+          onClick={handleContinue}
+          className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
           style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
         >
           Continue →

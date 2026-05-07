@@ -26,6 +26,7 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
       ? data.carModel : ""
   );
   const [showCustom, setShowCustom] = useState(false);
+  const [attempted, setAttempted] = useState(false);
 
   const selectedVehicle = vehicleData.find((v) => v.type === data.vehicleType);
 
@@ -49,7 +50,21 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
   }
 
   const modelValid = data.carModel.trim().length >= 2 || (showCustom && customModel.trim().length >= 2);
-  const valid = data.vehicleType && modelValid && data.carNumber.trim().length >= 3;
+  const numberValid = data.carNumber.trim().length >= 3;
+  const valid = !!data.vehicleType && modelValid && numberValid;
+
+  const errType   = attempted && !data.vehicleType;
+  const errModel  = attempted && !!data.vehicleType && !modelValid;
+  const errNumber = attempted && !numberValid;
+
+  function handleContinue() {
+    if (valid) {
+      setAttempted(false);
+      onNext();
+    } else {
+      setAttempted(true);
+    }
+  }
 
   return (
     <div>
@@ -60,9 +75,9 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
 
       {/* ── Car Type ── */}
       <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-        Car Type
+        Car Type *
       </p>
-      <div className="grid grid-cols-1 gap-2 mb-4">
+      <div className={`grid grid-cols-1 gap-2 mb-1 ${errType ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
         {vehicleData.map((v) => {
           const selected = data.vehicleType === v.type;
           return (
@@ -87,6 +102,8 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
           );
         })}
       </div>
+      {errType && <p className="text-[11px] text-red-300 mb-3">Pick your car type.</p>}
+      {!errType && <div className="mb-3" />}
 
       {/* ── Car Model ── */}
       <AnimatePresence>
@@ -100,10 +117,10 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
             className="mb-4"
           >
             <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-              Car Model
+              Car Model *
             </p>
 
-            <div className="flex flex-wrap gap-2 mb-2">
+            <div className={`flex flex-wrap gap-2 mb-2 ${errModel ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
               {selectedVehicle.models.map((model) => {
                 const sel = data.carModel === model && !showCustom;
                 return (
@@ -162,6 +179,9 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
                 ✓ <span className="font-semibold">{data.carModel}</span> selected
               </p>
             )}
+            {errModel && (
+              <p className="text-[11px] text-red-300 mt-1.5">Pick a model or tap &ldquo;Other&rdquo; to type yours.</p>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -177,9 +197,18 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
           placeholder="e.g. KA 01 AB 1234"
           value={data.carNumber}
           onChange={(e) => update({ carNumber: e.target.value.toUpperCase() })}
-          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm font-mono tracking-wider focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors"
+          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm font-mono tracking-wider focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors ${
+            errNumber ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
+          }`}
         />
+        {errNumber && <p className="text-[11px] text-red-300 mt-1">Enter the registration number.</p>}
       </div>
+
+      {attempted && !valid && (
+        <p className="text-[12px] text-red-300 text-center mb-3">
+          Please complete the highlighted fields above.
+        </p>
+      )}
 
       <div className="flex gap-3">
         <button
@@ -189,9 +218,8 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
           ← Back
         </button>
         <button
-          onClick={onNext}
-          disabled={!valid}
-          className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
+          onClick={handleContinue}
+          className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
           style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
         >
           Continue →

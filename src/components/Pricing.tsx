@@ -34,7 +34,6 @@ const plans = [
     tagline: "Premium paint & interior care",
     badge: null as string | null,
     features: [
-      "Power Shine Treatment from ₹2,999",
       "Ceramic Sealant Coating from ₹4,999",
       "Optional Interior Detailing add-on from ₹1,999",
       "Deep gloss & hydrophobic finish",

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Check, AlertCircle } from "lucide-react";
 import CarShowcase from "./CarShowcase";
@@ -18,7 +19,6 @@ const optionToPkg: Record<string, BookingData["pkg"]> = {
   WeeklyThrice:      "TriWeekly",
   OneTimeManual:     "OneTime",
   OneTimeMachine:    "OneTime",
-  PowerShine:        null,
   CeramicSealant:    null,
   InteriorDetailing: null,
 };
@@ -31,11 +31,22 @@ interface Props {
 }
 
 export default function StepPackage({ data, update, onNext, onBack }: Props) {
+  const [attempted, setAttempted] = useState(false);
   const tier = tierForVehicleType(data.vehicleType);
   const category = data.service;
   const optionIds = category ? OPTIONS_BY_CATEGORY[category] : [];
   const selectedOption = data.serviceOption;
   const selectedDef = selectedOption ? SERVICE_OPTIONS[selectedOption as keyof typeof SERVICE_OPTIONS] : undefined;
+  const errOption = attempted && !selectedDef;
+
+  function handleContinue() {
+    if (selectedDef) {
+      setAttempted(false);
+      onNext();
+    } else {
+      setAttempted(true);
+    }
+  }
 
   function selectOption(id: string) {
     if (id === selectedOption) return;
@@ -80,7 +91,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
       )}
 
       {/* Option cards for the chosen category */}
-      <div className="grid grid-cols-1 gap-3 mb-4 mt-2">
+      <div className={`grid grid-cols-1 gap-3 mb-1 mt-2 ${errOption ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
         {optionIds.map((id) => {
           const opt = SERVICE_OPTIONS[id];
           const selected = selectedOption === id;
@@ -137,8 +148,10 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
           );
         })}
       </div>
+      {errOption && <p className="text-[11px] text-red-300 mt-2 mb-3">Pick an option to continue.</p>}
+      {!errOption && <div className="mb-3" />}
 
-      {/* Interior add-on — Power Shine / Ceramic Sealant / One-Time Manual */}
+      {/* Interior add-on — Ceramic Sealant / One-Time Manual */}
       {selectedDef?.addOn && (
         <button
           onClick={toggleAddOn}
@@ -195,6 +208,12 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
         </div>
       )}
 
+      {attempted && !selectedDef && (
+        <p className="text-[12px] text-red-300 text-center mb-3">
+          Please pick an option above to continue.
+        </p>
+      )}
+
       <div className="flex gap-3">
         <button
           onClick={onBack}
@@ -203,9 +222,8 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
           ← Back
         </button>
         <button
-          onClick={onNext}
-          disabled={!selectedDef}
-          className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
+          onClick={handleContinue}
+          className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
           style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
         >
           Review Booking →

@@ -63,6 +63,10 @@ export default function StepConfirm({ data, onBack }: Props) {
         animate={{ opacity: 1, scale: 1 }}
         className="flex flex-col items-center text-center py-6"
       >
+        <div className="w-full mb-6">
+          <CarShowcase pkg={data.pkg} vehicleType={data.vehicleType} />
+        </div>
+
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -83,10 +87,6 @@ export default function StepConfirm({ data, onBack }: Props) {
         <p className="text-white/35 text-xs">
           Confirmation sent to <span className="text-white/55">{data.phone}</span>
         </p>
-
-        <div className="mt-6 w-full">
-          <CarShowcase pkg={data.pkg} vehicleType={data.vehicleType} />
-        </div>
       </motion.div>
     );
   }

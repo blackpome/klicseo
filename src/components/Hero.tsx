@@ -25,10 +25,21 @@ export default function Hero() {
   const [activeIdx, setActiveIdx] = useState(0);
 
   // Kick off the first clip. Other browser autoplay rules require muted +
-  // playsInline (set on the elements below). Catch silences the "autoplay
-  // blocked" promise rejection on browsers that still refuse.
+  // playsInline (set on the elements below). On iOS Safari the autoPlay
+  // attribute usually does it, but if not we retry on the very first user
+  // interaction so the dirt→clean reveal still plays for mobile visitors.
   useEffect(() => {
-    videoRefs.current[0]?.play().catch(() => {});
+    const v = videoRefs.current[0];
+    if (!v) return;
+    const tryPlay = () => v.play().catch(() => {});
+    tryPlay();
+    const onInteract = () => tryPlay();
+    window.addEventListener("touchstart", onInteract, { once: true, passive: true });
+    window.addEventListener("scroll", onInteract, { once: true, passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onInteract);
+      window.removeEventListener("scroll", onInteract);
+    };
   }, []);
 
   const handleEnded = (justEndedIdx: number) => {
@@ -89,36 +100,45 @@ export default function Hero() {
             key={src}
             ref={(el) => {
               videoRefs.current[i] = el;
+              // iOS Safari only honours autoplay if `muted` is the DOM
+              // *property* (not just the attribute React sets via JSX).
+              if (el) {
+                el.muted = true;
+                el.defaultMuted = true;
+              }
             }}
             src={src}
             muted
+            autoPlay={i === 0}
             playsInline
+            webkit-playsinline="true"
             preload="auto"
+            poster="/car_wash.jpeg"
             onEnded={() => handleEnded(i)}
             aria-hidden
             className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out"
-            style={{ opacity: i === activeIdx ? 0.55 : 0 }}
+            style={{ opacity: i === activeIdx ? 1 : 0 }}
           />
         ))}
       </motion.div>
 
-      {/* Top + bottom vignette so content (headline, CTAs, stats) stays readable
-          regardless of which frame of the video is on screen. */}
+      {/* Bottom vignette so the headline / CTAs / stats stay readable, while
+          leaving the top half of the frame clear for the dirt-to-clean
+          transformation footage to actually show through. */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "linear-gradient(to bottom, rgba(5,14,33,0.55) 0%, rgba(5,14,33,0.35) 40%, rgba(5,14,33,0.85) 85%, #050E21 100%)",
+            "linear-gradient(to bottom, rgba(5,14,33,0.15) 0%, rgba(5,14,33,0.10) 35%, rgba(5,14,33,0.55) 70%, rgba(5,14,33,0.95) 90%, #050E21 100%)",
         }}
       />
 
-      {/* Existing brand radial accents — sit on top of the video so the blue
-          glow still sells the Klicseo palette. */}
+      {/* Brand radial accents — kept light so the video stays visible. */}
       <div className="absolute inset-0 pointer-events-none" style={{
-        background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(26,95,212,0.35) 0%, transparent 70%)",
+        background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(26,95,212,0.18) 0%, transparent 70%)",
       }} />
       <div className="absolute inset-0 pointer-events-none" style={{
-        background: "radial-gradient(ellipse 50% 40% at 80% 80%, rgba(13,61,142,0.2) 0%, transparent 60%)",
+        background: "radial-gradient(ellipse 50% 40% at 80% 80%, rgba(13,61,142,0.10) 0%, transparent 60%)",
       }} />
 
       {/* Orbs — parallax */}
