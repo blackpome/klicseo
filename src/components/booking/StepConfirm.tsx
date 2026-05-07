@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle, Car, User, MapPin, Calendar, Sparkles } from "lucide-react";
+import { CheckCircle, Car, User, MapPin, Calendar, Sparkles, Home } from "lucide-react";
 import CarShowcase from "./CarShowcase";
 import type { BookingData } from "./BookingWizard";
 import { SERVICE_OPTIONS, isServiceOptionId, priceFor, tierLabel, tierForVehicleType, inr } from "@/lib/pricing";
@@ -120,6 +120,15 @@ export default function StepConfirm({ data, onBack }: Props) {
         />
         <Row icon={User}    label="Contact"  value={`${data.name} · ${data.phone}`} />
         <Row icon={MapPin}  label="Location" value={`${data.address}, ${data.pincode}`} />
+        {data.parkingLocation && (
+          <Row
+            icon={Home}
+            label="Parking & Access"
+            value={`${data.parkingLocation === "inside" ? "Inside (garage/basement)" : "Outside (driveway/open)"}${
+              data.gateAccessConsent ? " · gate access confirmed" : ""
+            }`}
+          />
+        )}
         {data.date && (
           <Row icon={Calendar} label="Date & Time" value={`${data.date} at ${data.time}`} />
         )}

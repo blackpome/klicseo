@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, Hash, CheckCircle, AlertTriangle, Loader2, LocateFixed } from "lucide-react";
+import { MapPin, Hash, CheckCircle, AlertTriangle, Loader2, LocateFixed, Home, Trees, Check, Lock } from "lucide-react";
 import type { BookingData } from "./BookingWizard";
 import {
   BUSINESS_LOCATION,
@@ -9,6 +9,14 @@ import {
   haversineKm,
   radiusForService,
 } from "@/lib/serviceability";
+
+// Service window: 8 PM – 10 AM (overnight). Hourly slots end-to-end.
+const TIME_SLOTS = [
+  "8:00 PM",  "9:00 PM",  "10:00 PM", "11:00 PM",
+  "12:00 AM", "1:00 AM",  "2:00 AM",  "3:00 AM",
+  "4:00 AM",  "5:00 AM",  "6:00 AM",  "7:00 AM",
+  "8:00 AM",  "9:00 AM",  "10:00 AM",
+];
 
 interface Props {
   data: BookingData;
@@ -61,8 +69,18 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
     );
   }
 
-  // Pincode + address are required for delivery; serviceability never blocks the form.
-  const valid = pinLooksComplete && data.address.trim().length >= 8;
+  // The GPS check is now compulsory — the user must either get a successful
+  // reading OR see an explicit error (denied / unsupported / timeout). A
+  // never-attempted check leaves them unable to continue. Outside-radius is
+  // still allowed (we ask them to call us, but the form proceeds).
+  const locationChecked = check.status === "done" || geoError !== null;
+  const valid =
+    pinLooksComplete &&
+    data.address.trim().length >= 8 &&
+    locationChecked &&
+    data.parkingLocation !== "" &&
+    data.gateAccessConsent &&
+    data.date.length > 0;
 
   return (
     <div>
@@ -71,7 +89,10 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
       </h2>
       <p className="text-white/45 text-sm mb-4">Our team will come to you — where should we head?</p>
 
-      {/* Serviceability check — driven only by GPS */}
+      {/* Serviceability check — required to proceed */}
+      <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
+        Availability Check *
+      </p>
       <button
         type="button"
         onClick={useMyLocation}
@@ -85,10 +106,15 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         )}
         {geoLoading
           ? "Locating…"
-          : check.status === "idle"
+          : check.status === "idle" && !geoError
           ? "Check availability with my location"
           : "Re-check using my location"}
       </button>
+      {!locationChecked && !geoLoading && (
+        <p className="text-[11px] text-white/40 mt-2">
+          Tap above to confirm we serve your area before continuing.
+        </p>
+      )}
 
       {check.status === "done" && check.distanceKm <= radiusKm && (
         <p className="flex items-center gap-1.5 text-[11px] text-[#C9A84C] mt-2">
@@ -150,6 +176,74 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         />
       </div>
 
+      {/* Parking — Inside / Outside */}
+      <div className="mb-4">
+        <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
+          Where is the car parked? *
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            { id: "inside",  label: "Inside",  blurb: "Garage / basement", Icon: Home  },
+            { id: "outside", label: "Outside", blurb: "Driveway / open",   Icon: Trees },
+          ] as const).map(({ id, label, blurb, Icon }) => {
+            const sel = data.parkingLocation === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => update({ parkingLocation: id })}
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all min-h-[48px] ${
+                  sel
+                    ? "border-[#C9A84C] shadow-[0_0_14px_rgba(201,168,76,0.2)]"
+                    : "glass-card hover:border-[#1A5FD4]/40"
+                }`}
+                style={sel ? { background: "rgba(201,168,76,0.08)" } : {}}
+              >
+                <Icon size={14} className={sel ? "text-[#C9A84C]" : "text-white/50"} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white leading-tight">{label}</p>
+                  <p className="text-[10px] text-white/40 mt-0.5 truncate">{blurb}</p>
+                </div>
+                {sel && (
+                  <div className="w-3 h-3 rounded-full flex-shrink-0"
+                       style={{ background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Gate / access consent */}
+      <button
+        type="button"
+        onClick={() => update({ gateAccessConsent: !data.gateAccessConsent })}
+        className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl border text-left mb-4 transition-all ${
+          data.gateAccessConsent
+            ? "border-[#C9A84C] bg-[rgba(201,168,76,0.08)]"
+            : "glass-card hover:border-[#1A5FD4]/40"
+        }`}
+      >
+        <div
+          className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border mt-0.5 ${
+            data.gateAccessConsent ? "border-[#C9A84C]" : "border-white/25"
+          }`}
+          style={data.gateAccessConsent ? { background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" } : {}}
+        >
+          {data.gateAccessConsent && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-white leading-tight flex items-center gap-1.5">
+            <Lock size={11} className="text-[#C9A84C]" /> Gate / parking access *
+          </p>
+          <p className="text-[11px] text-white/55 mt-1 leading-snug">
+            I confirm someone will arrange gate, security or parking-area access during the
+            8 PM – 10 AM service window. If the gate is locked or restricted at the time of
+            visit, the booking may be rescheduled.
+          </p>
+        </div>
+      </button>
+
       {/* Date & Time — stacked on mobile, side-by-side on sm+ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
         <div>
@@ -166,14 +260,14 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         </div>
         <div>
           <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-            Preferred Time
+            Preferred Time (8 PM – 10 AM)
           </label>
           <select
             value={data.time}
             onChange={(e) => update({ time: e.target.value })}
             className="w-full bg-[#071F4A] border border-white/10 rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none focus:border-[#C9A84C] transition-colors appearance-none cursor-pointer"
           >
-            {["8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM"].map((t) => (
+            {TIME_SLOTS.map((t) => (
               <option key={t}>{t}</option>
             ))}
           </select>

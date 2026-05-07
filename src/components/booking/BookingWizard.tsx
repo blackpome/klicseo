@@ -31,6 +31,8 @@ export interface BookingData {
   otpVerified: boolean;
   pincode: string;
   address: string;
+  parkingLocation: "" | "inside" | "outside";
+  gateAccessConsent: boolean;
   date: string;
   time: string;
 }
@@ -61,8 +63,10 @@ export default function BookingWizard() {
     otpVerified: false,
     pincode: "",
     address: "",
+    parkingLocation: "",
+    gateAccessConsent: false,
     date: "",
-    time: "8:00 AM",
+    time: "8:00 PM",
   });
 
   useEffect(() => {
