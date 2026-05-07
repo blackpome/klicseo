@@ -5,6 +5,7 @@ import { ChevronDown, Star, Shield, Clock } from "lucide-react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import BubbleParticles from "./BubbleParticles";
+import Magnetic from "./Magnetic";
 
 const stats = [
   { value: "2,500+", label: "Cars Washed" },
@@ -230,25 +231,29 @@ export default function Hero() {
           transition={{ duration: 0.6, delay: 0.4, ease: "easeOut" }}
           className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14"
         >
-          <motion.a
-            href="#pricing"
-            whileHover={{ scale: 1.05, y: -2 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 320, damping: 20 }}
-            className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-base text-[#050E21] shadow-[0_4px_24px_rgba(201,168,76,0.4)] hover:shadow-[0_8px_32px_rgba(201,168,76,0.6)] transition-shadow duration-300"
-            style={{ background: "linear-gradient(135deg,#9C7A2A 0%,#C9A84C 50%,#E8CC7A 100%)" }}
-          >
-            Book Your Wash
-          </motion.a>
-          <motion.a
-            href="#services"
-            whileHover={{ scale: 1.05, y: -2 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 320, damping: 20 }}
-            className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-base text-white glass-blue hover:bg-[#1A5FD4]/25 transition-colors duration-300"
-          >
-            Explore Services
-          </motion.a>
+          <Magnetic className="w-full sm:w-auto">
+            <motion.a
+              href="#pricing"
+              whileHover={{ scale: 1.05, y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 320, damping: 20 }}
+              className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-base text-[#050E21] shadow-[0_4px_24px_rgba(201,168,76,0.4)] hover:shadow-[0_8px_32px_rgba(201,168,76,0.6)] transition-shadow duration-300"
+              style={{ background: "linear-gradient(135deg,#9C7A2A 0%,#C9A84C 50%,#E8CC7A 100%)" }}
+            >
+              Book Your Wash
+            </motion.a>
+          </Magnetic>
+          <Magnetic className="w-full sm:w-auto">
+            <motion.a
+              href="#services"
+              whileHover={{ scale: 1.05, y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 320, damping: 20 }}
+              className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-base text-white glass-blue hover:bg-[#1A5FD4]/25 transition-colors duration-300"
+            >
+              Explore Services
+            </motion.a>
+          </Magnetic>
         </motion.div>
 
         {/* Trust badges */}

@@ -62,7 +62,7 @@ export const SERVICE_OPTIONS: Record<ServiceOptionId, ServiceOptionDef> = {
     blurb: "Mon – Sat, full month subscription",
     recurring: "monthly",
     category: "CarWash",
-    price: { hatchback: 1000, sedan: 1099, compactSUV: 1199, suv: 1399, xuv: 1599 },
+    price: { hatchback: 999, sedan: 1099, compactSUV: 1199, suv: 1399, xuv: 1599 },
   },
   WeeklyThrice: {
     id: "WeeklyThrice",

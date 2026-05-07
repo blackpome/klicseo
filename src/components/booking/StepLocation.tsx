@@ -39,11 +39,35 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
   const [geoError, setGeoError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
 
-  function useMyLocation() {
+  async function useMyLocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoError("Your browser doesn't support location access.");
       return;
     }
+
+    // Pre-flight permission check. Browsers (especially mobile Chrome/Safari)
+    // remember a previous denial and silently reject getCurrentPosition
+    // without re-prompting — which feels broken to the user. Querying the
+    // Permissions API up front lets us show explicit recovery instructions
+    // instead of bouncing into the generic PERMISSION_DENIED branch.
+    if (typeof navigator !== "undefined" && navigator.permissions) {
+      try {
+        const status = await navigator.permissions.query({
+          name: "geolocation" as PermissionName,
+        });
+        if (status.state === "denied") {
+          setGeoError(
+            "Location access is blocked for this site. On your phone: tap the lock/info icon next to the URL → Permissions → Location → Allow, then tap the button again. On desktop: browser Settings → Privacy → Site settings → Location. You can also keep filling the form and we'll confirm by phone.",
+          );
+          return;
+        }
+      } catch {
+        // Older mobile Safari builds don't support querying 'geolocation' via
+        // the Permissions API. Fall through — getCurrentPosition will still
+        // surface PERMISSION_DENIED below if appropriate.
+      }
+    }
+
     setGeoLoading(true);
     setGeoError(null);
     navigator.geolocation.getCurrentPosition(
@@ -59,11 +83,13 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
       (err) => {
         setGeoLoading(false);
         if (err.code === err.PERMISSION_DENIED) {
-          setGeoError("Location access denied. You can still fill the form and we'll confirm by phone.");
+          setGeoError(
+            "Location access denied. To enable it: tap the lock/info icon next to the site URL → Permissions → Location → Allow, then tap the button again. You can also continue filling the form.",
+          );
         } else if (err.code === err.TIMEOUT) {
-          setGeoError("Location request timed out. You can still fill the form and we'll confirm by phone.");
+          setGeoError("Location request timed out — try again, or continue filling the form and we'll confirm by phone.");
         } else {
-          setGeoError("Couldn't get your location. You can still fill the form and we'll confirm by phone.");
+          setGeoError("Couldn't get your location. Continue filling the form and we'll confirm by phone.");
         }
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
@@ -132,7 +158,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
       </button>
       {!locationChecked && !geoLoading && (
         <p className={`text-[11px] mt-2 ${errLocation ? "text-red-300" : "text-white/40"}`}>
-          Tap above to confirm we serve your area before continuing.
+          One-time check — we use your location only to confirm we serve your area. Tap above to allow.
         </p>
       )}
 
@@ -274,36 +300,49 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         </div>
       </button>
 
-      {/* Date & Time — stacked on mobile, side-by-side on sm+ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-        <div>
-          <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-            Preferred Date *
-          </label>
-          <input
-            type="date"
-            value={data.date}
-            min={new Date().toISOString().split("T")[0]}
-            onChange={(e) => update({ date: e.target.value })}
-            className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors [color-scheme:dark] ${
-              errDate ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
-            }`}
-          />
-          {errDate && <p className="text-[11px] text-red-300 mt-1">Pick a date.</p>}
-        </div>
-        <div>
-          <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-            Preferred Time (8 PM – 10 AM)
-          </label>
-          <select
-            value={data.time}
-            onChange={(e) => update({ time: e.target.value })}
-            className="w-full bg-[#071F4A] border border-white/10 rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none focus:border-[#C9A84C] transition-colors appearance-none cursor-pointer"
-          >
-            {TIME_SLOTS.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
+      {/* Date */}
+      <div className="mb-4">
+        <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
+          Preferred Date *
+        </label>
+        <input
+          type="date"
+          value={data.date}
+          min={new Date().toISOString().split("T")[0]}
+          onChange={(e) => update({ date: e.target.value })}
+          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors [color-scheme:dark] ${
+            errDate ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
+          }`}
+        />
+        {errDate && <p className="text-[11px] text-red-300 mt-1">Pick a date.</p>}
+      </div>
+
+      {/* Time-slot grid — replaces the old <select> with tappable buttons so
+          the user can scan all 15 overnight slots at a glance instead of
+          opening a long native picker on mobile. */}
+      <div className="mb-6">
+        <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
+          Preferred Time (8 PM – 10 AM)
+        </label>
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+          {TIME_SLOTS.map((t) => {
+            const sel = data.time === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => update({ time: t })}
+                className={`px-2 py-2.5 rounded-lg text-xs font-semibold border transition-all duration-200 min-h-[40px] ${
+                  sel
+                    ? "text-[#050E21] border-[#C9A84C]"
+                    : "border-white/10 bg-white/[0.03] text-white/70 hover:text-white hover:border-[#C9A84C]/40 active:scale-[0.97]"
+                }`}
+                style={sel ? { background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" } : {}}
+              >
+                {t}
+              </button>
+            );
+          })}
         </div>
       </div>
 

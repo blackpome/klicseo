@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import confetti from "canvas-confetti";
 import { CheckCircle, Car, User, MapPin, Calendar, Sparkles, Home } from "lucide-react";
-import CarShowcase from "./CarShowcase";
+import TransformationLoop from "./TransformationLoop";
 import type { BookingData } from "./BookingWizard";
+import { clearBookingDraft } from "./BookingWizard";
 import { SERVICE_OPTIONS, isServiceOptionId, priceFor, tierLabel, tierForVehicleType, inr } from "@/lib/pricing";
 
 interface Props {
@@ -53,8 +55,52 @@ export default function StepConfirm({ data, onBack }: Props) {
     } catch {
       // backend not connected yet — still show success
     }
-    setTimeout(() => { setLoading(false); setSubmitted(true); }, 1200);
+    setTimeout(() => {
+      setLoading(false);
+      setSubmitted(true);
+      clearBookingDraft();
+    }, 1200);
   }
+
+  // Gold-themed confetti burst on success — fires once when the screen
+  // transitions, layered as two angled bursts so it spreads across the
+  // viewport rather than firing from a single point. Also scrolls the page
+  // to the top so the confirmation hero (3D car + checkmark) is in view
+  // rather than the user landing on the bottom-of-page submit button.
+  useEffect(() => {
+    if (!submitted) return;
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    const palette = ["#9C7A2A", "#C9A84C", "#E8CC7A", "#FFFFFF"];
+    confetti({
+      particleCount: 90,
+      spread: 70,
+      angle: 60,
+      origin: { x: 0, y: 0.7 },
+      colors: palette,
+      scalar: 0.9,
+    });
+    confetti({
+      particleCount: 90,
+      spread: 70,
+      angle: 120,
+      origin: { x: 1, y: 0.7 },
+      colors: palette,
+      scalar: 0.9,
+    });
+    const t = setTimeout(() => {
+      confetti({
+        particleCount: 60,
+        spread: 100,
+        startVelocity: 35,
+        origin: { x: 0.5, y: 0.5 },
+        colors: palette,
+        scalar: 0.8,
+      });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [submitted]);
 
   if (submitted) {
     return (
@@ -64,7 +110,7 @@ export default function StepConfirm({ data, onBack }: Props) {
         className="flex flex-col items-center text-center py-6"
       >
         <div className="w-full mb-6">
-          <CarShowcase pkg={data.pkg} vehicleType={data.vehicleType} />
+          <TransformationLoop />
         </div>
 
         <motion.div
@@ -98,10 +144,8 @@ export default function StepConfirm({ data, onBack }: Props) {
       </h2>
       <p className="text-white/45 text-sm mb-4">Everything look right?</p>
 
-      <CarShowcase pkg={data.pkg} vehicleType={data.vehicleType} />
-
       {/* Summary */}
-      <div className="glass-card rounded-2xl px-3 py-0.5 mb-4 mt-3">
+      <div className="glass-card rounded-2xl px-3 py-0.5 mb-4">
         {data.service && (
           <Row
             icon={Sparkles}

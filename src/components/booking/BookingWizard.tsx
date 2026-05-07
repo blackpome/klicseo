@@ -39,6 +39,40 @@ export interface BookingData {
 
 const TOTAL_STEPS = 5;
 
+// localStorage key for the in-progress booking draft. Survives page refresh
+// so a 5-step form isn't punishing if the tab is reloaded mid-fill.
+const DRAFT_KEY = "klicseo-booking-draft";
+
+// otpVerified is excluded from the draft on purpose — phone re-verification
+// must happen each session for security.
+type DraftData = Omit<BookingData, "otpVerified">;
+
+function readDraft(): Partial<DraftData> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as Partial<DraftData>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(data: BookingData) {
+  if (typeof window === "undefined") return;
+  try {
+    const { otpVerified: _otp, ...rest } = data;
+    void _otp;
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(rest));
+  } catch {
+    // Storage may be full or disabled (private mode) — silently no-op.
+  }
+}
+
+export function clearBookingDraft() {
+  if (typeof window === "undefined") return;
+  try { localStorage.removeItem(DRAFT_KEY); } catch {}
+}
+
 const variants = {
   enter: (dir: number) => ({ x: dir > 0 ? "55%" : "-55%", opacity: 0 }),
   center: { x: 0, opacity: 1 },
@@ -69,6 +103,19 @@ export default function BookingWizard() {
     time: "8:00 PM",
   });
 
+  // Hydrate from localStorage draft once on mount. Deep-link query params
+  // below still override draft fields, so a fresh "Book Detailing" CTA always
+  // lands on the right service even if the user had a half-filled draft.
+  useEffect(() => {
+    const draft = readDraft();
+    if (draft) setData((d) => ({ ...d, ...draft, otpVerified: false }));
+  }, []);
+
+  // Persist on every change. Cheap; the form is small.
+  useEffect(() => {
+    writeDraft(data);
+  }, [data]);
+
   useEffect(() => {
     // Legacy ?package= deep-link from older marketing links. Map to the new
     // serviceOption + service category model so the rest of the flow works.
@@ -96,8 +143,14 @@ export default function BookingWizard() {
     setData((d) => ({ ...d, ...patch }));
   }
 
+  // Scroll the whole page to the very top on step changes — scrolling the
+  // wizard ref via scrollIntoView often does nothing because the wizard
+  // already overlaps the viewport, leaving the user stranded mid-form. The
+  // page-level scroll resets the booking header and progress bar back into
+  // view, which is the visual signal that "you moved to a new step".
   function scrollTop() {
-    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function next() {

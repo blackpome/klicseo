@@ -28,7 +28,7 @@ export function radiusForService(service: string | null | undefined): number {
 
 // Phone number shown to customers whose location is outside the radius.
 // Keep in sync with the footer / contact section.
-export const SUPPORT_PHONE = "+1 (234) 567-890";
+export const SUPPORT_PHONE = "+917904332212";
 
 export function haversineKm(
   a: { lat: number; lng: number },

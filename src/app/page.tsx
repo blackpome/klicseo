@@ -6,6 +6,8 @@ import Pricing from "@/components/Pricing";
 import Testimonials from "@/components/Testimonials";
 import BookingTeaser from "@/components/BookingTeaser";
 import Footer from "@/components/Footer";
+import StickyMobileCTA from "@/components/StickyMobileCTA";
+import FloatingContact from "@/components/FloatingContact";
 
 export default function Home() {
   return (
@@ -18,6 +20,8 @@ export default function Home() {
       <Testimonials />
       <BookingTeaser />
       <Footer />
+      <StickyMobileCTA />
+      <FloatingContact />
     </main>
   );
 }

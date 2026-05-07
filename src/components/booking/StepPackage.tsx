@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Check, AlertCircle } from "lucide-react";
-import CarShowcase from "./CarShowcase";
+import TransformationLoop from "./TransformationLoop";
 import type { BookingData } from "./BookingWizard";
 import {
   OPTIONS_BY_CATEGORY,
@@ -68,7 +68,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
       </h2>
       <p className="text-white/45 text-sm mb-3">Pricing for your {tierLabel[tier]}.</p>
 
-      <CarShowcase pkg={data.pkg} vehicleType={data.vehicleType} />
+      <TransformationLoop label={selectedDef?.shortLabel} />
 
       {/* Vehicle summary — already chosen in the previous step */}
       {data.vehicleType && (
