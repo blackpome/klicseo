@@ -113,7 +113,6 @@ export default function Hero() {
             playsInline
             webkit-playsinline="true"
             preload="auto"
-            poster="/car_wash.jpeg"
             onEnded={() => handleEnded(i)}
             aria-hidden
             className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out"
