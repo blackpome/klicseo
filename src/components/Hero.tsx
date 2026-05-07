@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { ChevronDown, Star, Shield, Clock } from "lucide-react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import BubbleParticles from "./BubbleParticles";
 
 const stats = [
@@ -17,10 +17,31 @@ const stats = [
 const HERO_VIDEOS = ["/car-detail-1.mp4", "/car-detail-2.mp4"];
 
 export default function Hero() {
-  // Cycle through HERO_VIDEOS — the active one is the only `<video>` in the
-  // DOM. We swap by changing key + src so the new clip auto-plays cleanly.
-  const [vIndex, setVIndex] = useState(0);
-  const advanceVideo = () => setVIndex((i) => (i + 1) % HERO_VIDEOS.length);
+  // Both clips are mounted permanently; we just swap which one is active.
+  // The inactive video stays paused at frame 0 with the file already cached,
+  // so play() returns within a frame or two — seamless handoff, no black gap
+  // and no remount cost.
+  const videoRefs = useRef<Array<HTMLVideoElement | null>>([null, null]);
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  // Kick off the first clip. Other browser autoplay rules require muted +
+  // playsInline (set on the elements below). Catch silences the "autoplay
+  // blocked" promise rejection on browsers that still refuse.
+  useEffect(() => {
+    videoRefs.current[0]?.play().catch(() => {});
+  }, []);
+
+  const handleEnded = (justEndedIdx: number) => {
+    const nextIdx = (justEndedIdx + 1) % HERO_VIDEOS.length;
+    const ended = videoRefs.current[justEndedIdx];
+    const next = videoRefs.current[nextIdx];
+    if (ended) ended.currentTime = 0; // rewind so it's ready when its turn returns
+    if (next) {
+      next.currentTime = 0;
+      next.play().catch(() => {});
+    }
+    setActiveIdx(nextIdx);
+  };
 
   // Mouse parallax — drives logo & orbs with subtle depth
   const mx = useMotionValue(0);
@@ -54,32 +75,32 @@ export default function Hero() {
       {/* Backgrounds */}
       <div className="absolute inset-0 bg-[#050E21]" />
 
-      {/* Cinematic detailing video — cycles through HERO_VIDEOS in order.
-          The wrapper handles the one-time fade-in so swapping the inner
-          <video> on advance doesn't make it pulse. preload="auto" + the
-          hidden preloader below keep handoff between clips snappy. */}
+      {/* Cinematic detailing video — both clips stay mounted, only one plays
+          and is visible at a time. Swap is a 600ms crossfade rather than a
+          hard cut, so the handoff feels continuous instead of edited. */}
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: 0.55 }}
+        animate={{ opacity: 1 }}
         transition={{ duration: 1.4, ease: "easeOut" }}
         className="absolute inset-0 pointer-events-none"
       >
-        <video
-          key={vIndex}
-          src={HERO_VIDEOS[vIndex]}
-          autoPlay
-          muted
-          playsInline
-          preload="auto"
-          onEnded={advanceVideo}
-          aria-hidden
-          className="w-full h-full object-cover"
-        />
+        {HERO_VIDEOS.map((src, i) => (
+          <video
+            key={src}
+            ref={(el) => {
+              videoRefs.current[i] = el;
+            }}
+            src={src}
+            muted
+            playsInline
+            preload="auto"
+            onEnded={() => handleEnded(i)}
+            aria-hidden
+            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out"
+            style={{ opacity: i === activeIdx ? 0.55 : 0 }}
+          />
+        ))}
       </motion.div>
-
-      {/* Silent preloader for the next clip in the loop, so the swap above
-          plays from a warm browser cache. Never rendered visibly. */}
-      <link rel="preload" as="video" href={HERO_VIDEOS[(vIndex + 1) % HERO_VIDEOS.length]} />
 
       {/* Top + bottom vignette so content (headline, CTAs, stats) stays readable
           regardless of which frame of the video is on screen. */}
