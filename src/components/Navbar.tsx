@@ -3,20 +3,27 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu, X, Phone } from "lucide-react";
 import { motion, useScroll, useSpring } from "framer-motion";
 
 const navLinks = [
-  { label: "Services",     href: "#services",     id: "services"     },
-  { label: "How It Works", href: "#how-it-works", id: "how-it-works" },
-  { label: "Pricing",      href: "#pricing",      id: "pricing"      },
-  { label: "Testimonials", href: "#testimonials", id: "testimonials" },
+  { label: "Services",     hash: "services"     },
+  { label: "How It Works", hash: "how-it-works" },
+  { label: "Pricing",      hash: "pricing"      },
+  { label: "Testimonials", hash: "testimonials" },
 ];
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const pathname = usePathname();
+  const onHome = pathname === "/";
+
+  // From the home page, use bare hash so the browser scrolls in place.
+  // From any other route, prefix with "/" so we route home + scroll on landing.
+  const hrefFor = (hash: string) => (onHome ? `#${hash}` : `/#${hash}`);
 
   // Page-scroll progress bar (top of viewport)
   const { scrollYProgress } = useScroll();
@@ -28,10 +35,15 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // IntersectionObserver for active section
+  // IntersectionObserver for active section — only meaningful on the home page
+  // where the sections actually exist. Skip entirely on other routes.
   useEffect(() => {
+    if (!onHome) {
+      setActiveId(null);
+      return;
+    }
     const sections = navLinks
-      .map((l) => document.getElementById(l.id))
+      .map((l) => document.getElementById(l.hash))
       .filter((el): el is HTMLElement => Boolean(el));
 
     if (!sections.length) return;
@@ -49,7 +61,7 @@ export default function Navbar() {
 
     sections.forEach((s) => observer.observe(s));
     return () => observer.disconnect();
-  }, []);
+  }, [onHome]);
 
   return (
     <header
@@ -98,11 +110,11 @@ export default function Navbar() {
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-2">
             {navLinks.map((link) => {
-              const active = activeId === link.id;
+              const active = onHome && activeId === link.hash;
               return (
-                <a
+                <Link
                   key={link.label}
-                  href={link.href}
+                  href={hrefFor(link.hash)}
                   className={`relative px-3 py-2 text-sm font-medium transition-colors duration-200 ${
                     active ? "text-white" : "text-white/65 hover:text-white"
                   }`}
@@ -121,7 +133,7 @@ export default function Navbar() {
                       active ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"
                     }`}
                   />
-                </a>
+                </Link>
               );
             })}
           </nav>
@@ -160,17 +172,20 @@ export default function Navbar() {
       >
         <div className="bg-[#071F4A]/95 backdrop-blur-md border-t border-[#1A5FD4]/20 px-4 py-4 space-y-1">
           {navLinks.map((link, i) => (
-            <motion.a
+            <motion.div
               key={link.label}
-              href={link.href}
-              onClick={() => setIsOpen(false)}
               initial={false}
               animate={isOpen ? { opacity: 1, x: 0 } : { opacity: 0, x: -8 }}
               transition={{ duration: 0.25, delay: isOpen ? i * 0.04 : 0 }}
-              className="block py-3 px-4 text-white/80 hover:text-white hover:bg-[#1A5FD4]/20 rounded-lg transition-colors font-medium"
             >
-              {link.label}
-            </motion.a>
+              <Link
+                href={hrefFor(link.hash)}
+                onClick={() => setIsOpen(false)}
+                className="block py-3 px-4 text-white/80 hover:text-white hover:bg-[#1A5FD4]/20 rounded-lg transition-colors font-medium"
+              >
+                {link.label}
+              </Link>
+            </motion.div>
           ))}
           <Link
             href="/booking"

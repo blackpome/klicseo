@@ -44,10 +44,40 @@ export default function Hero() {
 
       {/* Backgrounds */}
       <div className="absolute inset-0 bg-[#050E21]" />
-      <div className="absolute inset-0" style={{
+
+      {/* Cinematic detailing video — sits above the solid color, dimmed enough
+          for the headline to stay legible. preload="auto" because we want it
+          rolling the moment the hero is visible. */}
+      <motion.video
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.55 }}
+        transition={{ duration: 1.4, ease: "easeOut" }}
+        src="/car-detail.mp4"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        aria-hidden
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+      />
+
+      {/* Top + bottom vignette so content (headline, CTAs, stats) stays readable
+          regardless of which frame of the video is on screen. */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(to bottom, rgba(5,14,33,0.55) 0%, rgba(5,14,33,0.35) 40%, rgba(5,14,33,0.85) 85%, #050E21 100%)",
+        }}
+      />
+
+      {/* Existing brand radial accents — sit on top of the video so the blue
+          glow still sells the Klicseo palette. */}
+      <div className="absolute inset-0 pointer-events-none" style={{
         background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(26,95,212,0.35) 0%, transparent 70%)",
       }} />
-      <div className="absolute inset-0" style={{
+      <div className="absolute inset-0 pointer-events-none" style={{
         background: "radial-gradient(ellipse 50% 40% at 80% 80%, rgba(13,61,142,0.2) 0%, transparent 60%)",
       }} />
 
