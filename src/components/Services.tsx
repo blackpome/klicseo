@@ -1,44 +1,47 @@
 "use client";
 
-import { Droplets, Sparkles, Shield, Zap, Car, Wind } from "lucide-react";
+import { Droplets, Sparkles, Car, CalendarDays, Building2, Gift } from "lucide-react";
 import { useRef, useState, MouseEvent } from "react";
 import { motion } from "framer-motion";
+import { SUPPORT_PHONE } from "@/lib/serviceability";
+
+const phoneDigits = SUPPORT_PHONE.replace(/[\s()\-+]/g, "");
 
 const services = [
   {
-    icon: Droplets,
-    title: "Exterior Wash",
-    description: "Full exterior hand wash with premium pH-balanced soap, wheel cleaning, and spot-free rinse.",
-    highlight: false,
-  },
-  {
     icon: Sparkles,
-    title: "Interior Detail",
-    description: "Deep vacuum, leather conditioning, dashboard polish, and odor elimination for a showroom finish.",
+    title: "Car Detailing",
+    description: "Premium ceramic sealant (6-9 mo durability, 3 mo top-up). Uses top chemicals to clear swirl marks & minor scratches. Includes tire polish & glass cleaning.",
     highlight: true,
   },
   {
-    icon: Shield,
-    title: "Ceramic Coating",
-    description: "Professional-grade ceramic protection that repels water, dirt, and UV rays for years.",
-    highlight: false,
-  },
-  {
     icon: Car,
-    title: "Full Detail",
-    description: "Complete top-to-bottom transformation — paint correction, interior deep clean, and sealant.",
+    title: "Interior Detailing",
+    description: "Foam wash for fabric or specialized chemical clean for leather. Includes dashboard polish, roof, floor, mat, dicky, and AC vent deep cleaning.",
     highlight: false,
   },
   {
-    icon: Zap,
-    title: "Express Wash",
-    description: "Quick 15-minute premium wash for busy schedules. No compromise on quality.",
+    icon: Droplets,
+    title: "One Time Wash",
+    description: "Choose between manual bucket wash or pressure foam wash. Clears major dirt safely without scratches. Includes tire polish and glass cleaning.",
     highlight: false,
   },
   {
-    icon: Wind,
-    title: "Engine Bay Clean",
-    description: "Safe degreaser treatment and detailing of your engine bay for optimal performance and looks.",
+    icon: CalendarDays,
+    title: "Monthly Subscription",
+    description: "Regular dust removal via wet cloth wipe method, plus monthly once mat cleaning. (Interior deep cleaning available with extra charges).",
+    highlight: false,
+  },
+  {
+    icon: Building2,
+    title: "Bulk Apartment Cleaning",
+    description: "Convenient and cost-effective bulk car wash solutions for apartments and gated communities. Professional service right at your doorstep.",
+    highlight: false,
+  },
+  {
+    icon: Gift,
+    title: "Referrals",
+    description: "Refer for Detailing: Get one free pressure wash. Refer for Monthly Subscription: Get ₹100 discount or cashback.",
     highlight: false,
   },
 ];
@@ -169,11 +172,16 @@ export default function Services() {
                     {service.description}
                   </p>
 
-                  <div className={`mt-5 text-sm font-semibold flex items-center gap-1 ${
-                    service.highlight ? "text-[#E8CC7A]" : "text-[#C9A84C]"
-                  } transition-all duration-200`}>
+                  <a
+                    href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent("Hi Klicseo, I'd like to learn more about the " + service.title + " service.")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`mt-5 text-sm font-semibold inline-flex items-center gap-1 ${
+                      service.highlight ? "text-[#E8CC7A]" : "text-[#C9A84C]"
+                    } transition-all duration-200 hover:opacity-80`}
+                  >
                     Learn more <span>→</span>
-                  </div>
+                  </a>
                 </TiltCard>
               </motion.div>
             );

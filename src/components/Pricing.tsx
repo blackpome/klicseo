@@ -8,25 +8,6 @@ import { motion, useSpring } from "framer-motion";
 // vehicle-tier-specific price from the same source (src/lib/pricing.ts).
 const plans = [
   {
-    id: "CarWash",
-    name: "Car Wash",
-    fromPrice: 649,
-    billing: "mo, starting from",
-    tagline: "Doorstep wash subscriptions",
-    badge: null as string | null,
-    features: [
-      "Daily Monthly Plan from ₹1,000/mo (Mon–Sat)",
-      "Weekly Thrice Plan from ₹649/mo",
-      "Free monthly interior cleaning on Daily plan",
-      "Trained & insured professionals",
-      "Doorstep service — we come to you",
-      "Cancel anytime, no contract",
-    ],
-    highlight: false,
-    cta: "Book Car Wash",
-    href: "/booking?service=CarWash",
-  },
-  {
     id: "CarDetailing",
     name: "Car Detailing",
     fromPrice: 1999,
@@ -40,9 +21,30 @@ const plans = [
       "Hand-applied by certified detailers",
       "By appointment at your location",
     ],
-    highlight: true,
+    highlight: false,
+    borderColor: "#10b981", // Premium Green
     cta: "Book Detailing",
     href: "/booking?service=CarDetailing",
+  },
+  {
+    id: "CarWash",
+    name: "Car Wash",
+    fromPrice: 33,
+    billing: "day, starting from",
+    tagline: "Doorstep wash subscriptions",
+    badge: null as string | null,
+    features: [
+      "Daily Monthly Plan from ₹999/mo (Mon–Sat)",
+      "Weekly Thrice Plan from ₹649/mo",
+      "Free monthly interior cleaning on Daily plan",
+      "Trained & insured professionals",
+      "Doorstep service — we come to you",
+      "Cancel anytime, no contract",
+    ],
+    highlight: true,
+    borderColor: "#3B82F6", // Premium Blue
+    cta: "Book Car Wash",
+    href: "/booking?service=CarWash",
   },
   {
     id: "OneTimeCarWash",
@@ -60,18 +62,21 @@ const plans = [
       "Great if you want to try us first",
     ],
     highlight: false,
+    borderColor: "#C9A84C", // Premium Gold
     cta: "Book One-Time Wash",
     href: "/booking?service=OneTimeCarWash",
   },
 ];
 
-/** 3D tilt + glare on hover, with smooth spring restore. */
+/** 3D tilt + glare + rotating border animation */
 function TiltPlanCard({
   children,
   highlight,
+  borderColor,
 }: {
   children: React.ReactNode;
   highlight: boolean;
+  borderColor: string;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const rx = useSpring(0, { stiffness: 200, damping: 20 });
@@ -96,61 +101,77 @@ function TiltPlanCard({
   }
 
   return (
-    <div
+    <motion.div
       ref={cardRef}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
-      style={{ perspective: "1100px" }}
-      className="h-full"
+      style={{
+        rotateX: rx,
+        rotateY: ry,
+        perspective: "1100px",
+        transformStyle: "preserve-3d",
+      }}
+      className="relative h-full"
     >
-      <motion.div
-        style={{ rotateX: rx, rotateY: ry, transformStyle: "preserve-3d" }}
-        className={`relative rounded-2xl p-7 flex flex-col h-full transition-shadow duration-300 overflow-hidden ${
-          highlight
-            ? "border border-[#1A5FD4]/60 shadow-[0_8px_48px_rgba(26,95,212,0.4)]"
-            : "glass-card hover:border-[#1A5FD4]/25"
-        }`}
+      {/* ── Animated rotating border wrapper ── */}
+      <div
+        className="relative rounded-2xl h-full overflow-hidden"
+        style={{ padding: "3px" }}
       >
-        {/* Solid gradient bg for highlight plan */}
-        {highlight && (
+        {/* The conic-gradient spinner — must be INSIDE overflow:hidden */}
+        <motion.div
+          className="absolute pointer-events-none"
+          style={{
+            inset: 0,
+            width: "100%",
+            height: "100%",
+          }}
+          animate={{ rotate: [0, 360] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+        >
+          {/* Expand the spinner so it covers all corners */}
+          <div
+            style={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              width: "200%",
+              height: "200%",
+              transform: "translate(-50%, -50%)",
+              background: `conic-gradient(from 0deg, transparent 0deg, ${borderColor} 60deg, transparent 120deg, transparent 180deg, ${borderColor} 240deg, transparent 300deg)`,
+            }}
+          />
+        </motion.div>
+
+        {/* ── Inner card (masks spinner to the border only) ── */}
+        <div
+          className="relative flex flex-col h-full rounded-[15px] overflow-hidden"
+          style={{ backgroundColor: "#050E21" }}
+        >
+          {/* Blue gradient bg for popular/highlight plan */}
+          {highlight && (
+            <div
+              aria-hidden
+              className="absolute inset-0 pointer-events-none"
+              style={{ background: "linear-gradient(145deg, #1A5FD4 0%, #0D3D8E 100%)" }}
+            />
+          )}
+
+          {/* Mouse-following glare */}
           <div
             aria-hidden
             className="absolute inset-0 pointer-events-none"
-            style={{ background: "linear-gradient(145deg, #1A5FD4 0%, #0D3D8E 100%)" }}
+            style={{
+              background: `radial-gradient(circle at ${glare.x}% ${glare.y}%, rgba(255,255,255,${glare.o}) 0%, transparent 60%)`,
+              transition: "opacity 0.18s ease",
+            }}
           />
-        )}
 
-        {/* Mouse-following glare */}
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: `radial-gradient(circle at ${glare.x}% ${glare.y}%, rgba(255,255,255,${glare.o}) 0%, transparent 60%)`,
-            transition: "opacity 0.18s ease",
-          }}
-        />
-
-        {/* Content sits above bg/glare */}
-        <div className="relative flex flex-col h-full">{children}</div>
-      </motion.div>
-
-      {/* Animated halo around highlight card — outside the tilted layer so it
-          stays parallel to the page; inside its own non-clipping wrapper. */}
-      {highlight && (
-        <motion.div
-          aria-hidden
-          className="absolute -inset-1 rounded-[1.25rem] pointer-events-none -z-10"
-          animate={{
-            boxShadow: [
-              "0 0 0 0 rgba(201,168,76,0.0)",
-              "0 0 28px 6px rgba(201,168,76,0.30)",
-              "0 0 0 0 rgba(201,168,76,0.0)",
-            ],
-          }}
-          transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
-        />
-      )}
-    </div>
+          {/* Content */}
+          <div className="relative flex flex-col h-full z-10 p-7">{children}</div>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -190,7 +211,7 @@ export default function Pricing() {
           <div className="divider-gold w-24 mx-auto mt-6" />
         </motion.div>
 
-        {/* Pricing cards — three services */}
+        {/* Pricing cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pt-5">
           {plans.map((plan, i) => (
             <motion.div
@@ -199,12 +220,11 @@ export default function Pricing() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.15 }}
               transition={{ duration: 0.6, delay: i * 0.12, ease: [0.22, 1, 0.36, 1] }}
-              className="relative"
+              className="relative pt-3"
             >
-              {/* Floating badges live OUTSIDE the tilted card so they stay
-                  flat to the page and don't get clipped. */}
+              {/* "Most Popular" badge */}
               {plan.highlight && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20">
                   <span
                     className="px-4 py-1 rounded-full text-[11px] font-bold tracking-widest uppercase text-[#050E21] whitespace-nowrap shadow-[0_4px_14px_rgba(201,168,76,0.4)]"
                     style={{ background: "linear-gradient(135deg, #9C7A2A, #C9A84C, #E8CC7A)" }}
@@ -213,18 +233,8 @@ export default function Pricing() {
                   </span>
                 </div>
               )}
-              {plan.badge && !plan.highlight && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
-                  <span
-                    className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wide text-white whitespace-nowrap shadow-[0_4px_14px_rgba(239,68,68,0.35)]"
-                    style={{ background: "rgba(239,68,68,0.92)" }}
-                  >
-                    {plan.badge}
-                  </span>
-                </div>
-              )}
 
-              <TiltPlanCard highlight={plan.highlight}>
+              <TiltPlanCard highlight={plan.highlight} borderColor={plan.borderColor}>
                 <div className="mb-4">
                   <h3
                     className="text-xl font-bold text-white mb-1"
@@ -259,13 +269,12 @@ export default function Pricing() {
                       className="flex items-start gap-3 text-sm"
                     >
                       <div
-                        className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center mt-0.5 ${
-                          plan.highlight ? "bg-white/20" : "bg-[#C9A84C]/20"
-                        }`}
+                        className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center mt-0.5"
+                        style={{ backgroundColor: `${plan.borderColor}30` }}
                       >
                         <Check
                           size={11}
-                          className={plan.highlight ? "text-white" : "text-[#C9A84C]"}
+                          style={{ color: plan.borderColor }}
                           strokeWidth={3}
                         />
                       </div>

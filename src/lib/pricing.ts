@@ -8,20 +8,20 @@
 export type PriceTier = "hatchback" | "sedan" | "compactSUV" | "suv" | "xuv";
 
 export const tierLabel: Record<PriceTier, string> = {
-  hatchback:  "Hatchback",
-  sedan:      "Sedan",
+  hatchback: "Hatchback",
+  sedan: "Sedan",
   compactSUV: "Compact SUV",
-  suv:        "SUV",
-  xuv:        "XUV / Large",
+  suv: "SUV",
+  xuv: "XUV / Large",
 };
 
 // vehicleType strings produced by StepVehicle → price tier
 const TIER_BY_VEHICLE_TYPE: Record<string, PriceTier> = {
-  "Hatchback":         "hatchback",
-  "Sedan":             "sedan",
-  "Compact SUV":       "compactSUV",
-  "SUV":               "suv",
-  "XUV & Large SUV":   "xuv",
+  "Hatchback": "hatchback",
+  "Sedan": "sedan",
+  "Compact SUV": "compactSUV",
+  "SUV": "suv",
+  "XUV & Large SUV": "xuv",
 };
 
 export function tierForVehicleType(type: string): PriceTier {
@@ -39,16 +39,16 @@ export type ServiceOptionId =
   | "InteriorDetailing";
 
 export interface ServiceOptionDef {
-  id:        ServiceOptionId;
-  label:     string;
+  id: ServiceOptionId;
+  label: string;
   shortLabel: string;
-  blurb:     string;
+  blurb: string;
   recurring: "monthly" | "one-time";
-  category:  ServiceCategory;
-  price:     Record<PriceTier, number>;
+  category: ServiceCategory;
+  price: Record<PriceTier, number>;
   // Optional add-on charged in addition to `price` (only OneTimeManual today).
   addOn?: {
-    id:    string;
+    id: string;
     label: string;
     price: Record<PriceTier, number>;
   };
@@ -80,7 +80,7 @@ export const SERVICE_OPTIONS: Record<ServiceOptionId, ServiceOptionDef> = {
     blurb: "Single hand-wash visit",
     recurring: "one-time",
     category: "OneTimeCarWash",
-    price: { hatchback: 249, sedan: 349, compactSUV: 399, suv: 499, xuv: 595 },
+    price: { hatchback: 249, sedan: 349, compactSUV: 399, suv: 499, xuv: 599 },
     addOn: {
       id: "InteriorClean",
       label: "Add interior cleaning",
@@ -131,9 +131,9 @@ export const SERVICE_OPTIONS: Record<ServiceOptionId, ServiceOptionDef> = {
 };
 
 export const OPTIONS_BY_CATEGORY: Record<ServiceCategory, ServiceOptionId[]> = {
-  CarWash:        ["Monthly", "WeeklyThrice"],
+  CarWash: ["Monthly", "WeeklyThrice"],
   OneTimeCarWash: ["OneTimeManual", "OneTimeMachine"],
-  CarDetailing:   ["CeramicSealant"],
+  CarDetailing: ["CeramicSealant"],
 };
 
 export function isServiceOptionId(v: unknown): v is ServiceOptionId {
