@@ -29,7 +29,7 @@ const plans = [
   {
     id: "CarWash",
     name: "Car Wash",
-    fromPrice: 33,
+    fromPrice: 27,
     billing: "day, starting from",
     tagline: "Doorstep wash subscriptions",
     badge: null as string | null,
