@@ -36,7 +36,7 @@ export default function StickyMobileCTA() {
             Mobile car wash
           </span>
           <span className="block text-base font-bold text-[#050E21]">
-            Book Now · From ₹249
+            Book Now · From ₹27/day
           </span>
         </span>
         <ArrowRight size={20} className="text-[#050E21] flex-shrink-0" strokeWidth={2.5} />
