@@ -9,6 +9,7 @@ import {
   haversineKm,
   radiusForService,
 } from "@/lib/serviceability";
+import { CATEGORY_COLORS } from "@/lib/pricing";
 
 // Service window: 8 PM – 10 AM (overnight). Hourly slots end-to-end.
 const TIME_SLOTS = [
@@ -148,7 +149,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         {geoLoading ? (
           <Loader2 size={14} className="animate-spin" />
         ) : (
-          <LocateFixed size={14} className="text-[#C9A84C]" />
+          <LocateFixed size={14} style={{ color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }} />
         )}
         {geoLoading
           ? "Locating…"
@@ -362,7 +363,11 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         <button
           onClick={handleContinue}
           className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
-          style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
+          style={{ 
+            background: data.service 
+              ? `linear-gradient(135deg, ${CATEGORY_COLORS[data.service]}, ${CATEGORY_COLORS[data.service]}cc)`
+              : "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" 
+          }}
         >
           Continue →
         </button>

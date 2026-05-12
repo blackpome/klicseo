@@ -11,7 +11,7 @@ const services = [
   {
     icon: Sparkles,
     title: "Car Detailing",
-    description: "Premium ceramic sealant (6-9 mo durability, 3 mo top-up). Uses top chemicals to clear swirl marks & minor scratches. Includes tire polish & glass cleaning.",
+    description: "Premium ceramic sealant (6-9 month durability, 3 month top-up important). Uses top chemicals to clear swirl marks & minor scratches. Includes tire polish & glass cleaning.",
     highlight: true,
   },
   {
@@ -86,11 +86,10 @@ function TiltCard({ children, highlight }: { children: React.ReactNode; highligh
           background: highlight ? "linear-gradient(145deg,#1A5FD4 0%,#0D3D8E 100%)" : undefined,
           borderRadius: "1rem",
         }}
-        className={`p-6 sm:p-7 h-full ${
-          highlight
-            ? "border border-[#1A5FD4] shadow-[0_8px_32px_rgba(26,95,212,0.35)]"
-            : "glass-card hover:border-[#1A5FD4]/30"
-        }`}
+        className={`p-6 sm:p-7 h-full ${highlight
+          ? "border border-[#1A5FD4] shadow-[0_8px_32px_rgba(26,95,212,0.35)]"
+          : "glass-card hover:border-[#1A5FD4]/30"
+          }`}
       >
         {/* Glare overlay */}
         <div
@@ -159,9 +158,8 @@ export default function Services() {
                 )}
                 <TiltCard highlight={service.highlight}>
 
-                  <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-5 transition-colors duration-300 ${
-                    service.highlight ? "bg-white/20" : "bg-[#1A5FD4]/15"
-                  }`}>
+                  <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-5 transition-colors duration-300 ${service.highlight ? "bg-white/20" : "bg-[#1A5FD4]/15"
+                    }`}>
                     <Icon size={22} className={service.highlight ? "text-white" : "text-[#C9A84C]"} />
                   </div>
 
@@ -176,9 +174,8 @@ export default function Services() {
                     href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent("Hi Klicseo, I'd like to learn more about the " + service.title + " service.")}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`mt-5 text-sm font-semibold inline-flex items-center gap-1 ${
-                      service.highlight ? "text-[#E8CC7A]" : "text-[#C9A84C]"
-                    } transition-all duration-200 hover:opacity-80`}
+                    className={`mt-5 text-sm font-semibold inline-flex items-center gap-1 ${service.highlight ? "text-[#E8CC7A]" : "text-[#C9A84C]"
+                      } transition-all duration-200 hover:opacity-80`}
                   >
                     Learn more <span>→</span>
                   </a>

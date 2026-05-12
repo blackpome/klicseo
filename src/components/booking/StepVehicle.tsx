@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Car, PenLine, ChevronRight } from "lucide-react";
 import type { BookingData } from "./BookingWizard";
+import { CATEGORY_COLORS } from "@/lib/pricing";
 
 const vehicleData: { type: string; icon: string; models: string[] }[] = [
   { type: "Hatchback",      icon: "🚗", models: ["Swift","i10","Tiago","Celerio","WagonR","i20","Kwid","Santro"] },
@@ -87,15 +88,19 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
               onClick={() => handleTypeSelect(v.type)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all duration-200 min-h-[48px] ${
                 selected
-                  ? "border-[#C9A84C] shadow-[0_0_14px_rgba(201,168,76,0.2)]"
+                  ? ""
                   : "glass-card hover:border-[#1A5FD4]/40"
               }`}
-              style={selected ? { background: "rgba(201,168,76,0.08)" } : {}}
+              style={selected ? { 
+                background: `${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}15`,
+                borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C",
+                boxShadow: `0 0 14px ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}33`
+              } : {}}
             >
               <span className="text-xl flex-shrink-0 w-7 text-center leading-none">{v.icon}</span>
               <span className="flex-1 text-sm font-semibold text-white">{v.type}</span>
               {selected
-                ? <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" }} />
+                ? <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#E8CC7A"})` }} />
                 : <ChevronRight size={14} className="text-white/20 flex-shrink-0" />
               }
             </motion.button>
@@ -129,10 +134,13 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
                     onClick={() => handleModelSelect(model)}
                     className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all duration-200 min-h-[40px] ${
                       sel
-                        ? "text-[#050E21] border-[#C9A84C]"
+                        ? "text-[#050E21]"
                         : "glass-card text-white/70 hover:text-white hover:border-[#C9A84C]/40 active:scale-95"
                     }`}
-                    style={sel ? { background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" } : {}}
+                    style={sel ? { 
+                      background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"})`,
+                      borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"
+                    } : {}}
                   >
                     {model}
                   </button>
@@ -144,10 +152,13 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
                 onClick={handleCustomToggle}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border min-h-[40px] transition-all duration-200 ${
                   showCustom
-                    ? "text-[#050E21] border-[#C9A84C]"
+                    ? "text-[#050E21]"
                     : "glass-card text-white/45 hover:text-white border-dashed"
                 }`}
-                style={showCustom ? { background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" } : {}}
+                style={showCustom ? { 
+                  background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"})`,
+                  borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"
+                } : {}}
               >
                 <PenLine size={12} />
                 Other
@@ -167,7 +178,9 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
                     placeholder="e.g. Mahindra Thar, MG Hector…"
                     value={customModel}
                     onChange={(e) => { setCustomModel(e.target.value); update({ carModel: e.target.value }); }}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors mt-1"
+                    className={`w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none transition-colors mt-1 ${
+                      data.service ? `focus:border-[${CATEGORY_COLORS[data.service]}] focus:ring-1 focus:ring-[${CATEGORY_COLORS[data.service]}33]` : "focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30"
+                    }`}
                     autoFocus
                   />
                 </motion.div>
@@ -175,7 +188,7 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
             </AnimatePresence>
 
             {data.carModel && !showCustom && (
-              <p className="text-[11px] text-[#C9A84C]/80 mt-1.5">
+              <p className="text-[11px] mt-1.5" style={{ color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
                 ✓ <span className="font-semibold">{data.carModel}</span> selected
               </p>
             )}
@@ -220,7 +233,11 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
         <button
           onClick={handleContinue}
           className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
-          style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
+          style={{ 
+            background: data.service 
+              ? `linear-gradient(135deg, ${CATEGORY_COLORS[data.service]}, ${CATEGORY_COLORS[data.service]}cc)`
+              : "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" 
+          }}
         >
           Continue →
         </button>

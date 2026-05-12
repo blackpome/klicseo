@@ -30,6 +30,12 @@ export function tierForVehicleType(type: string): PriceTier {
 
 export type ServiceCategory = "CarWash" | "CarDetailing" | "OneTimeCarWash";
 
+export const CATEGORY_COLORS: Record<ServiceCategory, string> = {
+  CarDetailing: "#10b981", // Premium Green
+  CarWash: "#3B82F6",      // Premium Blue
+  OneTimeCarWash: "#C9A84C", // Premium Gold
+};
+
 export type ServiceOptionId =
   | "Monthly"
   | "WeeklyThrice"

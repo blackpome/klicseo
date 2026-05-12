@@ -12,6 +12,7 @@ import {
   tierForVehicleType,
   tierLabel,
   inr,
+  CATEGORY_COLORS,
 } from "@/lib/pricing";
 
 const optionToPkg: Record<string, BookingData["pkg"]> = {
@@ -75,7 +76,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
         <div className="mt-3 mb-4 flex items-center justify-center gap-2 text-[11px] text-white/55">
           <span>Pricing for</span>
           <span className="px-2.5 py-1 rounded-md font-semibold text-[#050E21]"
-                style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}>
+                style={{ background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#E8CC7A"})` }}>
             {data.vehicleType}
           </span>
           {data.carModel && <span className="text-white/40">· {data.carModel}</span>}
@@ -108,7 +109,11 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
               }`}
               style={
                 selected
-                  ? { background: "linear-gradient(145deg,rgba(201,168,76,0.1),rgba(5,14,33,0.9))" }
+                  ? { 
+                      background: "linear-gradient(145deg,rgba(255,255,255,0.05),rgba(5,14,33,0.9))",
+                      borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C",
+                      boxShadow: `0 0 20px ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}40`
+                    }
                   : {}
               }
             >
@@ -121,7 +126,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
                     {selected && (
                       <div
                         className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
-                        style={{ background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" }}
+                        style={{ background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#E8CC7A"})` }}
                       >
                         <Check size={9} className="text-[#050E21]" strokeWidth={3} />
                       </div>
@@ -136,7 +141,8 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
                 </div>
 
                 <div className="text-right flex-shrink-0 ml-1">
-                  <div className="text-lg sm:text-xl font-bold gold-shimmer" style={{ fontFamily: "var(--font-playfair)" }}>
+                  <div className="text-lg sm:text-xl font-bold" 
+                       style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
                     {p ? inr(p.base) : "—"}
                   </div>
                   <div className="text-white/35 text-[10px]">
@@ -157,7 +163,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
           onClick={toggleAddOn}
           className={`w-full flex items-center justify-between gap-3 px-3 py-3 rounded-xl border text-left mb-4 transition-all ${
             data.interiorAddOn
-              ? "border-[#C9A84C] bg-[rgba(201,168,76,0.08)]"
+              ? `border-[${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}] bg-[${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}15]`
               : "glass-card hover:border-[#1A5FD4]/40"
           }`}
         >
@@ -165,10 +171,13 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
             <div
               className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border ${
                 data.interiorAddOn
-                  ? "border-[#C9A84C]"
+                  ? ""
                   : "border-white/25"
               }`}
-              style={data.interiorAddOn ? { background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" } : {}}
+              style={data.interiorAddOn ? { 
+                background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#E8CC7A"})`,
+                borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"
+              } : {}}
             >
               {data.interiorAddOn && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
             </div>
@@ -181,7 +190,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
               </p>
             </div>
           </div>
-          <span className="text-sm font-bold text-[#C9A84C] whitespace-nowrap">
+          <span className="text-sm font-bold whitespace-nowrap" style={{ color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
             +{inr(selectedDef.addOn.price[tier])}
           </span>
         </button>
@@ -191,7 +200,10 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
       {selectedDef && (
         <div
           className="flex items-center justify-between px-4 py-3 rounded-xl mb-5"
-          style={{ background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)" }}
+          style={{ 
+            background: `${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}15`, 
+            border: `1px solid ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}40` 
+          }}
         >
           <div>
             <p className="text-white/60 text-sm leading-none">Estimated total</p>
@@ -199,7 +211,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
               {selectedDef.recurring === "monthly" ? "per month" : "one time"} · {tierLabel[tier]}
             </p>
           </div>
-          <span className="text-2xl font-bold gold-shimmer" style={{ fontFamily: "var(--font-playfair)" }}>
+          <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
             {(() => {
               const p = priceFor(selectedOption, data.vehicleType, data.interiorAddOn);
               return p ? inr(p.total) : "—";
@@ -224,7 +236,11 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
         <button
           onClick={handleContinue}
           className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
-          style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
+          style={{ 
+            background: data.service 
+              ? `linear-gradient(135deg, ${CATEGORY_COLORS[data.service]}, ${CATEGORY_COLORS[data.service]}cc)`
+              : "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" 
+          }}
         >
           Review Booking →
         </button>

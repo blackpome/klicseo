@@ -7,7 +7,7 @@ import { CheckCircle, Car, User, MapPin, Calendar, Sparkles, Home } from "lucide
 import TransformationLoop from "./TransformationLoop";
 import type { BookingData } from "./BookingWizard";
 import { clearBookingDraft } from "./BookingWizard";
-import { SERVICE_OPTIONS, isServiceOptionId, priceFor, tierLabel, tierForVehicleType, inr } from "@/lib/pricing";
+import { SERVICE_OPTIONS, isServiceOptionId, priceFor, tierLabel, tierForVehicleType, inr, CATEGORY_COLORS } from "@/lib/pricing";
 
 interface Props {
   data: BookingData;
@@ -23,8 +23,8 @@ const serviceLabel: Record<string, string> = {
 function Row({ icon: Icon, label, value }: { icon: React.ComponentType<{ size?: number; className?: string }>; label: string; value: string }) {
   return (
     <div className="flex items-start gap-3 py-2.5 border-b border-white/5 last:border-0">
-      <div className="w-7 h-7 rounded-lg bg-[#1A5FD4]/15 flex items-center justify-center flex-shrink-0 mt-0.5">
-        <Icon size={13} className="text-[#C9A84C]" />
+      <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <Icon size={13} className="text-white/50" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] text-white/40 uppercase tracking-widest">{label}</p>
@@ -117,8 +117,11 @@ export default function StepConfirm({ data, onBack }: Props) {
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.1 }}
-          className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center mb-4 shadow-[0_0_40px_rgba(201,168,76,0.4)]"
-          style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
+          className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center mb-4"
+          style={{ 
+            background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"})`,
+            boxShadow: `0 0 40px ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}66`
+          }}
         >
           <CheckCircle size={30} className="text-[#050E21] sm:hidden" />
           <CheckCircle size={36} className="text-[#050E21] hidden sm:block" />
@@ -128,7 +131,7 @@ export default function StepConfirm({ data, onBack }: Props) {
           Booking Confirmed!
         </h2>
         <p className="text-white/50 text-sm mb-1.5">
-          Thank you, <span className="text-[#C9A84C] font-semibold">{data.name}</span>. We&apos;ll be at your location on time.
+          Thank you, <span className="font-semibold" style={{ color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>{data.name}</span>. We&apos;ll be at your location on time.
         </p>
         <p className="text-white/35 text-xs">
           Confirmation sent to <span className="text-white/55">{data.phone}</span>
@@ -181,7 +184,10 @@ export default function StepConfirm({ data, onBack }: Props) {
       {/* Price */}
       <div
         className="flex items-center justify-between px-4 py-3 rounded-xl mb-5"
-        style={{ background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.25)" }}
+        style={{ 
+          background: `${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}15`, 
+          border: `1px solid ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}40` 
+        }}
       >
         <div>
           <p className="text-white/60 text-sm leading-none">Total</p>
@@ -189,7 +195,7 @@ export default function StepConfirm({ data, onBack }: Props) {
             {isMonthly ? "per month" : "one time"} · {tierLabel[tier]}
           </p>
         </div>
-        <span className="text-2xl font-bold gold-shimmer" style={{ fontFamily: "var(--font-playfair)" }}>
+        <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
           {inr(total)}
         </span>
       </div>
@@ -205,7 +211,11 @@ export default function StepConfirm({ data, onBack }: Props) {
           onClick={handleSubmit}
           disabled={loading}
           className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98] disabled:opacity-70"
-          style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
+          style={{ 
+            background: data.service 
+              ? `linear-gradient(135deg, ${CATEGORY_COLORS[data.service]}, ${CATEGORY_COLORS[data.service]}cc)`
+              : "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" 
+          }}
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
