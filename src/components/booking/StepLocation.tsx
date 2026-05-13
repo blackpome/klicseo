@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, Hash, CheckCircle, AlertTriangle, Loader2, LocateFixed, Home, Trees, Check, Lock } from "lucide-react";
+import { MapPin, Hash, CheckCircle, AlertTriangle, Loader2, LocateFixed, Home, Trees, Check, Lock, Clock } from "lucide-react";
 import type { BookingData } from "./BookingWizard";
 import {
   BUSINESS_LOCATION,
@@ -9,14 +9,15 @@ import {
   haversineKm,
   radiusForService,
 } from "@/lib/serviceability";
-import { CATEGORY_COLORS } from "@/lib/pricing";
 
-// Service window: 8 PM – 10 AM (overnight). Hourly slots end-to-end.
+// Callback availability slots. The service visit is confirmed later by the team.
 const TIME_SLOTS = [
-  "8:00 PM",  "9:00 PM",  "10:00 PM", "11:00 PM",
   "12:00 AM", "1:00 AM",  "2:00 AM",  "3:00 AM",
   "4:00 AM",  "5:00 AM",  "6:00 AM",  "7:00 AM",
-  "8:00 AM",  "9:00 AM",  "10:00 AM",
+  "8:00 AM",  "9:00 AM",  "10:00 AM", "11:00 AM",
+  "12:00 PM", "1:00 PM",  "2:00 PM",  "3:00 PM",
+  "4:00 PM",  "5:00 PM",  "6:00 PM",  "7:00 PM",
+  "8:00 PM",  "9:00 PM",  "10:00 PM", "11:00 PM",
 ];
 
 interface Props {
@@ -108,6 +109,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
     addressValid &&
     locationChecked &&
     data.parkingLocation !== "" &&
+    (data.parkingLocation !== "outside" || data.carCoverChoice !== "") &&
     data.gateAccessConsent &&
     data.date.length > 0;
 
@@ -115,6 +117,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
   const errPin      = attempted && !pinLooksComplete;
   const errAddress  = attempted && !addressValid;
   const errParking  = attempted && data.parkingLocation === "";
+  const errCarCover = attempted && data.parkingLocation === "outside" && data.carCoverChoice === "";
   const errGate     = attempted && !data.gateAccessConsent;
   const errDate     = attempted && data.date.length === 0;
 
@@ -149,7 +152,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         {geoLoading ? (
           <Loader2 size={14} className="animate-spin" />
         ) : (
-          <LocateFixed size={14} style={{ color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }} />
+          <LocateFixed size={14} className="text-[#C9A84C]" />
         )}
         {geoLoading
           ? "Locating…"
@@ -244,7 +247,12 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
               <button
                 key={id}
                 type="button"
-                onClick={() => update({ parkingLocation: id })}
+                onClick={() =>
+                  update({
+                    parkingLocation: id,
+                    carCoverChoice: id === "outside" ? data.carCoverChoice : "",
+                  })
+                }
                 className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all min-h-[48px] ${
                   sel
                     ? "border-[#C9A84C] shadow-[0_0_14px_rgba(201,168,76,0.2)]"
@@ -267,6 +275,76 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         </div>
         {errParking && <p className="text-[11px] text-red-300 mt-2">Pick where the car will be parked.</p>}
       </div>
+
+      {data.parkingLocation === "outside" && (
+        <>
+          <div className="mb-4">
+            <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
+              Do you have a car cover? *
+            </p>
+            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${errCarCover ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
+              {([
+                {
+                  id: "yes",
+                  title: "Yes, I have one",
+                  note: "Get a Rs.100 discount",
+                  warning: "Even after cleaning, the car cover may carry dust, so the car may collect dust again.",
+                },
+                {
+                  id: "no",
+                  title: "No car cover",
+                  note: "Extra charges may apply",
+                  warning: "",
+                },
+              ] as const).map((option) => {
+                const sel = data.carCoverChoice === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => update({ carCoverChoice: option.id })}
+                    className={`rounded-xl border px-3 py-3 text-left transition-all ${
+                      sel
+                        ? "border-[#C9A84C] bg-[rgba(201,168,76,0.10)] shadow-[0_0_14px_rgba(201,168,76,0.16)]"
+                        : "glass-card hover:border-[#1A5FD4]/40"
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-white">{option.title}</p>
+                    <p className={`mt-1 text-[11px] ${option.id === "yes" ? "text-[#C9A84C]" : "text-red-300"}`}>
+                      {option.note}
+                    </p>
+                    {option.warning && (
+                      <p className="mt-1.5 text-[11px] leading-snug text-red-300">
+                        {option.warning}
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {errCarCover && <p className="text-[11px] text-red-300 mt-2">Choose whether you have a car cover.</p>}
+          </div>
+
+          <div
+            className="mb-4 rounded-xl px-3 py-3 text-[11px] leading-snug text-red-200"
+            style={{
+              background: "rgba(248, 113, 113, 0.10)",
+              border: "1px solid rgba(248, 113, 113, 0.35)",
+            }}
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={14} className="mt-0.5 flex-shrink-0 text-red-300" />
+              <div>
+                <p className="font-semibold text-red-100 mb-1">Car cover required</p>
+                <p>
+                  If the car is parked outside, a car cover is mandatory. Without a cover,
+                  extra charges may apply based on the car&apos;s condition.
+                </p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Gate / access consent */}
       <button
@@ -301,11 +379,14 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         </div>
       </button>
 
-      {/* Date */}
+      {/* Callback availability */}
       <div className="mb-4">
         <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-          Preferred Date *
+          When should our team call you? *
         </label>
+        <p className="text-[11px] text-white/45 mb-2">
+          Choose a date when you&apos;re free for a quick confirmation call.
+        </p>
         <input
           type="date"
           value={data.date}
@@ -315,35 +396,33 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
             errDate ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
           }`}
         />
-        {errDate && <p className="text-[11px] text-red-300 mt-1">Pick a date.</p>}
+        {errDate && <p className="text-[11px] text-red-300 mt-1">Pick a callback date.</p>}
       </div>
 
-      {/* Time-slot grid — replaces the old <select> with tappable buttons so
-          the user can scan all 15 overnight slots at a glance instead of
-          opening a long native picker on mobile. */}
+      {/* Compact callback-time picker. */}
       <div className="mb-6">
         <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-          Preferred Time (8 PM – 10 AM)
+          Your free time for the call
         </label>
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-          {TIME_SLOTS.map((t) => {
-            const sel = data.time === t;
-            return (
-              <button
-                key={t}
-                type="button"
-                onClick={() => update({ time: t })}
-                className={`px-2 py-2.5 rounded-lg text-xs font-semibold border transition-all duration-200 min-h-[40px] ${
-                  sel
-                    ? "text-[#050E21] border-[#C9A84C]"
-                    : "border-white/10 bg-white/[0.03] text-white/70 hover:text-white hover:border-[#C9A84C]/40 active:scale-[0.97]"
-                }`}
-                style={sel ? { background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" } : {}}
-              >
+        <div className="relative">
+          <Clock
+            size={14}
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#C9A84C]"
+          />
+          <select
+            value={data.time}
+            onChange={(e) => update({ time: e.target.value })}
+            className="w-full appearance-none rounded-xl border border-white/10 bg-[#071F4A] py-3.5 pl-10 pr-10 text-sm font-semibold text-white focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 [color-scheme:dark]"
+          >
+            {TIME_SLOTS.map((t) => (
+              <option key={t} value={t}>
                 {t}
-              </button>
-            );
-          })}
+              </option>
+            ))}
+          </select>
+          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs text-white/35">
+            ▼
+          </span>
         </div>
       </div>
 
@@ -363,11 +442,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         <button
           onClick={handleContinue}
           className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
-          style={{ 
-            background: data.service 
-              ? `linear-gradient(135deg, ${CATEGORY_COLORS[data.service]}, ${CATEGORY_COLORS[data.service]}cc)`
-              : "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" 
-          }}
+          style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
         >
           Continue →
         </button>

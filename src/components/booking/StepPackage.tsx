@@ -79,6 +79,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
                 style={{ background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#E8CC7A"})` }}>
             {data.vehicleType}
           </span>
+          {data.parkingLocation === "outside" && <span className="text-white/40">· outside parked</span>}
           {data.carModel && <span className="text-white/40">· {data.carModel}</span>}
         </div>
       )}
@@ -96,7 +97,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
         {optionIds.map((id) => {
           const opt = SERVICE_OPTIONS[id];
           const selected = selectedOption === id;
-          const p = priceFor(id, data.vehicleType, false);
+          const p = priceFor(id, data.vehicleType, false, data.parkingLocation);
           return (
             <motion.button
               key={id}
@@ -213,7 +214,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
           </div>
           <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
             {(() => {
-              const p = priceFor(selectedOption, data.vehicleType, data.interiorAddOn);
+              const p = priceFor(selectedOption, data.vehicleType, data.interiorAddOn, data.parkingLocation);
               return p ? inr(p.total) : "—";
             })()}
           </span>
@@ -236,11 +237,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
         <button
           onClick={handleContinue}
           className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
-          style={{ 
-            background: data.service 
-              ? `linear-gradient(135deg, ${CATEGORY_COLORS[data.service]}, ${CATEGORY_COLORS[data.service]}cc)`
-              : "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" 
-          }}
+          style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
         >
           Review Booking →
         </button>

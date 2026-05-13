@@ -40,7 +40,7 @@ export default function StepConfirm({ data, onBack }: Props) {
 
   const tier = tierForVehicleType(data.vehicleType);
   const optionDef = isServiceOptionId(data.serviceOption) ? SERVICE_OPTIONS[data.serviceOption] : null;
-  const priced = priceFor(data.serviceOption, data.vehicleType, data.interiorAddOn);
+  const priced = priceFor(data.serviceOption, data.vehicleType, data.interiorAddOn, data.parkingLocation);
   const total = priced?.total ?? 0;
   const isMonthly = optionDef?.recurring === "monthly";
 
@@ -131,7 +131,7 @@ export default function StepConfirm({ data, onBack }: Props) {
           Booking Confirmed!
         </h2>
         <p className="text-white/50 text-sm mb-1.5">
-          Thank you, <span className="font-semibold" style={{ color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>{data.name}</span>. We&apos;ll be at your location on time.
+          Thank you, <span className="font-semibold" style={{ color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>{data.name}</span>. Our team will call you at your selected time.
         </p>
         <p className="text-white/35 text-xs">
           Confirmation sent to <span className="text-white/55">{data.phone}</span>
@@ -172,12 +172,16 @@ export default function StepConfirm({ data, onBack }: Props) {
             icon={Home}
             label="Parking & Access"
             value={`${data.parkingLocation === "inside" ? "Inside (garage/basement)" : "Outside (driveway/open)"}${
-              data.gateAccessConsent ? " · gate access confirmed" : ""
-            }`}
+              data.carCoverChoice === "yes"
+                ? " · car cover available (Rs.100 discount)"
+                : data.carCoverChoice === "no"
+                ? " · no car cover (extra charges may apply)"
+                : ""
+            }${data.gateAccessConsent ? " · gate access confirmed" : ""}`}
           />
         )}
         {data.date && (
-          <Row icon={Calendar} label="Date & Time" value={`${data.date} at ${data.time}`} />
+          <Row icon={Calendar} label="Callback Time" value={`${data.date} at ${data.time}`} />
         )}
       </div>
 
@@ -193,6 +197,7 @@ export default function StepConfirm({ data, onBack }: Props) {
           <p className="text-white/60 text-sm leading-none">Total</p>
           <p className="text-white/35 text-[10px] mt-0.5">
             {isMonthly ? "per month" : "one time"} · {tierLabel[tier]}
+            {data.parkingLocation === "outside" ? " · outside parked" : ""}
           </p>
         </div>
         <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
@@ -211,11 +216,7 @@ export default function StepConfirm({ data, onBack }: Props) {
           onClick={handleSubmit}
           disabled={loading}
           className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98] disabled:opacity-70"
-          style={{ 
-            background: data.service 
-              ? `linear-gradient(135deg, ${CATEGORY_COLORS[data.service]}, ${CATEGORY_COLORS[data.service]}cc)`
-              : "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" 
-          }}
+          style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">

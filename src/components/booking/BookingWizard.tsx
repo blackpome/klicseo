@@ -32,6 +32,7 @@ export interface BookingData {
   pincode: string;
   address: string;
   parkingLocation: "" | "inside" | "outside";
+  carCoverChoice: "" | "yes" | "no";
   gateAccessConsent: boolean;
   date: string;
   time: string;
@@ -98,9 +99,10 @@ export default function BookingWizard() {
     pincode: "",
     address: "",
     parkingLocation: "",
+    carCoverChoice: "",
     gateAccessConsent: false,
     date: "",
-    time: "8:00 PM",
+    time: "10:00 AM",
   });
 
   // Hydrate from localStorage draft once on mount. Deep-link query params

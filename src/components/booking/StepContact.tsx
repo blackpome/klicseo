@@ -12,6 +12,12 @@ interface Props {
   onNext: () => void;
 }
 
+const SERVICE_AREA_COLORS: Record<ServiceCategory, string> = {
+  CarDetailing: "#0F4C81",
+  OneTimeCarWash: "#123E73",
+  CarWash: "#1A5FD4",
+};
+
 // Service categories shown as cards. Sub-options are pulled from OPTIONS_BY_CATEGORY
 // in src/lib/pricing.ts so labels and prices stay in sync everywhere.
 const categories: {
@@ -342,11 +348,10 @@ export default function StepContact({ data, update, onNext }: Props) {
                   <motion.button
                     whileTap={{ scale: 0.98 }}
                     onClick={() => selectServiceCategory(c)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 min-h-[48px] ${selected
-                        ? ""
-                        : "bg-white/[0.02] hover:bg-white/[0.05]"
-                      }`}
-                    style={selected ? { background: "rgba(201,168,76,0.10)" } : {}}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 min-h-[48px] hover:brightness-110"
+                    style={{
+                      backgroundColor: SERVICE_AREA_COLORS[c.id],
+                    }}
                   >
                     <div
                       className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"

@@ -6,6 +6,7 @@
 // matches the spec sheet provided by the business.
 
 export type PriceTier = "hatchback" | "sedan" | "compactSUV" | "suv" | "xuv";
+export type ParkingLocation = "" | "inside" | "outside";
 
 export const tierLabel: Record<PriceTier, string> = {
   hatchback: "Hatchback",
@@ -136,6 +137,25 @@ export const SERVICE_OPTIONS: Record<ServiceOptionId, ServiceOptionDef> = {
   },
 };
 
+// Outside-parked car wash subscription prices. These override the standard
+// subscription price grid only when parkingLocation === "outside".
+const OUTSIDE_CAR_WASH_PRICES: Partial<Record<ServiceOptionId, Record<PriceTier, number>>> = {
+  Monthly: {
+    hatchback: 1199,
+    sedan: 1399,
+    compactSUV: 1499,
+    suv: 1599,
+    xuv: 1799,
+  },
+  WeeklyThrice: {
+    hatchback: 749,
+    sedan: 849,
+    compactSUV: 899,
+    suv: 949,
+    xuv: 1049,
+  },
+};
+
 export const OPTIONS_BY_CATEGORY: Record<ServiceCategory, ServiceOptionId[]> = {
   CarWash: ["Monthly", "WeeklyThrice"],
   OneTimeCarWash: ["OneTimeManual", "OneTimeMachine"],
@@ -155,11 +175,13 @@ export function priceFor(
   optionId: string,
   vehicleType: string,
   withAddOn = false,
+  parkingLocation: ParkingLocation = "",
 ): { base: number; addOn: number; total: number; tier: PriceTier } | null {
   if (!isServiceOptionId(optionId)) return null;
   const def = SERVICE_OPTIONS[optionId];
   const tier = tierForVehicleType(vehicleType);
-  const base = def.price[tier];
+  const outsideGrid = parkingLocation === "outside" ? OUTSIDE_CAR_WASH_PRICES[optionId] : undefined;
+  const base = (outsideGrid ?? def.price)[tier];
   const addOn = withAddOn && def.addOn ? def.addOn.price[tier] : 0;
   return { base, addOn, total: base + addOn, tier };
 }
