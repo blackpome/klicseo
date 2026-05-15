@@ -12,12 +12,6 @@ interface Props {
   onNext: () => void;
 }
 
-const SERVICE_AREA_COLORS: Record<ServiceCategory, string> = {
-  CarDetailing: "#0F4C81",
-  OneTimeCarWash: "#123E73",
-  CarWash: "#1A5FD4",
-};
-
 // Service categories shown as cards. Sub-options are pulled from OPTIONS_BY_CATEGORY
 // in src/lib/pricing.ts so labels and prices stay in sync everywhere.
 const categories: {
@@ -44,7 +38,7 @@ const categories: {
       blurb: "Single visit, no commitment",
       icon: Wrench,
       defaultPkg: "OneTime",
-      borderColor: CATEGORY_COLORS.OneTimeCarWash,
+      borderColor: "#EC4899", // Pink — distinct from brand gold
     },
     {
       id: "CarWash",
@@ -313,9 +307,9 @@ export default function StepContact({ data, update, onNext }: Props) {
                 key={c.id}
                 className="transition-all duration-300 relative rounded-[14px] overflow-hidden"
                 style={{
-                  padding: selected ? "3px" : "2.2px",
+                  padding: selected ? "4.5px" : "3px",
                   boxShadow: selected
-                    ? `0 0 22px ${PREMIUM_GOLD}55`
+                    ? `0 0 24px ${c.borderColor}66`
                     : `0 0 8px ${c.borderColor}15`,
                 }}
               >
@@ -335,7 +329,7 @@ export default function StepContact({ data, update, onNext }: Props) {
                       height: "200%",
                       transform: "translate(-50%, -50%)",
                       background: selected
-                        ? `conic-gradient(from 0deg, transparent 0deg, ${PREMIUM_GOLD_DARK} 35deg, ${PREMIUM_GOLD} 60deg, ${PREMIUM_GOLD_LIGHT} 85deg, transparent 120deg, transparent 180deg, ${PREMIUM_GOLD_DARK} 215deg, ${PREMIUM_GOLD} 240deg, ${PREMIUM_GOLD_LIGHT} 265deg, transparent 300deg)`
+                        ? `conic-gradient(from 0deg, transparent 0deg, ${c.borderColor}99 35deg, ${c.borderColor} 60deg, ${c.borderColor}CC 85deg, transparent 120deg, transparent 180deg, ${c.borderColor}99 215deg, ${c.borderColor} 240deg, ${c.borderColor}CC 265deg, transparent 300deg)`
                         : `conic-gradient(from 0deg, transparent 0deg, ${c.borderColor}60 60deg, transparent 120deg, transparent 180deg, ${c.borderColor}60 240deg, transparent 300deg)`,
                     }}
                   />
@@ -350,14 +344,16 @@ export default function StepContact({ data, update, onNext }: Props) {
                     onClick={() => selectServiceCategory(c)}
                     className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 min-h-[48px] hover:brightness-110"
                     style={{
-                      backgroundColor: SERVICE_AREA_COLORS[c.id],
+                      background: selected
+                        ? `linear-gradient(135deg, ${c.borderColor}F2 0%, ${c.borderColor}E6 100%)`
+                        : `linear-gradient(135deg, ${c.borderColor}E6 0%, ${c.borderColor}D9 100%)`,
                     }}
                   >
                     <div
                       className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
                       style={{
                         background: selected
-                          ? PREMIUM_GRADIENT
+                          ? `linear-gradient(135deg, ${c.borderColor}DD, ${c.borderColor}, ${c.borderColor}AA)`
                           : "rgba(255,255,255,0.05)",
                       }}
                     >
@@ -372,7 +368,7 @@ export default function StepContact({ data, update, onNext }: Props) {
                     <span
                       className={`text-[10px] font-bold uppercase tracking-widest flex-shrink-0 px-2 py-1 rounded-md ${selected ? "text-[#050E21]" : "text-white/30 border border-white/10"
                         }`}
-                      style={selected ? { background: PREMIUM_GRADIENT } : {}}
+                      style={selected ? { background: `linear-gradient(135deg, ${c.borderColor}DD, ${c.borderColor}, ${c.borderColor}AA)` } : {}}
                     >
                       {selected ? "Selected" : "Select"}
                     </span>
@@ -390,8 +386,10 @@ export default function StepContact({ data, update, onNext }: Props) {
                           className={`px-3 pt-3 pb-3 ${errOption ? "ring-2 ring-inset ring-red-400/70" : ""}`}
                           style={{ background: "rgba(255,255,255,0.02)" }}
                         >
-                          <p className={`text-[10px] font-semibold uppercase tracking-widest mb-2 ${errOption ? "text-red-300" : "text-[#C9A84C]/80"
-                            }`}>
+                          <p
+                            className="text-[10px] font-semibold uppercase tracking-widest mb-2"
+                            style={errOption ? { color: "rgb(252 165 165)" } : { color: `${c.borderColor}CC` }}
+                          >
                             Choose Option *
                           </p>
                           {errOption && (
@@ -405,22 +403,41 @@ export default function StepContact({ data, update, onNext }: Props) {
                                 <button
                                   key={id}
                                   onClick={() => selectServiceOption(id)}
-                                  className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 ${sel
-                                      ? "text-[#050E21]"
-                                      : "border-white/10 bg-white/[0.04] text-white/75 hover:text-white hover:border-[#C9A84C]/40 active:scale-[0.99]"
+                                  className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${sel
+                                      ? "text-white"
+                                      : "bg-white/[0.04] text-white/75 hover:text-white active:scale-[0.99]"
                                     }`}
-                                  style={sel ? { background: PREMIUM_GRADIENT } : {}}
+                                  style={
+                                    sel
+                                      ? {
+                                          background: `${c.borderColor}1F`,
+                                          border: `2px solid ${c.borderColor}`,
+                                          boxShadow: `0 0 14px ${c.borderColor}33`,
+                                        }
+                                      : { border: "1.5px solid rgba(255,255,255,0.10)" }
+                                  }
+                                  onMouseEnter={(e) => {
+                                    if (!sel) e.currentTarget.style.borderColor = `${c.borderColor}66`;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!sel) e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)";
+                                  }}
                                 >
                                   <span className="flex items-center gap-2 text-left leading-tight">
                                     <span
-                                      className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center border-2 ${sel ? "border-[#050E21] bg-white/30" : "border-white/30"
-                                        }`}
+                                      className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center border-2"
+                                      style={{ borderColor: sel ? c.borderColor : "rgba(255,255,255,0.30)" }}
                                     >
-                                      {sel && <span className="w-1.5 h-1.5 rounded-full bg-[#050E21]" />}
+                                      {sel && (
+                                        <span
+                                          className="w-1.5 h-1.5 rounded-full"
+                                          style={{ background: c.borderColor }}
+                                        />
+                                      )}
                                     </span>
                                     <span>
                                       <span className="block font-semibold">{opt.label}</span>
-                                      <span className={`block text-[11px] mt-0.5 ${sel ? "text-[#050E21]/70" : "text-white/40"}`}>
+                                      <span className={`block text-[11px] mt-0.5 ${sel ? "text-white/70" : "text-white/40"}`}>
                                         {opt.blurb}
                                       </span>
                                     </span>
@@ -434,16 +451,24 @@ export default function StepContact({ data, update, onNext }: Props) {
                             <button
                               type="button"
                               onClick={() => update({ interiorAddOn: !data.interiorAddOn })}
-                              className={`mt-2 w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${data.interiorAddOn
-                                  ? "border-[#C9A84C] bg-[rgba(201,168,76,0.08)]"
-                                  : "border-white/10 bg-white/[0.04] hover:border-[#1A5FD4]/40"
-                                }`}
+                              className="mt-2 w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border text-left transition-all"
+                              style={
+                                data.interiorAddOn
+                                  ? { borderColor: c.borderColor, background: `${c.borderColor}14` }
+                                  : { borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }
+                              }
                             >
                               <div className="flex items-center gap-3">
                                 <div
-                                  className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border ${data.interiorAddOn ? "border-[#C9A84C]" : "border-white/25"
-                                    }`}
-                                  style={data.interiorAddOn ? { background: PREMIUM_GRADIENT } : {}}
+                                  className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border"
+                                  style={
+                                    data.interiorAddOn
+                                      ? {
+                                          borderColor: c.borderColor,
+                                          background: `linear-gradient(135deg, ${c.borderColor}DD, ${c.borderColor}, ${c.borderColor}AA)`,
+                                        }
+                                      : { borderColor: "rgba(255,255,255,0.25)" }
+                                  }
                                 >
                                   {data.interiorAddOn && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
                                 </div>
@@ -456,7 +481,10 @@ export default function StepContact({ data, update, onNext }: Props) {
                                   </p>
                                 </div>
                               </div>
-                              <span className="text-xs font-semibold text-[#C9A84C] whitespace-nowrap">
+                              <span
+                                className="text-xs font-semibold whitespace-nowrap"
+                                style={{ color: c.borderColor }}
+                              >
                                 +{inr(Math.min(...Object.values(addOn.price)))}
                               </span>
                             </button>

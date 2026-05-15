@@ -5,9 +5,19 @@ import HowItWorks from "@/components/HowItWorks";
 import Pricing from "@/components/Pricing";
 import Testimonials from "@/components/Testimonials";
 import BookingTeaser from "@/components/BookingTeaser";
+import LocalSeoContent from "@/components/LocalSeoContent";
 import Footer from "@/components/Footer";
 import StickyMobileCTA from "@/components/StickyMobileCTA";
 import FloatingContact from "@/components/FloatingContact";
+import { homeDescription, seoKeywords, siteUrl } from "@/lib/seo";
+
+export const metadata = {
+  description: homeDescription,
+  keywords: [...seoKeywords],
+  alternates: {
+    canonical: siteUrl,
+  },
+};
 
 export default function Home() {
   return (
@@ -19,6 +29,7 @@ export default function Home() {
       <Pricing />
       <Testimonials />
       <BookingTeaser />
+      <LocalSeoContent />
       <Footer />
       <StickyMobileCTA />
       <FloatingContact />

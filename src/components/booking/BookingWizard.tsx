@@ -36,6 +36,7 @@ export interface BookingData {
   gateAccessConsent: boolean;
   date: string;
   time: string;
+  shift: "" | "morning" | "evening";
 }
 
 const TOTAL_STEPS = 5;
@@ -103,6 +104,7 @@ export default function BookingWizard() {
     gateAccessConsent: false,
     date: "",
     time: "10:00 AM",
+    shift: "",
   });
 
   // Hydrate from localStorage draft once on mount. Deep-link query params

@@ -2,10 +2,14 @@ import { Suspense } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BookingWizard from "@/components/booking/BookingWizard";
+import { bookingDescription, siteUrl } from "@/lib/seo";
 
 export const metadata = {
-  title: "Book a Service — Klicseo",
-  description: "Book your premium mobile car wash service. We come to you.",
+  title: `Book Doorstep Car Wash`,
+  description: bookingDescription,
+  alternates: {
+    canonical: `${siteUrl}/booking`,
+  },
 };
 
 export default function BookingPage() {

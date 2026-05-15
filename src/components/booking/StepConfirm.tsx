@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { CheckCircle, Car, User, MapPin, Calendar, Sparkles, Home } from "lucide-react";
+import { CheckCircle, Car, User, MapPin, Calendar, Sparkles, Home, Sunrise, Sunset } from "lucide-react";
 import TransformationLoop from "./TransformationLoop";
 import type { BookingData } from "./BookingWizard";
 import { clearBookingDraft } from "./BookingWizard";
@@ -178,6 +178,13 @@ export default function StepConfirm({ data, onBack }: Props) {
                 ? " · no car cover (extra charges may apply)"
                 : ""
             }${data.gateAccessConsent ? " · gate access confirmed" : ""}`}
+          />
+        )}
+        {data.shift && (
+          <Row
+            icon={data.shift === "morning" ? Sunrise : Sunset}
+            label="Service Shift"
+            value={data.shift === "morning" ? "Morning Shift (4 AM – 10 AM)" : "Evening Shift (8 PM – 11 PM)"}
           />
         )}
         {data.date && (

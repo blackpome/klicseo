@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import { Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
+import {
+  businessName,
+  homeDescription,
+  primaryCity,
+  seoKeywords,
+  siteUrl,
+} from "@/lib/seo";
 
 const playfair = Playfair_Display({
   variable: "--font-playfair",
@@ -15,10 +22,41 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Klicseo — Premium Car Wash Service",
-  description:
-    "Experience luxury car care with Klicseo. Professional detailing and wash services that leave your vehicle spotless.",
-  keywords: "car wash, luxury car detailing, premium car care, klicseo",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: `${businessName} | Doorstep Car Wash in ${primaryCity}`,
+    template: `%s | ${businessName}`,
+  },
+  description: homeDescription,
+  keywords: [...seoKeywords],
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: siteUrl,
+    title: `${businessName} | Doorstep Car Wash in ${primaryCity}`,
+    description: homeDescription,
+    siteName: businessName,
+    locale: "en_IN",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${businessName} | Doorstep Car Wash in ${primaryCity}`,
+    description: homeDescription,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  category: "Automotive Services",
 };
 
 export default function RootLayout({

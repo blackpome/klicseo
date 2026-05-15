@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, Hash, CheckCircle, AlertTriangle, Loader2, LocateFixed, Home, Trees, Check, Lock, Clock } from "lucide-react";
+import { MapPin, Hash, CheckCircle, AlertTriangle, Loader2, LocateFixed, Home, Trees, Check, Lock, Clock, Sunrise, Sunset } from "lucide-react";
 import type { BookingData } from "./BookingWizard";
 import {
   BUSINESS_LOCATION,
@@ -111,6 +111,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
     data.parkingLocation !== "" &&
     (data.parkingLocation !== "outside" || data.carCoverChoice !== "") &&
     data.gateAccessConsent &&
+    data.shift !== "" &&
     data.date.length > 0;
 
   const errLocation = attempted && !locationChecked;
@@ -119,6 +120,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
   const errParking  = attempted && data.parkingLocation === "";
   const errCarCover = attempted && data.parkingLocation === "outside" && data.carCoverChoice === "";
   const errGate     = attempted && !data.gateAccessConsent;
+  const errShift    = attempted && data.shift === "";
   const errDate     = attempted && data.date.length === 0;
 
   function handleContinue() {
@@ -378,6 +380,65 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           {errGate && <p className="text-[11px] text-red-300 mt-2">Tick this box to confirm gate access.</p>}
         </div>
       </button>
+
+      {/* Service shift */}
+      <div className="mb-4">
+        <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
+          Preferred service shift *
+        </p>
+        <div className={`grid grid-cols-2 gap-2 ${errShift ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
+          {([
+            {
+              id: "morning",
+              label: "Morning Shift",
+              blurb: "4 AM – 10 AM",
+              Icon: Sunrise,
+              recommended: false,
+            },
+            {
+              id: "evening",
+              label: "Evening Shift",
+              blurb: "8 PM – 11 PM",
+              Icon: Sunset,
+              recommended: true,
+            },
+          ] as const).map(({ id, label, blurb, Icon, recommended }) => {
+            const sel = data.shift === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => update({ shift: id })}
+                className={`relative flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all min-h-[56px] ${
+                  sel
+                    ? "border-[#C9A84C] shadow-[0_0_14px_rgba(201,168,76,0.2)]"
+                    : "glass-card hover:border-[#1A5FD4]/40"
+                }`}
+                style={sel ? { background: "rgba(201,168,76,0.08)" } : {}}
+              >
+                {recommended && (
+                  <span
+                    className="absolute -top-2 right-2 px-1.5 py-0.5 rounded-full text-[8px] font-bold tracking-widest uppercase text-[#050E21] whitespace-nowrap shadow-[0_2px_8px_rgba(201,168,76,0.4)]"
+                    style={{ background: "linear-gradient(135deg, #9C7A2A, #C9A84C, #E8CC7A)" }}
+                  >
+                    Recommended
+                  </span>
+                )}
+                <Icon size={14} className={sel ? "text-[#C9A84C]" : "text-white/50"} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white leading-tight">{label}</p>
+                  <p className="text-[10px] text-white/40 mt-0.5 truncate">{blurb}</p>
+                </div>
+                {sel && (
+                  <div className="w-3 h-3 rounded-full flex-shrink-0"
+                       style={{ background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {errShift && <p className="text-[11px] text-red-300 mt-2">Pick a service shift.</p>}
+      </div>
 
       {/* Callback availability */}
       <div className="mb-4">

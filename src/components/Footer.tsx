@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { Globe, Share2, ExternalLink, MapPin, Phone, Mail } from "lucide-react";
 import { motion } from "framer-motion";
+import { businessEmail, businessPhone, primaryCity, serviceAreaText } from "@/lib/seo";
 
 const footerLinks = {
   Services: ["Exterior Wash", "Interior Detail", "Ceramic Coating", "Full Detail", "Express Wash", "Engine Bay Clean"],
@@ -107,9 +108,9 @@ export default function Footer() {
           className="glass-card rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8 mb-10"
         >
           {[
-            { icon: MapPin, text: "Sydney, Melbourne & Brisbane, AU", href: undefined },
-            { icon: Phone, text: "+1 (234) 567-890", href: "tel:+1234567890" },
-            { icon: Mail, text: "hello@klicseo.com", href: "mailto:hello@klicseo.com" },
+            { icon: MapPin, text: `${primaryCity} · ${serviceAreaText}`, href: undefined },
+            { icon: Phone, text: businessPhone, href: `tel:${businessPhone.replace(/\s+/g, "")}` },
+            { icon: Mail, text: businessEmail, href: `mailto:${businessEmail}` },
           ].map(({ icon: Icon, text, href }) => {
             const inner = (
               <>
