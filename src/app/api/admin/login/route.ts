@@ -1,0 +1,54 @@
+import { NextResponse } from "next/server";
+import {
+  buildAdminSessionCookie,
+  isAdmin,
+  passwordMatches,
+} from "@/lib/admin-auth";
+
+// Receives a plain HTML form POST from /admin/login. Returns 303 + Set-Cookie
+// + Location — a single atomic response the browser handles natively. This
+// avoids every cookie/redirect race that bit mobile Safari + Server Actions.
+
+function safeNext(raw: string): string {
+  // Only allow same-origin admin paths; reject open redirects.
+  return raw.startsWith("/admin") && !raw.startsWith("//") ? raw : "/admin";
+}
+
+function loginRedirect(req: Request, params: { error?: string; next: string }) {
+  const url = new URL("/admin/login", req.url);
+  url.searchParams.set("next", params.next);
+  if (params.error) url.searchParams.set("error", params.error);
+  return NextResponse.redirect(url, { status: 303 });
+}
+
+export async function POST(req: Request) {
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch {
+    return loginRedirect(req, { error: "Invalid form submission.", next: "/admin" });
+  }
+
+  const password = String(form.get("password") ?? "");
+  const next = safeNext(String(form.get("next") ?? "/admin"));
+
+  // Already logged in? Just go.
+  if (await isAdmin()) {
+    return NextResponse.redirect(new URL(next, req.url), { status: 303 });
+  }
+
+  if (!passwordMatches(password)) {
+    // Tiny artificial delay so response-time doesn't leak whether the password
+    // was empty vs. wrong vs. correct.
+    await new Promise((r) => setTimeout(r, 200));
+    return loginRedirect(req, { error: "Incorrect password.", next });
+  }
+
+  // Build the cookie and attach it to the redirect response itself. This is
+  // the critical bit: Set-Cookie + Location ship in the same 303, and the
+  // browser commits the cookie before following the Location.
+  const { name, value, options } = buildAdminSessionCookie();
+  const response = NextResponse.redirect(new URL(next, req.url), { status: 303 });
+  response.cookies.set(name, value, options);
+  return response;
+}

@@ -74,12 +74,15 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
     setGeoError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const distanceKm = haversineKm(
-          { lat: pos.coords.latitude, lng: pos.coords.longitude },
-          BUSINESS_LOCATION,
-        );
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const distanceKm = haversineKm({ lat, lng }, BUSINESS_LOCATION);
         const rounded = Math.round(distanceKm * 10) / 10;
         setCheck({ status: "done", distanceKm: rounded });
+        // Persist the actual coordinates onto the booking so the admin can
+        // see the customer's location on a map — not just whether they're
+        // in-range.
+        update({ latitude: lat, longitude: lng });
         setGeoLoading(false);
       },
       (err) => {

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Phone, User, CheckCircle, RefreshCw, Sparkles, Droplets, Wrench, Check } from "lucide-react";
+import { Phone, User, Sparkles, Droplets, Wrench, Check } from "lucide-react";
 import type { BookingData, ServiceCategory } from "./BookingWizard";
 import { OPTIONS_BY_CATEGORY, SERVICE_OPTIONS, inr, isServiceOptionId, CATEGORY_COLORS } from "@/lib/pricing";
 
@@ -66,24 +66,17 @@ const PREMIUM_GOLD_LIGHT = "#E8CC7A";
 const PREMIUM_GRADIENT = `linear-gradient(135deg, ${PREMIUM_GOLD_DARK}, ${PREMIUM_GOLD}, ${PREMIUM_GOLD_LIGHT})`;
 
 export default function StepContact({ data, update, onNext }: Props) {
-  const [otpSent, setOtpSent] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [countdown, setCountdown] = useState(0);
   const [attempted, setAttempted] = useState(false);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const phoneValid = data.phone.trim().length >= 8;
   const nameValid = data.name.trim().length >= 2;
-  const otpComplete = otp.join("").length === 6;
   const serviceValid = !!data.service && data.serviceOption.length > 0;
-  const canProceed = serviceValid && nameValid && phoneValid && data.otpVerified;
+  const canProceed = serviceValid && nameValid && phoneValid;
 
   const errCategory = attempted && !data.service;
   const errOption = attempted && !!data.service && !data.serviceOption;
   const errName = attempted && !nameValid;
   const errPhone = attempted && !phoneValid;
-  const errOtp = attempted && phoneValid && !data.otpVerified;
 
   function handleContinue() {
     if (canProceed) {
@@ -117,40 +110,6 @@ export default function StepContact({ data, update, onNext }: Props) {
     });
   }
 
-  useEffect(() => {
-    if (countdown <= 0) return;
-    const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [countdown]);
-
-  function sendOtp() {
-    setSending(true);
-    setTimeout(() => {
-      setSending(false);
-      setOtpSent(true);
-      setCountdown(30);
-      setOtp(["", "", "", "", "", ""]);
-      update({ otpVerified: false });
-    }, 1500);
-  }
-
-  function handleOtpChange(val: string, idx: number) {
-    if (!/^\d?$/.test(val)) return;
-    const next = [...otp];
-    next[idx] = val;
-    setOtp(next);
-    if (val && idx < 5) inputRefs.current[idx + 1]?.focus();
-    if (next.join("").length === 6) {
-      setTimeout(() => update({ otpVerified: true }), 300);
-    }
-  }
-
-  function handleOtpKey(e: React.KeyboardEvent, idx: number) {
-    if (e.key === "Backspace" && !otp[idx] && idx > 0) {
-      inputRefs.current[idx - 1]?.focus();
-    }
-  }
-
   return (
     <div>
       <h2 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
@@ -179,118 +138,27 @@ export default function StepContact({ data, update, onNext }: Props) {
         )}
       </div>
 
-      {/* Phone + Send OTP */}
+      {/* Phone */}
       <div className="mb-4">
         <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
           <Phone size={10} className="inline mr-1" /> Phone Number *
         </label>
-        <div className="flex gap-2">
-          <input
-            type="tel"
-            inputMode="tel"
-            placeholder="+91 98765 43210"
-            value={data.phone}
-            onChange={(e) => {
-              update({ phone: e.target.value, otpVerified: false });
-              setOtpSent(false);
-              setOtp(["", "", "", "", "", ""]);
-            }}
-            disabled={data.otpVerified}
-            className={`flex-1 min-w-0 bg-white/5 border rounded-xl px-3 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none transition-colors disabled:opacity-60 ${errPhone ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
-              }`}
-            style={!errPhone ? { "--focus-color": activeCategory?.borderColor || "#C9A84C" } as any : {}}
-            onFocus={(e) => e.target.style.borderColor = (e.target as any).style.getPropertyValue("--focus-color")}
-            onBlur={(e) => e.target.style.borderColor = ""}
-          />
-          {!data.otpVerified && (
-            <button
-              onClick={sendOtp}
-              disabled={!phoneValid || sending || countdown > 0}
-              className={`flex-shrink-0 px-3 py-3.5 rounded-xl text-xs font-bold text-[#050E21] disabled:opacity-40 transition-all active:scale-95 whitespace-nowrap ${errOtp && !otpSent ? "ring-2 ring-red-400/60" : ""
-                }`}
-              style={{ background: PREMIUM_GRADIENT, minWidth: 80 }}
-            >
-              {sending ? (
-                <RefreshCw size={13} className="animate-spin mx-auto" />
-              ) : countdown > 0 ? (
-                `${countdown}s`
-              ) : otpSent ? (
-                "Resend"
-              ) : (
-                "Send OTP"
-              )}
-            </button>
-          )}
-        </div>
+        <input
+          type="tel"
+          inputMode="tel"
+          placeholder="+91 98765 43210"
+          value={data.phone}
+          onChange={(e) => update({ phone: e.target.value })}
+          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none transition-colors ${errPhone ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
+            }`}
+          style={!errPhone ? { "--focus-color": activeCategory?.borderColor || "#C9A84C" } as any : {}}
+          onFocus={(e) => e.target.style.borderColor = (e.target as any).style.getPropertyValue("--focus-color")}
+          onBlur={(e) => e.target.style.borderColor = ""}
+        />
         {errPhone && (
           <p className="text-[11px] text-red-300 mt-1">Enter a valid phone number.</p>
         )}
-        {errOtp && (
-          <p className="text-[11px] text-red-300 mt-1">
-            {otpSent ? "Enter the 6-digit code we sent to verify your phone." : "Verify your phone with OTP to continue."}
-          </p>
-        )}
       </div>
-
-      {/* OTP boxes — responsive sizing to fit all 6 on 320px */}
-      <AnimatePresence>
-        {otpSent && !data.otpVerified && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mb-4 overflow-hidden"
-          >
-            <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-3">
-              Enter 6-Digit OTP
-            </label>
-            <div className="flex gap-1.5 sm:gap-2">
-              {otp.map((d, i) => (
-                <input
-                  key={i}
-                  ref={(el) => { inputRefs.current[i] = el; }}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={d}
-                  onChange={(e) => handleOtpChange(e.target.value, i)}
-                  onKeyDown={(e) => handleOtpKey(e, i)}
-                  className={`flex-1 aspect-square text-center text-base sm:text-lg font-bold text-white bg-white/5 border rounded-xl focus:outline-none transition-colors ${errOtp ? "border-red-400/70" : "border-white/15"
-                    }`}
-                  style={!errOtp ? { 
-                    maxWidth: 52, 
-                    minWidth: 36,
-                    "--focus-color": PREMIUM_GOLD 
-                  } as any : { maxWidth: 52, minWidth: 36 }}
-                  onFocus={(e) => e.target.style.borderColor = (e.target as any).style.getPropertyValue("--focus-color")}
-                  onBlur={(e) => e.target.style.borderColor = ""}
-                />
-              ))}
-            </div>
-            {otpComplete && !data.otpVerified && (
-              <p className="text-white/40 text-xs mt-2">Verifying…</p>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Verified badge */}
-      <AnimatePresence>
-        {data.otpVerified && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl"
-            style={{ 
-              background: "rgba(201,168,76,0.10)", 
-              border: `1px solid ${PREMIUM_GOLD}66` 
-            }}
-          >
-            <CheckCircle size={15} style={{ color: PREMIUM_GOLD }} className="flex-shrink-0" />
-            <span className="text-sm font-semibold" style={{ color: PREMIUM_GOLD }}>Phone verified</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Service required */}
       <div className="mb-5">

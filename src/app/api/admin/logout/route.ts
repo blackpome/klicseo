@@ -1,0 +1,9 @@
+import { NextResponse } from "next/server";
+import { buildAdminLogoutCookie } from "@/lib/admin-auth";
+
+export async function POST(req: Request) {
+  const { name, value, options } = buildAdminLogoutCookie();
+  const response = NextResponse.redirect(new URL("/admin/login", req.url), { status: 303 });
+  response.cookies.set(name, value, options);
+  return response;
+}

@@ -37,6 +37,7 @@ function Row({ icon: Icon, label, value }: { icon: React.ComponentType<{ size?: 
 export default function StepConfirm({ data, onBack }: Props) {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const tier = tierForVehicleType(data.vehicleType);
   const optionDef = isServiceOptionId(data.serviceOption) ? SERVICE_OPTIONS[data.serviceOption] : null;
@@ -46,14 +47,24 @@ export default function StepConfirm({ data, onBack }: Props) {
 
   async function handleSubmit() {
     setLoading(true);
+    setSubmitError(null);
     try {
-      await fetch("/api/booking", {
+      const res = await fetch("/api/booking", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...data, price: total }),
       });
-    } catch {
-      // backend not connected yet — still show success
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.success) {
+        const msg = json?.error || `Booking failed (HTTP ${res.status}).`;
+        setSubmitError(msg);
+        setLoading(false);
+        return;
+      }
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Network error — please try again.");
+      setLoading(false);
+      return;
     }
     setTimeout(() => {
       setLoading(false);
@@ -211,6 +222,18 @@ export default function StepConfirm({ data, onBack }: Props) {
           {inr(total)}
         </span>
       </div>
+
+      {submitError && (
+        <div
+          className="mb-3 px-3 py-2.5 rounded-xl text-[12px] leading-snug text-red-200"
+          style={{
+            background: "rgba(248, 113, 113, 0.10)",
+            border: "1px solid rgba(248, 113, 113, 0.35)",
+          }}
+        >
+          {submitError}
+        </div>
+      )}
 
       <div className="flex gap-3">
         <button

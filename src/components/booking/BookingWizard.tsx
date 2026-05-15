@@ -28,7 +28,6 @@ export interface BookingData {
   carNumber: string;
   name: string;
   phone: string;
-  otpVerified: boolean;
   pincode: string;
   address: string;
   parkingLocation: "" | "inside" | "outside";
@@ -37,6 +36,8 @@ export interface BookingData {
   date: string;
   time: string;
   shift: "" | "morning" | "evening";
+  latitude: number | null;
+  longitude: number | null;
 }
 
 const TOTAL_STEPS = 5;
@@ -45,15 +46,11 @@ const TOTAL_STEPS = 5;
 // so a 5-step form isn't punishing if the tab is reloaded mid-fill.
 const DRAFT_KEY = "klicseo-booking-draft";
 
-// otpVerified is excluded from the draft on purpose — phone re-verification
-// must happen each session for security.
-type DraftData = Omit<BookingData, "otpVerified">;
-
-function readDraft(): Partial<DraftData> | null {
+function readDraft(): Partial<BookingData> | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
-    return raw ? (JSON.parse(raw) as Partial<DraftData>) : null;
+    return raw ? (JSON.parse(raw) as Partial<BookingData>) : null;
   } catch {
     return null;
   }
@@ -62,9 +59,7 @@ function readDraft(): Partial<DraftData> | null {
 function writeDraft(data: BookingData) {
   if (typeof window === "undefined") return;
   try {
-    const { otpVerified: _otp, ...rest } = data;
-    void _otp;
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(rest));
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
   } catch {
     // Storage may be full or disabled (private mode) — silently no-op.
   }
@@ -96,7 +91,6 @@ export default function BookingWizard() {
     carNumber: "",
     name: "",
     phone: "",
-    otpVerified: false,
     pincode: "",
     address: "",
     parkingLocation: "",
@@ -105,6 +99,8 @@ export default function BookingWizard() {
     date: "",
     time: "10:00 AM",
     shift: "",
+    latitude: null,
+    longitude: null,
   });
 
   // Hydrate from localStorage draft once on mount. Deep-link query params
@@ -112,7 +108,7 @@ export default function BookingWizard() {
   // lands on the right service even if the user had a half-filled draft.
   useEffect(() => {
     const draft = readDraft();
-    if (draft) setData((d) => ({ ...d, ...draft, otpVerified: false }));
+    if (draft) setData((d) => ({ ...d, ...draft }));
   }, []);
 
   // Persist on every change. Cheap; the form is small.
