@@ -1,22 +1,33 @@
 "use client";
 
-import { useTransition } from "react";
+import { useFormStatus } from "react-dom";
 import { Trash2 } from "lucide-react";
 import { deleteLeadAction } from "../actions";
 
+// Using a real <form> + server action (rather than useTransition) so Next's
+// server-action runtime processes the redirect() and revalidatePath() calls.
+// The confirm prompt runs in onSubmit and aborts the submission on cancel.
 export default function DeleteLeadButton({ id }: { id: string }) {
-  const [pending, start] = useTransition();
+  return (
+    <form
+      action={deleteLeadAction}
+      onSubmit={(e) => {
+        if (!confirm("Delete this lead permanently? This cannot be undone.")) {
+          e.preventDefault();
+        }
+      }}
+    >
+      <input type="hidden" name="id" value={id} />
+      <SubmitButton />
+    </form>
+  );
+}
 
-  function handle() {
-    if (!confirm("Delete this lead permanently? This cannot be undone.")) return;
-    const fd = new FormData();
-    fd.append("id", id);
-    start(() => deleteLeadAction(fd));
-  }
-
+function SubmitButton() {
+  const { pending } = useFormStatus();
   return (
     <button
-      onClick={handle}
+      type="submit"
       disabled={pending}
       className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-400/40 text-red-300 hover:bg-red-400/10 disabled:opacity-50"
     >

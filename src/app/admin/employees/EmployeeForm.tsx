@@ -1,8 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
-import { User, Briefcase, MapPin, Calendar, IndianRupee, FileText } from "lucide-react";
+import { useActionState, useState } from "react";
+import { User, Briefcase, MapPin, Calendar, IndianRupee, FileText, Loader2 } from "lucide-react";
 import { JOB_CATALOG, type EmployeeRow } from "@/lib/employees-shared";
+import { attachCompressedFileTo, type CompressOptions } from "@/lib/compress-image";
+
+const COMPRESS_AADHAAR: CompressOptions = { maxDim: 2000, quality: 0.85 };
+const COMPRESS_PROFILE: CompressOptions = { maxDim: 1200, quality: 0.8 };
 
 const fieldCls =
   "w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C9A84C]";
@@ -54,8 +58,25 @@ export default function EmployeeForm({
   hiddenId?: string;
 }) {
   const [state, formAction, pending] = useActionState<State, FormData>(action, {});
+  const [compressing, setCompressing] = useState<Record<string, boolean>>({});
 
   const v = (k: keyof EmployeeRow) => (initial?.[k] as string | number | null | undefined) ?? "";
+
+  async function handleFileChange(
+    e: React.ChangeEvent<HTMLInputElement>,
+    key: string,
+    opts: CompressOptions,
+  ) {
+    setCompressing((m) => ({ ...m, [key]: true }));
+    try {
+      await attachCompressedFileTo(e.currentTarget, opts);
+    } finally {
+      setCompressing((m) => ({ ...m, [key]: false }));
+    }
+  }
+
+  const compressBusy = Object.values(compressing).some(Boolean);
+  const busy = pending || compressBusy;
 
   return (
     <form action={formAction} encType="multipart/form-data" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -106,19 +127,29 @@ export default function EmployeeForm({
             className={`${fieldCls} font-mono`}
           />
         </Field>
-        <Field label={initial?.aadhaar_photo_path ? "Replace Aadhaar photo" : "Aadhaar photo"}>
+        <Field
+          label={`${initial?.aadhaar_photo_path ? "Replace Aadhaar photo" : "Aadhaar photo"}${
+            compressing.aadhaar ? " · compressing…" : ""
+          }`}
+        >
           <input
             type="file"
             name="aadhaar_photo"
             accept="image/*,application/pdf"
+            onChange={(e) => handleFileChange(e, "aadhaar", COMPRESS_AADHAAR)}
             className="w-full text-xs file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/15 file:cursor-pointer"
           />
         </Field>
-        <Field label={initial?.profile_photo_path ? "Replace profile photo" : "Profile photo"}>
+        <Field
+          label={`${initial?.profile_photo_path ? "Replace profile photo" : "Profile photo"}${
+            compressing.profile ? " · compressing…" : ""
+          }`}
+        >
           <input
             type="file"
             name="profile_photo"
             accept="image/*"
+            onChange={(e) => handleFileChange(e, "profile", COMPRESS_PROFILE)}
             className="w-full text-xs file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/15 file:cursor-pointer"
           />
         </Field>
@@ -177,11 +208,12 @@ export default function EmployeeForm({
         {state.error && <p className="text-[12px] text-red-300">{state.error}</p>}
         <button
           type="submit"
-          disabled={pending}
-          className="w-full py-3.5 rounded-xl font-bold text-sm text-[#050E21] disabled:opacity-60"
+          disabled={busy}
+          className="w-full py-3.5 rounded-xl font-bold text-sm text-[#050E21] disabled:opacity-60 inline-flex items-center justify-center gap-2"
           style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
         >
-          {pending ? pendingLabel : submitLabel}
+          {compressBusy && <Loader2 size={14} className="animate-spin" />}
+          {pending ? pendingLabel : compressBusy ? "Preparing photos…" : submitLabel}
         </button>
       </div>
     </form>

@@ -1,19 +1,41 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import SignaturePad from "@/components/SignaturePad";
 import { submitApplicationAction } from "../actions";
+import { attachCompressedFileTo, type CompressOptions } from "@/lib/compress-image";
 import type { JobRole } from "@/lib/employees-shared";
 
 const fieldCls =
   "w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C9A84C]";
 const labelCls = "text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1 block";
 
+// Aadhaar must stay legible — keep more pixels. Profile photo is just a face,
+// 1200px is plenty.
+const COMPRESS_AADHAAR: CompressOptions = { maxDim: 2000, quality: 0.85 };
+const COMPRESS_PROFILE: CompressOptions = { maxDim: 1200, quality: 0.8 };
+
 export default function ApplicationForm({ role }: { role: JobRole }) {
   const [state, action, pending] = useActionState(submitApplicationAction, { ok: false });
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState<Record<string, boolean>>({});
   const formRef = useRef<HTMLFormElement | null>(null);
+
+  async function handleFileChange(
+    e: React.ChangeEvent<HTMLInputElement>,
+    key: string,
+    opts: CompressOptions,
+  ) {
+    setCompressing((m) => ({ ...m, [key]: true }));
+    try {
+      await attachCompressedFileTo(e.currentTarget, opts);
+    } finally {
+      setCompressing((m) => ({ ...m, [key]: false }));
+    }
+  }
+
+  const busy = pending || Object.values(compressing).some(Boolean);
 
   if (state.ok) {
     return (
@@ -55,22 +77,30 @@ export default function ApplicationForm({ role }: { role: JobRole }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="block">
-          <span className={labelCls}>Aadhaar photo *</span>
+          <span className={labelCls}>
+            Aadhaar photo *
+            {compressing.aadhaar && <CompressingTag />}
+          </span>
           <input
             type="file"
             name="aadhaar_photo"
             required
             accept="image/*,application/pdf"
+            onChange={(e) => handleFileChange(e, "aadhaar", COMPRESS_AADHAAR)}
             className="w-full text-xs file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/15 file:cursor-pointer"
           />
         </label>
         <label className="block">
-          <span className={labelCls}>Profile photo *</span>
+          <span className={labelCls}>
+            Profile photo *
+            {compressing.profile && <CompressingTag />}
+          </span>
           <input
             type="file"
             name="profile_photo"
             required
             accept="image/*"
+            onChange={(e) => handleFileChange(e, "profile", COMPRESS_PROFILE)}
             className="w-full text-xs file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/15 file:cursor-pointer"
           />
         </label>
@@ -96,12 +126,24 @@ export default function ApplicationForm({ role }: { role: JobRole }) {
 
       <button
         type="submit"
-        disabled={pending}
+        disabled={busy}
         className="w-full py-3.5 rounded-xl font-bold text-sm text-[#050E21] disabled:opacity-60"
         style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
       >
-        {pending ? "Submitting…" : "Submit application"}
+        {pending
+          ? "Submitting…"
+          : Object.values(compressing).some(Boolean)
+          ? "Preparing photos…"
+          : "Submit application"}
       </button>
     </form>
+  );
+}
+
+function CompressingTag() {
+  return (
+    <span className="inline-flex items-center gap-1 ml-2 text-[10px] text-white/55 normal-case tracking-normal font-normal">
+      <Loader2 size={10} className="animate-spin" /> compressing…
+    </span>
   );
 }
