@@ -38,7 +38,7 @@ const categories: {
       blurb: "Single visit, no commitment",
       icon: Wrench,
       defaultPkg: "OneTime",
-      borderColor: "#EC4899", // Pink — distinct from brand gold
+      borderColor: CATEGORY_COLORS.OneTimeCarWash,
     },
     {
       id: "CarWash",

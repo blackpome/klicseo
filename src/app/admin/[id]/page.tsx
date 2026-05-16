@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import AdminShell from "../AdminShell";
+import AdminError from "../AdminError";
 import LeadStatusControl from "../LeadStatusControl";
 import LeadNotesEditor from "./LeadNotesEditor";
 import DeleteLeadButton from "./DeleteLeadButton";
 import { getLead, type LeadStatus } from "@/lib/leads";
-import { ArrowLeft, Phone, MapPin, User, Car, Calendar, Sunrise, Sunset, Sparkles } from "lucide-react";
+import { ArrowLeft, Phone, MapPin, User, Car, Calendar, Sunrise, Sunset, Sparkles, Pencil } from "lucide-react";
 
 const STATUS_COLOR: Record<LeadStatus, string> = {
   new: "#3B82F6",
@@ -50,7 +51,16 @@ export default async function LeadDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const lead = await getLead(id);
+  let lead;
+  try {
+    lead = await getLead(id);
+  } catch (err) {
+    return (
+      <AdminShell>
+        <AdminError err={err} />
+      </AdminShell>
+    );
+  }
   if (!lead) notFound();
 
   const ShiftIcon = lead.shift === "morning" ? Sunrise : Sunset;
@@ -69,6 +79,12 @@ export default async function LeadDetailPage({
         </Link>
         <div className="flex items-center gap-3">
           <LeadStatusControl id={lead.id} status={lead.status} color={STATUS_COLOR[lead.status]} />
+          <Link
+            href={`/admin/${lead.id}/edit`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 text-white/80 hover:text-white hover:border-white/30"
+          >
+            <Pencil size={12} /> Edit
+          </Link>
           <DeleteLeadButton id={lead.id} />
         </div>
       </div>
@@ -134,11 +150,31 @@ export default async function LeadDetailPage({
           />
           <Field label="Parking" value={fmt(lead.parking_location)} />
           <Field label="Car cover" value={fmt(lead.car_cover_choice)} />
-          <Field label="Gate access confirmed" value={fmt(lead.gate_access_consent)} />
           <Field
-            label="GPS"
+            label="Gate access notes"
             value={
-              lead.latitude != null && lead.longitude != null ? (
+              lead.gate_access_notes ? (
+                <span className="whitespace-pre-line">{lead.gate_access_notes}</span>
+              ) : lead.gate_access_consent ? (
+                "Confirmed (legacy flag)"
+              ) : (
+                "—"
+              )
+            }
+          />
+          <Field
+            label="Map"
+            value={
+              lead.map_link ? (
+                <a
+                  href={lead.map_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#3B82F6] hover:underline break-all"
+                >
+                  {lead.map_link} ↗
+                </a>
+              ) : lead.latitude != null && lead.longitude != null ? (
                 <a
                   href={`https://www.google.com/maps?q=${lead.latitude},${lead.longitude}`}
                   target="_blank"

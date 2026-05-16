@@ -62,7 +62,7 @@ const plans = [
       "Great if you want to try us first",
     ],
     highlight: false,
-    borderColor: "#C9A84C", // Premium Gold
+    borderColor: "#EC4899", // Vivid Pink — matches OneTimeCarWash in booking
     cta: "Book One-Time Wash",
     href: "/booking?service=OneTimeCarWash",
   },

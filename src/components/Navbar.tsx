@@ -7,11 +7,15 @@ import { usePathname } from "next/navigation";
 import { Menu, X, Phone } from "lucide-react";
 import { motion, useScroll, useSpring } from "framer-motion";
 
-const navLinks = [
+type HashLink = { label: string; hash: string; href?: undefined };
+type RouteLink = { label: string; href: string; hash?: undefined };
+
+const navLinks: (HashLink | RouteLink)[] = [
   { label: "Services",     hash: "services"     },
   { label: "How It Works", hash: "how-it-works" },
   { label: "Pricing",      hash: "pricing"      },
   { label: "Testimonials", hash: "testimonials" },
+  { label: "Careers",      href: "/careers"     },
 ];
 
 export default function Navbar() {
@@ -43,7 +47,7 @@ export default function Navbar() {
       return;
     }
     const sections = navLinks
-      .map((l) => document.getElementById(l.hash))
+      .map((l) => (l.hash ? document.getElementById(l.hash) : null))
       .filter((el): el is HTMLElement => Boolean(el));
 
     if (!sections.length) return;
@@ -110,11 +114,15 @@ export default function Navbar() {
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-2">
             {navLinks.map((link) => {
-              const active = onHome && activeId === link.hash;
+              const isHash = "hash" in link && link.hash !== undefined;
+              const active = isHash
+                ? onHome && activeId === link.hash
+                : pathname.startsWith(link.href!);
+              const href: string = isHash ? hrefFor(link.hash!) : link.href!;
               return (
                 <Link
                   key={link.label}
-                  href={hrefFor(link.hash)}
+                  href={href}
                   className={`relative px-3 py-2 text-sm font-medium transition-colors duration-200 ${
                     active ? "text-white" : "text-white/65 hover:text-white"
                   }`}
@@ -179,7 +187,7 @@ export default function Navbar() {
               transition={{ duration: 0.25, delay: isOpen ? i * 0.04 : 0 }}
             >
               <Link
-                href={hrefFor(link.hash)}
+                href={link.hash !== undefined ? hrefFor(link.hash) : link.href!}
                 onClick={() => setIsOpen(false)}
                 className="block py-3 px-4 text-white/80 hover:text-white hover:bg-[#1A5FD4]/20 rounded-lg transition-colors font-medium"
               >

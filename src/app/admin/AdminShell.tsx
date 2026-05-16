@@ -22,6 +22,9 @@ export default async function AdminShell({ children }: { children: React.ReactNo
           <nav className="flex items-center gap-4 text-xs">
             <Link href="/admin" className="text-white/70 hover:text-white">Leads</Link>
             <Link href="/admin/new" className="text-white/70 hover:text-white">+ Add Lead</Link>
+            <span className="text-white/20">·</span>
+            <Link href="/admin/employees" className="text-white/70 hover:text-white">Employees</Link>
+            <Link href="/admin/employees/new" className="text-white/70 hover:text-white">+ Add Employee</Link>
             <form action="/api/admin/logout" method="post">
               <button className="text-white/60 hover:text-red-300" type="submit">Logout</button>
             </form>

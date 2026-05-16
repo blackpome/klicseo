@@ -1,4 +1,5 @@
 import AdminShell from "./AdminShell";
+import AdminError from "./AdminError";
 import { listLeads, type LeadStatus } from "@/lib/leads";
 import LeadStatusControl from "./LeadStatusControl";
 import Link from "next/link";
@@ -25,7 +26,22 @@ export default async function AdminLeadsPage({
 }) {
   const { status, q } = await searchParams;
   const filter = (STATUS_TABS.find((t) => t.id === status)?.id ?? "all") as LeadStatus | "all";
-  const leads = await listLeads({ status: filter, search: q });
+
+  let leads;
+  try {
+    leads = await listLeads({ status: filter, search: q });
+  } catch (err) {
+    return (
+      <AdminShell>
+        <div className="max-w-3xl space-y-4">
+          <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
+            Leads
+          </h1>
+          <AdminError err={err} />
+        </div>
+      </AdminShell>
+    );
+  }
 
   return (
     <AdminShell>
@@ -115,7 +131,16 @@ export default async function AdminLeadsPage({
                   </td>
                   <td className="px-3 py-2 text-xs">{l.shift ?? "—"}</td>
                   <td className="px-3 py-2 text-xs">
-                    {l.latitude != null && l.longitude != null ? (
+                    {l.map_link ? (
+                      <a
+                        href={l.map_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#3B82F6] hover:underline"
+                      >
+                        Map ↗
+                      </a>
+                    ) : l.latitude != null && l.longitude != null ? (
                       <a
                         href={`https://www.google.com/maps?q=${l.latitude},${l.longitude}`}
                         target="_blank"

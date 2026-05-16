@@ -23,9 +23,11 @@ export interface LeadRow {
 
   pincode: string | null;
   address: string | null;
+  map_link: string | null;
   parking_location: string | null;
   car_cover_choice: string | null;
   gate_access_consent: boolean;
+  gate_access_notes: string | null;
   shift: string | null;
 
   callback_date: string | null;
@@ -96,6 +98,13 @@ export async function getLead(id: string): Promise<LeadRow | null> {
   const { data, error } = await supabase().from("leads").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
   return (data ?? null) as LeadRow | null;
+}
+
+export type LeadUpdate = Partial<Omit<LeadRow, "id" | "created_at" | "source">>;
+
+export async function updateLead(id: string, patch: LeadUpdate): Promise<void> {
+  const { error } = await supabase().from("leads").update(patch).eq("id", id);
+  if (error) throw error;
 }
 
 export async function updateLeadStatus(id: string, status: LeadStatus): Promise<void> {

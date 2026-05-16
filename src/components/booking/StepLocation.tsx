@@ -10,6 +10,35 @@ import {
   radiusForService,
 } from "@/lib/serviceability";
 
+// Detect the user's platform so the recovery instructions match the menus
+// they'll actually see. We can't open OS settings from the web, so the best
+// we can do is name the right path. Falls back to a generic message when
+// the UA isn't recognisable.
+function blockedMessage(): string {
+  if (typeof navigator === "undefined") return GENERIC_BLOCKED;
+  const ua = navigator.userAgent;
+
+  if (/iPhone|iPad|iPod/.test(ua)) {
+    return "Location is turned off for this site on iOS. To enable it: open the AA / page-settings menu next to the URL → Website Settings → Location → Allow. Or, in iOS Settings → Privacy & Security → Location Services → Safari → While Using the App. Then come back and tap the button again.";
+  }
+  if (/Android/.test(ua)) {
+    return "Location is turned off for this site on Android. Tap the lock icon next to the URL → Permissions → Location → Allow. If Location is off system-wide, also enable it in Settings → Location, then tap the button again.";
+  }
+  if (/Mac OS X/.test(ua) && /Safari/.test(ua) && !/Chrome/.test(ua)) {
+    return "Location is blocked for this site in Safari. Open Safari → Settings → Websites → Location → set this site to Allow. Also confirm macOS System Settings → Privacy & Security → Location Services is on for Safari. Then tap the button again.";
+  }
+  if (/Chrome/.test(ua)) {
+    return "Location is blocked for this site in Chrome. Click the lock icon next to the URL → Site settings → Location → Allow, then reload the page and tap the button again.";
+  }
+  if (/Firefox/.test(ua)) {
+    return "Location is blocked for this site in Firefox. Click the lock icon next to the URL → Clear permission, then tap the button again and choose Allow when prompted.";
+  }
+  return GENERIC_BLOCKED;
+}
+
+const GENERIC_BLOCKED =
+  "Location access is blocked for this site. Open your browser's site settings, allow Location for this site, then tap the button again.";
+
 // Callback availability slots. The service visit is confirmed later by the team.
 const TIME_SLOTS = [
   "12:00 AM", "1:00 AM",  "2:00 AM",  "3:00 AM",
@@ -38,29 +67,39 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
 
   const [check, setCheck] = useState<CheckState>({ status: "idle" });
   const [geoLoading, setGeoLoading] = useState(false);
-  const [geoError, setGeoError] = useState<string | null>(null);
+  // `blocked` means the browser/OS has denied permission and the user must
+  // re-enable it in settings — only this state surfaces the long recovery
+  // note. `retry` means a transient failure (timeout / position unavailable):
+  // we just nudge them to tap again, no settings wall.
+  const [geoError, setGeoError] = useState<
+    | { kind: "blocked"; message: string }
+    | { kind: "retry"; message: string }
+    | null
+  >(null);
   const [attempted, setAttempted] = useState(false);
 
   async function useMyLocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGeoError("Your browser doesn't support location access.");
+      setGeoError({
+        kind: "blocked",
+        message:
+          "Your browser doesn't support location access. Please open this site in Chrome, Safari, or another modern browser to continue.",
+      });
       return;
     }
 
     // Pre-flight permission check. Browsers (especially mobile Chrome/Safari)
     // remember a previous denial and silently reject getCurrentPosition
-    // without re-prompting — which feels broken to the user. Querying the
-    // Permissions API up front lets us show explicit recovery instructions
-    // instead of bouncing into the generic PERMISSION_DENIED branch.
-    if (typeof navigator !== "undefined" && navigator.permissions) {
+    // without re-prompting — querying the Permissions API up front lets us
+    // surface explicit recovery instructions instead of leaving the user
+    // staring at a button that does nothing.
+    if (navigator.permissions) {
       try {
         const status = await navigator.permissions.query({
           name: "geolocation" as PermissionName,
         });
         if (status.state === "denied") {
-          setGeoError(
-            "Location access is blocked for this site. On your phone: tap the lock/info icon next to the URL → Permissions → Location → Allow, then tap the button again. On desktop: browser Settings → Privacy → Site settings → Location. You can also keep filling the form and we'll confirm by phone.",
-          );
+          setGeoError({ kind: "blocked", message: blockedMessage() });
           return;
         }
       } catch {
@@ -88,24 +127,27 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
       (err) => {
         setGeoLoading(false);
         if (err.code === err.PERMISSION_DENIED) {
-          setGeoError(
-            "Location access denied. To enable it: tap the lock/info icon next to the site URL → Permissions → Location → Allow, then tap the button again. You can also continue filling the form.",
-          );
+          setGeoError({ kind: "blocked", message: blockedMessage() });
         } else if (err.code === err.TIMEOUT) {
-          setGeoError("Location request timed out — try again, or continue filling the form and we'll confirm by phone.");
+          setGeoError({
+            kind: "retry",
+            message: "Location request timed out. Please tap the button to try again.",
+          });
         } else {
-          setGeoError("Couldn't get your location. Continue filling the form and we'll confirm by phone.");
+          setGeoError({
+            kind: "retry",
+            message: "Couldn't read your location. Please tap the button to try again.",
+          });
         }
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
     );
   }
 
-  // The GPS check is now compulsory — the user must either get a successful
-  // reading OR see an explicit error (denied / unsupported / timeout). A
-  // never-attempted check leaves them unable to continue. Outside-radius is
-  // still allowed (we ask them to call us, but the form proceeds).
-  const locationChecked = check.status === "done" || geoError !== null;
+  // A successful GPS read is the only way to clear this step — the form will
+  // not let the user continue without it. Blocked / retry errors surface
+  // guidance but do not unlock the Continue button.
+  const locationChecked = check.status === "done";
   const addressValid = data.address.trim().length >= 8;
   const valid =
     pinLooksComplete &&
@@ -165,9 +207,9 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           ? "Check availability with my location"
           : "Re-check using my location"}
       </button>
-      {!locationChecked && !geoLoading && (
+      {!locationChecked && !geoLoading && !geoError && (
         <p className={`text-[11px] mt-2 ${errLocation ? "text-red-300" : "text-white/40"}`}>
-          One-time check — we use your location only to confirm we serve your area. Tap above to allow.
+          Required — we use your location only to confirm we serve your area. Tap above to allow.
         </p>
       )}
 
@@ -193,10 +235,22 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           </span>
         </div>
       )}
-      {geoError && (
+      {geoError?.kind === "retry" && (
         <p className="flex items-center gap-1.5 text-[11px] text-amber-300 mt-2">
-          <AlertTriangle size={12} className="flex-shrink-0" /> {geoError}
+          <AlertTriangle size={12} className="flex-shrink-0" /> {geoError.message}
         </p>
+      )}
+      {geoError?.kind === "blocked" && (
+        <div
+          className="flex items-start gap-2 text-[11px] text-amber-200 mt-2 px-3 py-2 rounded-lg leading-snug"
+          style={{ background: "rgba(251, 191, 36, 0.08)", border: "1px solid rgba(251, 191, 36, 0.30)" }}
+        >
+          <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+          <span>
+            <strong className="text-amber-100">Location is required to continue.</strong>{" "}
+            {geoError.message}
+          </span>
+        </div>
       )}
 
       <div className="h-px bg-white/5 my-5" />
