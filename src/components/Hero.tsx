@@ -82,7 +82,7 @@ export default function Hero() {
   }, [mx, my]);
 
   return (
-    <section className="relative min-h-screen flex flex-col items-center justify-between overflow-hidden px-4 pb-0">
+    <section id="hero" className="relative min-h-screen flex flex-col items-center justify-between overflow-hidden px-4 pb-0">
 
       {/* Backgrounds */}
       <div className="absolute inset-0 bg-[#050E21]" />
@@ -224,6 +224,79 @@ export default function Hero() {
           immaculate, every time.
         </motion.p>
 
+        {/* Hero "Book Now from ₹19" pill. Background is a single brand-blue
+            fill (no gradient) for a cleaner, more confident look on the
+            page; the ₹19 stays solid premium red so the price is the only
+            chromatic accent inside the button. Padding is generous and the
+            row is items-center so the big number and small copy share a
+            common vertical axis. */}
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.35, ease: "easeOut" }}
+          className="flex justify-center mb-5"
+        >
+          <Magnetic className="w-full sm:w-auto">
+            <div className="relative inline-block w-full sm:w-auto">
+              {/* Subtle white aura behind the glass — gives the pill a
+                  soft, breathing halo without any colored fill. */}
+              <motion.div
+                aria-hidden
+                className="absolute inset-0 rounded-full pointer-events-none"
+                animate={{ opacity: [0.35, 0.6, 0.35], scale: [1, 1.04, 1] }}
+                transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+                style={{
+                  background: "rgba(255,255,255,0.55)",
+                  filter: "blur(22px)",
+                }}
+              />
+              <motion.a
+                href="/booking"
+                whileHover={{ scale: 1.05, y: -2 }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: "spring", stiffness: 320, damping: 20 }}
+                className="relative w-full sm:w-auto inline-flex items-center justify-center text-center px-10 sm:px-12 py-5 sm:py-6 rounded-full font-semibold text-base text-white overflow-hidden transition-shadow duration-300 backdrop-blur-xl"
+                style={{
+                  // White glassmorphism: translucent white fill, a soft
+                  // 1px frosted edge, and a subtle inner highlight to mimic
+                  // light catching the rim of frosted glass.
+                  background: "rgba(255,255,255,0.12)",
+                  WebkitBackdropFilter: "blur(16px) saturate(140%)",
+                  backdropFilter: "blur(16px) saturate(140%)",
+                  boxShadow:
+                    "0 8px 32px rgba(255,255,255,0.18), 0 0 0 1px rgba(255,255,255,0.35) inset, 0 1px 0 rgba(255,255,255,0.45) inset",
+                }}
+              >
+                {/* Diagonal shimmer sweep — kept for the catchy glint */}
+                <motion.span
+                  aria-hidden
+                  className="absolute inset-y-0 -left-1/3 w-1/3 pointer-events-none"
+                  initial={{ x: "-100%" }}
+                  animate={{ x: "400%" }}
+                  transition={{ duration: 2.6, repeat: Infinity, repeatDelay: 1.6, ease: "easeInOut" }}
+                  style={{
+                    background:
+                      "linear-gradient(75deg, transparent 0%, rgba(255,255,255,0.30) 50%, transparent 100%)",
+                    filter: "blur(4px)",
+                  }}
+                />
+                <span className="relative inline-flex items-center justify-center gap-2.5 whitespace-nowrap">
+                  <span className="leading-none">Book Now from</span>
+                  <motion.span
+                    animate={{ scale: [1, 1.1, 1] }}
+                    transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                    className="inline-block text-4xl sm:text-5xl font-extrabold leading-none drop-shadow-[0_2px_10px_rgba(220,38,38,0.65)]"
+                    style={{ fontFamily: "var(--font-playfair)", color: "#DC2626" }}
+                  >
+                    ₹19
+                  </motion.span>
+                  <span className="leading-none text-white/85">/day</span>
+                </span>
+              </motion.a>
+            </div>
+          </Magnetic>
+        </motion.div>
+
         {/* CTAs */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -240,7 +313,7 @@ export default function Hero() {
               className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-base text-[#050E21] shadow-[0_4px_24px_rgba(201,168,76,0.4)] hover:shadow-[0_8px_32px_rgba(201,168,76,0.6)] transition-shadow duration-300"
               style={{ background: "linear-gradient(135deg,#9C7A2A 0%,#C9A84C 50%,#E8CC7A 100%)" }}
             >
-              Book Your Wash
+              Pricing
             </motion.a>
           </Magnetic>
           <Magnetic className="w-full sm:w-auto">

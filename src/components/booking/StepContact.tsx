@@ -42,7 +42,7 @@ const categories: {
     },
     {
       id: "CarWash",
-      label: "Car Wash",
+      label: "Car Wash - Monthly Subscription",
       blurb: "Subscription doorstep wash",
       icon: Droplets,
       defaultPkg: "Daily",

@@ -9,6 +9,7 @@ import {
   haversineKm,
   radiusForService,
 } from "@/lib/serviceability";
+import { CATEGORY_COLORS } from "@/lib/pricing";
 
 // Detect the user's platform so the recovery instructions match the menus
 // they'll actually see. We can't open OS settings from the web, so the best
@@ -64,6 +65,14 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
   const pin = data.pincode.trim();
   const pinLooksComplete = /^\d{6}$/.test(pin);
   const radiusKm = radiusForService(data.service);
+
+  // Step 2 borders / selected-state tints follow the category color picked
+  // in Step 1 (blue for CarWash, green for CarDetailing, pink for
+  // OneTimeCarWash) — never gold. Decorative label icons and the bottom
+  // Continue button keep their existing brand-gold to stay consistent with
+  // the rest of the wizard.
+  const accent = data.service ? CATEGORY_COLORS[data.service] : "#C9A84C";
+  const accent20 = `${accent}33`; // 20% alpha — focus ring / soft glow
 
   const [check, setCheck] = useState<CheckState>({ status: "idle" });
   const [geoLoading, setGeoLoading] = useState(false);
@@ -192,14 +201,17 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         type="button"
         onClick={useMyLocation}
         disabled={geoLoading}
-        className={`w-full py-3 rounded-xl text-sm font-semibold text-white border bg-[#C9A84C]/5 hover:bg-[#C9A84C]/10 hover:border-[#C9A84C]/70 disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
-          errLocation ? "border-red-400/70 ring-1 ring-red-400/30" : "border-[#C9A84C]/40"
-        }`}
+        className="w-full py-3 rounded-xl text-sm font-semibold text-white border disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+        style={
+          errLocation
+            ? { borderColor: "rgba(248,113,113,0.70)", boxShadow: "0 0 0 1px rgba(248,113,113,0.30)", background: "rgba(255,255,255,0.02)" }
+            : { borderColor: `${accent}66`, background: `${accent}0D` }
+        }
       >
         {geoLoading ? (
           <Loader2 size={14} className="animate-spin" />
         ) : (
-          <LocateFixed size={14} className="text-[#C9A84C]" />
+          <LocateFixed size={14} style={{ color: accent }} />
         )}
         {geoLoading
           ? "Locating…"
@@ -214,7 +226,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
       )}
 
       {check.status === "done" && check.distanceKm <= radiusKm && (
-        <p className="flex items-center gap-1.5 text-[11px] text-[#C9A84C] mt-2">
+        <p className="flex items-center gap-1.5 text-[11px] mt-2" style={{ color: accent }}>
           <CheckCircle size={12} className="flex-shrink-0" />
           Service available — about {check.distanceKm} km away (within {radiusKm} km).
         </p>
@@ -267,7 +279,17 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           placeholder="e.g. 600001"
           value={data.pincode}
           onChange={(e) => update({ pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
-          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors ${
+          onFocus={(e) => {
+            if (!errPin) {
+              e.currentTarget.style.borderColor = accent;
+              e.currentTarget.style.boxShadow = `0 0 0 1px ${accent20}`;
+            }
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "";
+            e.currentTarget.style.boxShadow = "";
+          }}
+          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none transition-colors ${
             errPin ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
           }`}
         />
@@ -284,7 +306,17 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           placeholder="Flat no, Building, Street, Area, City"
           value={data.address}
           onChange={(e) => update({ address: e.target.value })}
-          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors resize-none ${
+          onFocus={(e) => {
+            if (!errAddress) {
+              e.currentTarget.style.borderColor = accent;
+              e.currentTarget.style.boxShadow = `0 0 0 1px ${accent20}`;
+            }
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "";
+            e.currentTarget.style.boxShadow = "";
+          }}
+          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none transition-colors resize-none ${
             errAddress ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
           }`}
         />
@@ -313,20 +345,21 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
                   })
                 }
                 className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all min-h-[48px] ${
-                  sel
-                    ? "border-[#C9A84C] shadow-[0_0_14px_rgba(201,168,76,0.2)]"
-                    : "glass-card hover:border-[#1A5FD4]/40"
+                  sel ? "" : "glass-card hover:border-[#1A5FD4]/40"
                 }`}
-                style={sel ? { background: "rgba(201,168,76,0.08)" } : {}}
+                style={
+                  sel
+                    ? { borderColor: accent, background: `${accent}14`, boxShadow: `0 0 14px ${accent20}` }
+                    : {}
+                }
               >
-                <Icon size={14} className={sel ? "text-[#C9A84C]" : "text-white/50"} />
+                <Icon size={14} style={sel ? { color: accent } : undefined} className={sel ? "" : "text-white/50"} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white leading-tight">{label}</p>
                   <p className="text-[10px] text-white/40 mt-0.5 truncate">{blurb}</p>
                 </div>
                 {sel && (
-                  <div className="w-3 h-3 rounded-full flex-shrink-0"
-                       style={{ background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" }} />
+                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: accent }} />
                 )}
               </button>
             );
@@ -363,13 +396,19 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
                     type="button"
                     onClick={() => update({ carCoverChoice: option.id })}
                     className={`rounded-xl border px-3 py-3 text-left transition-all ${
-                      sel
-                        ? "border-[#C9A84C] bg-[rgba(201,168,76,0.10)] shadow-[0_0_14px_rgba(201,168,76,0.16)]"
-                        : "glass-card hover:border-[#1A5FD4]/40"
+                      sel ? "" : "glass-card hover:border-[#1A5FD4]/40"
                     }`}
+                    style={
+                      sel
+                        ? { borderColor: accent, background: `${accent}1A`, boxShadow: `0 0 14px ${accent}29` }
+                        : {}
+                    }
                   >
                     <p className="text-sm font-semibold text-white">{option.title}</p>
-                    <p className={`mt-1 text-[11px] ${option.id === "yes" ? "text-[#C9A84C]" : "text-red-300"}`}>
+                    <p
+                      className={`mt-1 text-[11px] ${option.id === "yes" ? "" : "text-red-300"}`}
+                      style={option.id === "yes" ? { color: accent } : undefined}
+                    >
                       {option.note}
                     </p>
                     {option.warning && (
@@ -411,19 +450,22 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         onClick={() => update({ gateAccessConsent: !data.gateAccessConsent })}
         className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl border text-left mb-4 transition-all ${
           data.gateAccessConsent
-            ? "border-[#C9A84C] bg-[rgba(201,168,76,0.08)]"
+            ? ""
             : errGate
             ? "border-red-400/70 ring-1 ring-red-400/30 bg-white/[0.04]"
             : "glass-card hover:border-[#1A5FD4]/40"
         }`}
+        style={data.gateAccessConsent ? { borderColor: accent, background: `${accent}14` } : {}}
       >
         <div
-          className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border mt-0.5 ${
-            data.gateAccessConsent ? "border-[#C9A84C]" : "border-white/25"
-          }`}
-          style={data.gateAccessConsent ? { background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" } : {}}
+          className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border mt-0.5"
+          style={
+            data.gateAccessConsent
+              ? { borderColor: accent, background: accent }
+              : { borderColor: "rgba(255,255,255,0.25)" }
+          }
         >
-          {data.gateAccessConsent && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
+          {data.gateAccessConsent && <Check size={11} className="text-white" strokeWidth={3} />}
         </div>
         <div className="flex-1">
           <p className="text-sm font-semibold text-white leading-tight flex items-center gap-1.5">
@@ -467,11 +509,13 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
                 type="button"
                 onClick={() => update({ shift: id })}
                 className={`relative flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all min-h-[56px] ${
-                  sel
-                    ? "border-[#C9A84C] shadow-[0_0_14px_rgba(201,168,76,0.2)]"
-                    : "glass-card hover:border-[#1A5FD4]/40"
+                  sel ? "" : "glass-card hover:border-[#1A5FD4]/40"
                 }`}
-                style={sel ? { background: "rgba(201,168,76,0.08)" } : {}}
+                style={
+                  sel
+                    ? { borderColor: accent, background: `${accent}14`, boxShadow: `0 0 14px ${accent20}` }
+                    : {}
+                }
               >
                 {recommended && (
                   <span
@@ -481,14 +525,13 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
                     Recommended
                   </span>
                 )}
-                <Icon size={14} className={sel ? "text-[#C9A84C]" : "text-white/50"} />
+                <Icon size={14} style={sel ? { color: accent } : undefined} className={sel ? "" : "text-white/50"} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white leading-tight">{label}</p>
                   <p className="text-[10px] text-white/40 mt-0.5 truncate">{blurb}</p>
                 </div>
                 {sel && (
-                  <div className="w-3 h-3 rounded-full flex-shrink-0"
-                       style={{ background: "linear-gradient(135deg,#9C7A2A,#E8CC7A)" }} />
+                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: accent }} />
                 )}
               </button>
             );
@@ -510,7 +553,17 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           value={data.date}
           min={new Date().toISOString().split("T")[0]}
           onChange={(e) => update({ date: e.target.value })}
-          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors [color-scheme:dark] ${
+          onFocus={(e) => {
+            if (!errDate) {
+              e.currentTarget.style.borderColor = accent;
+              e.currentTarget.style.boxShadow = `0 0 0 1px ${accent20}`;
+            }
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "";
+            e.currentTarget.style.boxShadow = "";
+          }}
+          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none transition-colors [color-scheme:dark] ${
             errDate ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
           }`}
         />
@@ -530,7 +583,15 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           <select
             value={data.time}
             onChange={(e) => update({ time: e.target.value })}
-            className="w-full appearance-none rounded-xl border border-white/10 bg-[#071F4A] py-3.5 pl-10 pr-10 text-sm font-semibold text-white focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 [color-scheme:dark]"
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = accent;
+              e.currentTarget.style.boxShadow = `0 0 0 1px ${accent20}`;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "";
+              e.currentTarget.style.boxShadow = "";
+            }}
+            className="w-full appearance-none rounded-xl border border-white/10 bg-[#071F4A] py-3.5 pl-10 pr-10 text-sm font-semibold text-white focus:outline-none [color-scheme:dark]"
           >
             {TIME_SLOTS.map((t) => (
               <option key={t} value={t}>

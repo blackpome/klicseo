@@ -91,17 +91,17 @@ export default function BookingCTA() {
               <h3 className="text-sm font-semibold text-white/60 uppercase tracking-widest">
                 Contact Us
               </h3>
-              <a href="tel:+1234567890" className="flex items-center gap-3 text-white hover:text-[#C9A84C] transition-colors group">
+              <a href="tel:+917904332212" className="flex items-center gap-3 text-white hover:text-[#C9A84C] transition-colors group">
                 <div className="w-9 h-9 rounded-lg bg-[#1A5FD4]/20 flex items-center justify-center group-hover:bg-[#C9A84C]/20 transition-colors">
                   <Phone size={16} className="text-[#C9A84C]" />
                 </div>
-                <span className="font-medium">+1 (234) 567-890</span>
+                <span className="font-medium">+91 79043 32212</span>
               </a>
-              <a href="mailto:hello@klicseo.com" className="flex items-center gap-3 text-white hover:text-[#C9A84C] transition-colors group">
+              <a href="mailto:klicseo@gmail.com" className="flex items-center gap-3 text-white hover:text-[#C9A84C] transition-colors group">
                 <div className="w-9 h-9 rounded-lg bg-[#1A5FD4]/20 flex items-center justify-center group-hover:bg-[#C9A84C]/20 transition-colors">
                   <Mail size={16} className="text-[#C9A84C]" />
                 </div>
-                <span className="font-medium">hello@klicseo.com</span>
+                <span className="font-medium">klicseo@gmail.com</span>
               </a>
             </div>
           </div>

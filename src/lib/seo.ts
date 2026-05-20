@@ -5,7 +5,7 @@ export const siteUrl =
 
 export const businessName = "Klicseo";
 export const businessPhone = "+91 79043 32212";
-export const businessEmail = "hello@klicseo.com";
+export const businessEmail = "klicseo@gmail.com";
 
 export const primaryCity = "Chennai";
 export const serviceAreas = [

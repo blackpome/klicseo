@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
-import ProgressBar from "./ProgressBar";
 import StepPackage from "./StepPackage";
 import StepVehicle from "./StepVehicle";
 import StepContact from "./StepContact";
@@ -167,9 +166,7 @@ export default function BookingWizard() {
 
   return (
     <div className="w-full max-w-2xl mx-auto py-6" ref={topRef}>
-      <ProgressBar current={step} />
-
-      <div className="relative overflow-hidden mt-4">
+      <div className="relative overflow-hidden">
         <AnimatePresence mode="wait" custom={dir}>
           <motion.div
             key={step}
