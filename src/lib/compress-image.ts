@@ -116,7 +116,7 @@ async function rasterizePdf(file: File, maxDim: number): Promise<HTMLCanvasEleme
       // White background — PDFs are usually transparent, JPEG isn't.
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvasContext: ctx, viewport }).promise;
+      await page.render({ canvas, canvasContext: ctx, viewport }).promise;
       page.cleanup();
       pages.push(canvas);
       totalHeight += canvas.height;
