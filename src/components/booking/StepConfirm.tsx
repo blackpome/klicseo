@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { CheckCircle, Car, User, MapPin, Calendar, Sparkles, Home, Sunrise, Sunset } from "lucide-react";
-import TransformationLoop from "./TransformationLoop";
 import type { BookingData } from "./BookingWizard";
 import { clearBookingDraft } from "./BookingWizard";
 import { SERVICE_OPTIONS, isServiceOptionId, inr, CATEGORY_COLORS, type ServiceOptionId } from "@/lib/pricing";
@@ -124,10 +123,6 @@ export default function StepConfirm({ data, onBack }: Props) {
         animate={{ opacity: 1, scale: 1 }}
         className="flex flex-col items-center text-center py-6"
       >
-        <div className="w-full mb-6">
-          <TransformationLoop />
-        </div>
-
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}

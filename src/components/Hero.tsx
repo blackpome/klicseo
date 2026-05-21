@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ChevronDown, Star, Shield, Clock } from "lucide-react";
+import { ChevronDown, Star, Shield, Clock, Flame } from "lucide-react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import BubbleParticles from "./BubbleParticles";
@@ -253,15 +253,15 @@ export default function Hero() {
         >
           <Magnetic className="w-full sm:w-auto">
             <div className="relative inline-block w-full sm:w-auto">
-              {/* Soft brand-blue aura behind the glass — a breathing halo
-                  that ties the pill to the site's blue accents. */}
+              {/* Warm aura behind the pill — breathing halo matching the
+                  offer badge's red→amber treatment. */}
               <motion.div
                 aria-hidden
                 className="absolute inset-0 rounded-full pointer-events-none"
-                animate={{ opacity: [0.35, 0.6, 0.35], scale: [1, 1.04, 1] }}
+                animate={{ opacity: [0.4, 0.65, 0.4], scale: [1, 1.05, 1] }}
                 transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
                 style={{
-                  background: "rgba(26,95,212,0.6)",
+                  background: "rgba(249,115,22,0.6)",
                   filter: "blur(24px)",
                 }}
               />
@@ -270,18 +270,14 @@ export default function Hero() {
                 whileHover={{ scale: 1.05, y: -2 }}
                 whileTap={{ scale: 0.97 }}
                 transition={{ type: "spring", stiffness: 320, damping: 20 }}
-                className="relative w-full sm:w-auto inline-flex items-center justify-center text-center px-10 sm:px-12 py-5 sm:py-6 rounded-full font-semibold text-base text-white overflow-hidden transition-shadow duration-300 backdrop-blur-xl"
+                className="relative w-full sm:w-auto inline-flex items-center justify-center text-center px-10 sm:px-12 py-5 sm:py-6 rounded-full font-semibold text-base text-white overflow-hidden transition-shadow duration-300"
                 style={{
-                  // Brand-blue glassmorphism: a translucent blue fill over the
-                  // navy, a frosted blue rim, and a subtle top highlight so it
-                  // reads like a lit pane of blue glass — on-brand and makes the
-                  // white "₹19" pop.
-                  background:
-                    "linear-gradient(135deg, rgba(59,130,246,0.30) 0%, rgba(26,95,212,0.22) 100%)",
-                  WebkitBackdropFilter: "blur(16px) saturate(150%)",
-                  backdropFilter: "blur(16px) saturate(150%)",
+                  // Offer-badge look: solid red→amber gradient with a warm
+                  // glow and a subtle top highlight so the pill reads as the
+                  // headline deal.
+                  background: "linear-gradient(135deg, #DC2626 0%, #F97316 100%)",
                   boxShadow:
-                    "0 8px 32px rgba(26,95,212,0.40), 0 0 0 1px rgba(120,170,255,0.45) inset, 0 1px 0 rgba(255,255,255,0.35) inset",
+                    "0 10px 34px rgba(220,38,38,0.50), 0 0 0 1px rgba(255,255,255,0.18) inset, 0 1px 0 rgba(255,255,255,0.35) inset",
                 }}
               >
                 {/* Diagonal shimmer sweep — kept for the catchy glint */}
@@ -298,17 +294,25 @@ export default function Hero() {
                   }}
                 />
                 <span className="relative inline-flex items-center justify-center gap-2.5 whitespace-nowrap">
+                  <motion.span
+                    aria-hidden
+                    animate={{ scale: [1, 1.18, 1] }}
+                    transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                    className="inline-flex flex-shrink-0"
+                  >
+                    {/* <Flame size={20} fill="#FFE08A" className="text-[#FFE08A]" /> */}
+                  </motion.span>
                   <span className="inline-flex flex-col items-start leading-none">
-                    <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/70 mb-0.5">
-                      Doorstep Car Care
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/85 mb-0.5">
+                      Doorstep Car Wash
                     </span>
-                    <span className="leading-none">Book Now from</span>
+                    <span className="leading-none">Book Now · Starts @ </span>
                   </span>
                   <motion.span
                     animate={{ scale: [1, 1.1, 1] }}
                     transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-                    className="inline-block text-4xl sm:text-5xl font-extrabold leading-none drop-shadow-[0_2px_14px_rgba(232,204,122,0.6)]"
-                    style={{ fontFamily: "var(--font-playfair)", color: "#F2D479" }}
+                    className="inline-block text-4xl sm:text-5xl font-extrabold leading-none drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]"
+                    style={{ fontFamily: "var(--font-playfair)", color: "#FFFFFF" }}
                   >
                     ₹19
                   </motion.span>
