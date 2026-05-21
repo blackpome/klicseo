@@ -26,7 +26,7 @@ const categories: {
 }[] = [
     {
       id: "CarDetailing",
-      label: "Car Detailing",
+      label: "Doorstep Car Detailing",
       blurb: "Premium paint & interior care",
       icon: Sparkles,
       defaultPkg: null,
@@ -34,7 +34,7 @@ const categories: {
     },
     {
       id: "OneTimeCarWash",
-      label: "One-Time Car Wash",
+      label: "Doorstep One-Time Car Wash",
       blurb: "Single visit, no commitment",
       icon: Wrench,
       defaultPkg: "OneTime",
@@ -42,7 +42,7 @@ const categories: {
     },
     {
       id: "CarWash",
-      label: "Car Wash - Monthly Subscription",
+      label: "Doorstep Car Wash - Monthly Subscription",
       blurb: "Subscription doorstep wash",
       icon: Droplets,
       defaultPkg: "Daily",

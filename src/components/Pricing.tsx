@@ -1,24 +1,9 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { useRef, useState, useEffect, MouseEvent } from "react";
-import { motion, useSpring, useInView } from "framer-motion";
+import { useRef, useState, MouseEvent } from "react";
+import { motion, useSpring } from "framer-motion";
 import AnimatedHeading from "./AnimatedHeading";
-
-// True below the Tailwind `sm` breakpoint (640px). Drives the spin behavior:
-// on mobile each card spins when it's fully on screen, on larger screens every
-// card spins at once.
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 639px)");
-    const update = () => setIsMobile(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-  return isMobile;
-}
 
 // "From" prices reflect the Hatchback tier; the booking flow charges the
 // vehicle-tier-specific price from the same source (src/lib/pricing.ts).
@@ -27,7 +12,7 @@ const plans = [
     id: "CarDetailing",
     name: "Car Detailing",
     fromPrice: 4999,
-    billing: "starting from",
+    billing: "package",
     tagline: "Premium paint & interior care",
     badge: null as string | null,
     features: [
@@ -46,7 +31,7 @@ const plans = [
     id: "CarWash",
     name: "Car Wash - Monthly Subscription",
     fromPrice: 19,
-    billing: "day, starting from",
+    billing: "day",
     tagline: "Doorstep wash subscriptions",
     badge: null as string | null,
     features: [
@@ -66,9 +51,9 @@ const plans = [
     id: "OneTimeCarWash",
     name: "One-Time Wash",
     fromPrice: 249,
-    billing: "starting from",
     tagline: "Single visit, no commitment",
     badge: null as string | null,
+    billing: "wash",
     features: [
       "Manual hand wash",
       "Machine pressure wash",
@@ -193,42 +178,13 @@ function TiltPlanCard({
 
 type Plan = (typeof plans)[number];
 
-function PlanCard({
-  plan,
-  index,
-  isMobile,
-}: {
-  plan: Plan;
-  index: number;
-  isMobile: boolean;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  // Mobile: wait until the card is (nearly) fully on screen, so each one spins
-  // on its own as you scroll. Desktop/tablet: a low threshold means the whole
-  // row trips together → all cards spin at once. `once` so it spins a single
-  // time and settles.
-  const inView = useInView(ref, {
-    once: true,
-    amount: isMobile ? 0.85 : 0.3,
-  });
-
+function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   return (
     <motion.div
-      ref={ref}
-      style={{ perspective: "1200px", transformStyle: "preserve-3d" }}
-      initial={{ opacity: 0, y: 40, rotateY: 0 }}
-      animate={
-        inView
-          ? { opacity: 1, y: 0, rotateY: [0, 360] }
-          : { opacity: 0, y: 40, rotateY: 0 }
-      }
-      transition={{
-        // Stagger only on desktop (mobile cards already fire one-by-one).
-        delay: isMobile ? 0 : index * 0.15,
-        opacity: { duration: 0.5 },
-        y: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
-        rotateY: { duration: 1.1, ease: [0.22, 1, 0.36, 1] },
-      }}
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.15 }}
+      transition={{ duration: 0.6, delay: index * 0.12, ease: [0.22, 1, 0.36, 1] }}
       className="relative pt-3"
     >
       {/* "Most Popular" badge */}
@@ -256,7 +212,7 @@ function PlanCard({
 
         <div className="mb-6">
           <div className="flex items-baseline gap-1">
-            <span className="text-white/50 text-sm font-medium mr-1">From</span>
+            <span className="text-white/50 text-sm font-medium mr-1">Starts @</span>
             <span
               className="text-4xl font-bold text-white"
               style={{ fontFamily: "var(--font-playfair)" }}
@@ -305,7 +261,6 @@ function PlanCard({
 }
 
 export default function Pricing() {
-  const isMobile = useIsMobile();
   return (
     <section id="pricing" className="relative py-20 sm:py-28 px-4">
       <div
@@ -343,7 +298,7 @@ export default function Pricing() {
         {/* Pricing cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pt-5">
           {plans.map((plan, i) => (
-            <PlanCard key={plan.id} plan={plan} index={i} isMobile={isMobile} />
+            <PlanCard key={plan.id} plan={plan} index={i} />
           ))}
         </div>
 

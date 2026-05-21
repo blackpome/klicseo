@@ -27,6 +27,8 @@ type Props = {
   trigger?: "mount" | "inView";
   /** Seconds to wait before the cascade starts. */
   delay?: number;
+  /** CSS class for `shimmer` lines (the gradient sweep). Defaults to gold. */
+  shimmerClassName?: string;
 };
 
 const container: Variants = {
@@ -64,6 +66,7 @@ export default function AnimatedHeading({
   as = "h2",
   trigger = "inView",
   delay = 0,
+  shimmerClassName = "gold-shimmer",
 }: Props) {
   const MotionTag = motion[as];
   const animateProps =
@@ -96,7 +99,7 @@ export default function AnimatedHeading({
               key={li}
               aria-hidden
               variants={shimmerLine}
-              className="gold-shimmer block"
+              className={`${shimmerClassName} block`}
               style={{ display: "block" }}
             >
               {line.text}

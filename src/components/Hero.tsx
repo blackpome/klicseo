@@ -211,6 +211,7 @@ export default function Hero() {
           delay={0.35}
           className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-tight tracking-tight mb-4"
           style={{ fontFamily: "var(--font-playfair)" }}
+          shimmerClassName="hero-accent"
           lines={[
             { text: "Luxury Car Care," },
             { text: "At Your Doorstep", shimmer: true },
@@ -242,16 +243,16 @@ export default function Hero() {
         >
           <Magnetic className="w-full sm:w-auto">
             <div className="relative inline-block w-full sm:w-auto">
-              {/* Subtle white aura behind the glass — gives the pill a
-                  soft, breathing halo without any colored fill. */}
+              {/* Soft brand-blue aura behind the glass — a breathing halo
+                  that ties the pill to the site's blue accents. */}
               <motion.div
                 aria-hidden
                 className="absolute inset-0 rounded-full pointer-events-none"
                 animate={{ opacity: [0.35, 0.6, 0.35], scale: [1, 1.04, 1] }}
                 transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
                 style={{
-                  background: "rgba(255,255,255,0.55)",
-                  filter: "blur(22px)",
+                  background: "rgba(26,95,212,0.6)",
+                  filter: "blur(24px)",
                 }}
               />
               <motion.a
@@ -261,14 +262,16 @@ export default function Hero() {
                 transition={{ type: "spring", stiffness: 320, damping: 20 }}
                 className="relative w-full sm:w-auto inline-flex items-center justify-center text-center px-10 sm:px-12 py-5 sm:py-6 rounded-full font-semibold text-base text-white overflow-hidden transition-shadow duration-300 backdrop-blur-xl"
                 style={{
-                  // White glassmorphism: translucent white fill, a soft
-                  // 1px frosted edge, and a subtle inner highlight to mimic
-                  // light catching the rim of frosted glass.
-                  background: "rgba(255,255,255,0.12)",
-                  WebkitBackdropFilter: "blur(16px) saturate(140%)",
-                  backdropFilter: "blur(16px) saturate(140%)",
+                  // Brand-blue glassmorphism: a translucent blue fill over the
+                  // navy, a frosted blue rim, and a subtle top highlight so it
+                  // reads like a lit pane of blue glass — on-brand and makes the
+                  // white "₹19" pop.
+                  background:
+                    "linear-gradient(135deg, rgba(59,130,246,0.30) 0%, rgba(26,95,212,0.22) 100%)",
+                  WebkitBackdropFilter: "blur(16px) saturate(150%)",
+                  backdropFilter: "blur(16px) saturate(150%)",
                   boxShadow:
-                    "0 8px 32px rgba(255,255,255,0.18), 0 0 0 1px rgba(255,255,255,0.35) inset, 0 1px 0 rgba(255,255,255,0.45) inset",
+                    "0 8px 32px rgba(26,95,212,0.40), 0 0 0 1px rgba(120,170,255,0.45) inset, 0 1px 0 rgba(255,255,255,0.35) inset",
                 }}
               >
                 {/* Diagonal shimmer sweep — kept for the catchy glint */}
@@ -285,12 +288,17 @@ export default function Hero() {
                   }}
                 />
                 <span className="relative inline-flex items-center justify-center gap-2.5 whitespace-nowrap">
-                  <span className="leading-none">Book Now from</span>
+                  <span className="inline-flex flex-col items-start leading-none">
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/70 mb-0.5">
+                      Doorstep Car Care
+                    </span>
+                    <span className="leading-none">Book Now from</span>
+                  </span>
                   <motion.span
                     animate={{ scale: [1, 1.1, 1] }}
                     transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-                    className="inline-block text-4xl sm:text-5xl font-extrabold leading-none drop-shadow-[0_2px_10px_rgba(220,38,38,0.65)]"
-                    style={{ fontFamily: "var(--font-playfair)", color: "#DC2626" }}
+                    className="inline-block text-4xl sm:text-5xl font-extrabold leading-none drop-shadow-[0_2px_14px_rgba(232,204,122,0.6)]"
+                    style={{ fontFamily: "var(--font-playfair)", color: "#F2D479" }}
                   >
                     ₹19
                   </motion.span>

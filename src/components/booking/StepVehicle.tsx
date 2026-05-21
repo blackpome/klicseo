@@ -77,7 +77,7 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
   >(null);
   const [attempted, setAttempted] = useState(false);
 
-  async function useMyLocation() {
+  function useMyLocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoError({
         kind: "blocked",
@@ -87,27 +87,13 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
       return;
     }
 
-    // Pre-flight permission check. Browsers (especially mobile Chrome/Safari)
-    // remember a previous denial and silently reject getCurrentPosition
-    // without re-prompting — querying the Permissions API up front lets us
-    // surface explicit recovery instructions instead of leaving the user
-    // staring at a button that does nothing.
-    if (navigator.permissions) {
-      try {
-        const status = await navigator.permissions.query({
-          name: "geolocation" as PermissionName,
-        });
-        if (status.state === "denied") {
-          setGeoError({ kind: "blocked", message: blockedMessage() });
-          return;
-        }
-      } catch {
-        // Older mobile Safari builds don't support querying 'geolocation' via
-        // the Permissions API. Fall through — getCurrentPosition will still
-        // surface PERMISSION_DENIED below if appropriate.
-      }
-    }
-
+    // Always call getCurrentPosition — this is the only thing that actually
+    // invokes the browser's native permission prompt and, on Android (and
+    // some desktops), the OS "turn on location" dialog when device location is
+    // off but the site is allowed. We deliberately do NOT short-circuit on a
+    // Permissions API "denied" reading, because that would suppress a prompt
+    // the browser might still be willing to show. We only consult the
+    // Permissions API afterwards to tailor the recovery message.
     setGeoLoading(true);
     setGeoError(null);
     navigator.geolocation.getCurrentPosition(
@@ -126,6 +112,8 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
       (err) => {
         setGeoLoading(false);
         if (err.code === err.PERMISSION_DENIED) {
+          // Hard-denied (or device location off): the browser won't re-prompt,
+          // so guide the user to re-enable it for their specific platform.
           setGeoError({ kind: "blocked", message: blockedMessage() });
         } else if (err.code === err.TIMEOUT) {
           setGeoError({
@@ -133,13 +121,22 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
             message: "Location request timed out. Please tap the button to try again.",
           });
         } else {
+          // POSITION_UNAVAILABLE — often means device location services are
+          // turned off. On Android the dialog above usually offers to enable
+          // it; otherwise point the user at their device settings.
           setGeoError({
-            kind: "retry",
-            message: "Couldn't read your location. Please tap the button to try again.",
+            kind: "blocked",
+            message:
+              "We couldn't get a location fix — your device's location/GPS may be turned off. " +
+              "Turn on Location (Settings → Location on Android, Settings → Privacy & Security → " +
+              "Location Services on iOS), then tap the button again.",
           });
         }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      // Long timeout: on Android, getCurrentPosition pops the system
+      // "Turn on location" dialog when device location is off; the user needs
+      // time to read it, tap OK, and get a first fix before we give up.
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 },
     );
   }
 

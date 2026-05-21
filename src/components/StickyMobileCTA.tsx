@@ -81,10 +81,10 @@ export default function StickyMobileCTA() {
 
           <span className="relative text-left">
             <span className="block text-[10px] font-semibold text-white/80 uppercase tracking-widest">
-              Mobile car wash
+              Doorstep Car Care
             </span>
             <span className="block text-base font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
-              Book Now · From ₹19/day
+              Book Now · Starts @ ₹19/day
             </span>
           </span>
 
