@@ -132,13 +132,16 @@ export default function LeadForm({
           </select>
         </Field>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Brand">
+            <input name="car_brand" defaultValue={v("car_brand") as string} className={fieldCls} />
+          </Field>
           <Field label="Model">
             <input name="car_model" defaultValue={v("car_model") as string} className={fieldCls} />
           </Field>
-          <Field label="Number plate">
-            <input name="car_number" defaultValue={v("car_number") as string} className={`${fieldCls} font-mono`} />
-          </Field>
         </div>
+        <Field label="Number plate">
+          <input name="car_number" defaultValue={v("car_number") as string} className={`${fieldCls} font-mono`} />
+        </Field>
       </Section>
 
       <Section title="Location" icon={MapPin}>

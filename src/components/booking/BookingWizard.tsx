@@ -9,6 +9,7 @@ import StepContact from "./StepContact";
 import StepLocation from "./StepLocation";
 import StepConfirm from "./StepConfirm";
 import type { ServiceCategory } from "@/lib/pricing";
+import type { CarPrices } from "@/lib/carPricing";
 
 export type { ServiceCategory } from "@/lib/pricing";
 
@@ -23,8 +24,14 @@ export interface BookingData {
   // by StepContact / deep-link handler; not used for pricing.
   pkg: "Daily" | "TriWeekly" | "OneTime" | null;
   vehicleType: string;
+  carBrand: string;
   carModel: string;
   carNumber: string;
+  // Set when the car is matched in the DB catalog; null for manual entry.
+  carId: string | null;
+  // Price snapshot for the matched car (the 9 service prices). null = manual
+  // entry / not found → the wizard shows the "we'll call you back" fallback.
+  carPrices: CarPrices | null;
   name: string;
   phone: string;
   pincode: string;
@@ -86,8 +93,11 @@ export default function BookingWizard() {
     interiorAddOn: false,
     pkg: null,
     vehicleType: "",
+    carBrand: "",
     carModel: "",
     carNumber: "",
+    carId: null,
+    carPrices: null,
     name: "",
     phone: "",
     pincode: "",

@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, useInView } from "framer-motion";
+import AnimatedHeading from "./AnimatedHeading";
 import { useRef } from "react";
 
 const steps = [
@@ -19,7 +20,7 @@ const steps = [
   {
     number: "03",
     title: "We Come to You",
-    description: "Our mobile team arrives at your location with all the professional equipment and premium products required.",
+    description: "Our doorstep team arrives at your location with all the professional equipment and premium products required.",
     icon: "🚗",
   },
   {
@@ -129,9 +130,11 @@ export default function HowItWorks() {
           className="text-center mb-16"
         >
           <p className="text-[#C9A84C] text-sm font-semibold tracking-[0.2em] uppercase mb-3">Simple Process</p>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4" style={{ fontFamily: "var(--font-playfair)" }}>
-            How It Works
-          </h2>
+          <AnimatedHeading
+            className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4"
+            style={{ fontFamily: "var(--font-playfair)" }}
+            lines={[{ text: "How It Works" }]}
+          />
           <p className="text-white/50 max-w-xl mx-auto text-sm sm:text-base">
             Four simple steps to a spotless vehicle — easy to book, effortless to experience.
           </p>

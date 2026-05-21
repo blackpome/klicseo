@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { insertLead } from "@/lib/leads";
-import { priceFor } from "@/lib/pricing";
+import { isServiceOptionId, type ServiceOptionId, type ParkingLocation } from "@/lib/pricing";
+import { carPriceFor, type CarPrices } from "@/lib/carPricing";
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -16,12 +17,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: "Phone number required" }, { status: 400 });
   }
 
-  const priced = priceFor(
-    String(body.serviceOption ?? ""),
-    String(body.vehicleType ?? ""),
-    Boolean(body.interiorAddOn),
-    (body.parkingLocation as "" | "inside" | "outside") || "",
-  );
+  // Price comes from the per-car snapshot captured in the wizard. If the car
+  // wasn't matched in the catalog (or has no price for this service), priced
+  // is null → we save price_total null and the team confirms by call.
+  const serviceOption = String(body.serviceOption ?? "");
+  const carPrices = (body.carPrices ?? null) as CarPrices | null;
+  const priced =
+    carPrices && isServiceOptionId(serviceOption)
+      ? carPriceFor(
+          carPrices,
+          serviceOption as ServiceOptionId,
+          ((body.parkingLocation as ParkingLocation) || "") as ParkingLocation,
+          Boolean(body.interiorAddOn),
+        )
+      : null;
 
   try {
     const lead = await insertLead({
@@ -32,6 +41,7 @@ export async function POST(req: NextRequest) {
       service_option: String(body.serviceOption ?? "") || null,
       interior_add_on: Boolean(body.interiorAddOn),
       vehicle_type: String(body.vehicleType ?? "") || null,
+      car_brand: String(body.carBrand ?? "") || null,
       car_model: String(body.carModel ?? "") || null,
       car_number: String(body.carNumber ?? "") || null,
       pincode: String(body.pincode ?? "") || null,

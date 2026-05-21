@@ -138,6 +138,7 @@ export default async function LeadDetailPage({
 
         <Section title="Vehicle" icon={Car}>
           <Field label="Type" value={fmt(lead.vehicle_type)} />
+          <Field label="Brand" value={fmt(lead.car_brand)} />
           <Field label="Model" value={fmt(lead.car_model)} />
           <Field label="Number plate" value={fmt(lead.car_number)} mono />
         </Section>

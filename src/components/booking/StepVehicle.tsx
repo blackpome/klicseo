@@ -1,18 +1,51 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Car, PenLine, ChevronRight } from "lucide-react";
+import {
+  MapPin,
+  Hash,
+  CheckCircle,
+  AlertTriangle,
+  Loader2,
+  LocateFixed,
+} from "lucide-react";
 import type { BookingData } from "./BookingWizard";
 import { CATEGORY_COLORS } from "@/lib/pricing";
+import {
+  BUSINESS_LOCATION,
+  SUPPORT_PHONE,
+  haversineKm,
+  radiusForService,
+} from "@/lib/serviceability";
 
-const vehicleData: { type: string; icon: string; models: string[] }[] = [
-  { type: "Hatchback",      icon: "🚗", models: ["Swift","i10","Tiago","Celerio","WagonR","i20","Kwid","Santro"] },
-  { type: "Sedan",          icon: "🚙", models: ["Honda City","Verna","Ciaz","Amaze","Slavia","Dzire"] },
-  { type: "Compact SUV",    icon: "🚐", models: ["Nexon","Venue","Brezza","Sonet","Kiger","Punch"] },
-  { type: "SUV",            icon: "🛻", models: ["Creta","Seltos","Duster","Grand Vitara","Hyryder"] },
-  { type: "XUV & Large SUV",icon: "🚌", models: ["XUV 700","Harrier","Safari","Scorpio","Fortuner","Innova","Gloster"] },
-];
+// Detect the user's platform so the recovery instructions match the menus
+// they'll actually see. We can't open OS settings from the web, so the best
+// we can do is name the right path. Falls back to a generic message when
+// the UA isn't recognisable.
+function blockedMessage(): string {
+  if (typeof navigator === "undefined") return GENERIC_BLOCKED;
+  const ua = navigator.userAgent;
+
+  if (/iPhone|iPad|iPod/.test(ua)) {
+    return "Location is turned off for this site on iOS. To enable it: open the AA / page-settings menu next to the URL → Website Settings → Location → Allow. Or, in iOS Settings → Privacy & Security → Location Services → Safari → While Using the App. Then come back and tap the button again.";
+  }
+  if (/Android/.test(ua)) {
+    return "Location is turned off for this site on Android. Tap the lock icon next to the URL → Permissions → Location → Allow. If Location is off system-wide, also enable it in Settings → Location, then tap the button again.";
+  }
+  if (/Mac OS X/.test(ua) && /Safari/.test(ua) && !/Chrome/.test(ua)) {
+    return "Location is blocked for this site in Safari. Open Safari → Settings → Websites → Location → set this site to Allow. Also confirm macOS System Settings → Privacy & Security → Location Services is on for Safari. Then tap the button again.";
+  }
+  if (/Chrome/.test(ua)) {
+    return "Location is blocked for this site in Chrome. Click the lock icon next to the URL → Site settings → Location → Allow, then reload the page and tap the button again.";
+  }
+  if (/Firefox/.test(ua)) {
+    return "Location is blocked for this site in Firefox. Click the lock icon next to the URL → Clear permission, then tap the button again and choose Allow when prompted.";
+  }
+  return GENERIC_BLOCKED;
+}
+
+const GENERIC_BLOCKED =
+  "Location access is blocked for this site. Open your browser's site settings, allow Location for this site, then tap the button again.";
 
 interface Props {
   data: BookingData;
@@ -21,42 +54,104 @@ interface Props {
   onBack: () => void;
 }
 
+type CheckState =
+  | { status: "idle" }
+  | { status: "done"; distanceKm: number };
+
 export default function StepVehicle({ data, update, onNext, onBack }: Props) {
-  const [customModel, setCustomModel] = useState(
-    data.carModel && !vehicleData.find((v) => v.type === data.vehicleType)?.models.includes(data.carModel)
-      ? data.carModel : ""
-  );
-  const [showCustom, setShowCustom] = useState(false);
+  const pin = data.pincode.trim();
+  const pinLooksComplete = /^\d{6}$/.test(pin);
+  const radiusKm = radiusForService(data.service);
+
+  // Borders / selected-state tints follow the category color picked in Step 1
+  // (blue for CarWash, green for CarDetailing, pink for OneTimeCarWash).
+  const accent = data.service ? CATEGORY_COLORS[data.service] : "#C9A84C";
+  const accent20 = `${accent}33`; // 20% alpha — focus ring / soft glow
+
+  const [check, setCheck] = useState<CheckState>({ status: "idle" });
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoError, setGeoError] = useState<
+    | { kind: "blocked"; message: string }
+    | { kind: "retry"; message: string }
+    | null
+  >(null);
   const [attempted, setAttempted] = useState(false);
 
-  const selectedVehicle = vehicleData.find((v) => v.type === data.vehicleType);
-
-  function handleTypeSelect(type: string) {
-    if (type !== data.vehicleType) {
-      update({ vehicleType: type, carModel: "" });
-      setCustomModel("");
-      setShowCustom(false);
+  async function useMyLocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoError({
+        kind: "blocked",
+        message:
+          "Your browser doesn't support location access. Please open this site in Chrome, Safari, or another modern browser to continue.",
+      });
+      return;
     }
+
+    // Pre-flight permission check. Browsers (especially mobile Chrome/Safari)
+    // remember a previous denial and silently reject getCurrentPosition
+    // without re-prompting — querying the Permissions API up front lets us
+    // surface explicit recovery instructions instead of leaving the user
+    // staring at a button that does nothing.
+    if (navigator.permissions) {
+      try {
+        const status = await navigator.permissions.query({
+          name: "geolocation" as PermissionName,
+        });
+        if (status.state === "denied") {
+          setGeoError({ kind: "blocked", message: blockedMessage() });
+          return;
+        }
+      } catch {
+        // Older mobile Safari builds don't support querying 'geolocation' via
+        // the Permissions API. Fall through — getCurrentPosition will still
+        // surface PERMISSION_DENIED below if appropriate.
+      }
+    }
+
+    setGeoLoading(true);
+    setGeoError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const distanceKm = haversineKm({ lat, lng }, BUSINESS_LOCATION);
+        const rounded = Math.round(distanceKm * 10) / 10;
+        setCheck({ status: "done", distanceKm: rounded });
+        // Persist the actual coordinates onto the booking so the admin can
+        // see the customer's location on a map — not just whether they're
+        // in-range.
+        update({ latitude: lat, longitude: lng });
+        setGeoLoading(false);
+      },
+      (err) => {
+        setGeoLoading(false);
+        if (err.code === err.PERMISSION_DENIED) {
+          setGeoError({ kind: "blocked", message: blockedMessage() });
+        } else if (err.code === err.TIMEOUT) {
+          setGeoError({
+            kind: "retry",
+            message: "Location request timed out. Please tap the button to try again.",
+          });
+        } else {
+          setGeoError({
+            kind: "retry",
+            message: "Couldn't read your location. Please tap the button to try again.",
+          });
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
   }
 
-  function handleModelSelect(model: string) {
-    update({ carModel: model });
-    setShowCustom(false);
-    setCustomModel("");
-  }
+  // A successful GPS read is the only way to clear this step — the form will
+  // not let the user continue without it.
+  const locationChecked = check.status === "done";
+  const addressValid = data.address.trim().length >= 8;
+  const valid = locationChecked && pinLooksComplete && addressValid;
 
-  function handleCustomToggle() {
-    setShowCustom(true);
-    update({ carModel: "" });
-  }
-
-  const modelValid = data.carModel.trim().length >= 2 || (showCustom && customModel.trim().length >= 2);
-  const numberValid = data.carNumber.trim().length >= 3;
-  const valid = !!data.vehicleType && modelValid && numberValid;
-
-  const errType   = attempted && !data.vehicleType;
-  const errModel  = attempted && !!data.vehicleType && !modelValid;
-  const errNumber = attempted && !numberValid;
+  const errLocation = attempted && !locationChecked;
+  const errPin      = attempted && !pinLooksComplete;
+  const errAddress  = attempted && !addressValid;
 
   function handleContinue() {
     if (valid) {
@@ -70,151 +165,138 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
   return (
     <div>
       <h2 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
-        Your Vehicle
+        Your Location
       </h2>
-      <p className="text-white/45 text-sm mb-4">Select your car type and model.</p>
+      <p className="text-white/45 text-sm mb-4">Our team will come to you — where should we head?</p>
 
-      {/* ── Car Type ── */}
+      {/* Serviceability check — required to proceed */}
       <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-        Car Type *
+        Availability Check *
       </p>
-      <div className={`grid grid-cols-1 gap-2 mb-1 ${errType ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
-        {vehicleData.map((v) => {
-          const selected = data.vehicleType === v.type;
-          return (
-            <motion.button
-              key={v.type}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => handleTypeSelect(v.type)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all duration-200 min-h-[48px] ${
-                selected
-                  ? ""
-                  : "glass-card hover:border-[#1A5FD4]/40"
-              }`}
-              style={selected ? { 
-                background: `${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}15`,
-                borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C",
-                boxShadow: `0 0 14px ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}33`
-              } : {}}
-            >
-              <span className="text-xl flex-shrink-0 w-7 text-center leading-none">{v.icon}</span>
-              <span className="flex-1 text-sm font-semibold text-white">{v.type}</span>
-              {selected
-                ? <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#E8CC7A"})` }} />
-                : <ChevronRight size={14} className="text-white/20 flex-shrink-0" />
-              }
-            </motion.button>
-          );
-        })}
-      </div>
-      {errType && <p className="text-[11px] text-red-300 mb-3">Pick your car type.</p>}
-      {!errType && <div className="mb-3" />}
-
-      {/* ── Car Model ── */}
-      <AnimatePresence>
-        {data.vehicleType && selectedVehicle && (
-          <motion.div
-            key={data.vehicleType}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.25 }}
-            className="mb-4"
-          >
-            <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-              Car Model *
-            </p>
-
-            <div className={`flex flex-wrap gap-2 mb-2 ${errModel ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
-              {selectedVehicle.models.map((model) => {
-                const sel = data.carModel === model && !showCustom;
-                return (
-                  <button
-                    key={model}
-                    onClick={() => handleModelSelect(model)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all duration-200 min-h-[40px] ${
-                      sel
-                        ? "text-[#050E21]"
-                        : "glass-card text-white/70 hover:text-white hover:border-[#C9A84C]/40 active:scale-95"
-                    }`}
-                    style={sel ? { 
-                      background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"})`,
-                      borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"
-                    } : {}}
-                  >
-                    {model}
-                  </button>
-                );
-              })}
-
-              {/* Other chip */}
-              <button
-                onClick={handleCustomToggle}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border min-h-[40px] transition-all duration-200 ${
-                  showCustom
-                    ? "text-[#050E21]"
-                    : "glass-card text-white/45 hover:text-white border-dashed"
-                }`}
-                style={showCustom ? { 
-                  background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"})`,
-                  borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"
-                } : {}}
-              >
-                <PenLine size={12} />
-                Other
-              </button>
-            </div>
-
-            <AnimatePresence>
-              {showCustom && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden"
-                >
-                  <input
-                    type="text"
-                    placeholder="e.g. Mahindra Thar, MG Hector…"
-                    value={customModel}
-                    onChange={(e) => { setCustomModel(e.target.value); update({ carModel: e.target.value }); }}
-                    className={`w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none transition-colors mt-1 ${
-                      data.service ? `focus:border-[${CATEGORY_COLORS[data.service]}] focus:ring-1 focus:ring-[${CATEGORY_COLORS[data.service]}33]` : "focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30"
-                    }`}
-                    autoFocus
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {data.carModel && !showCustom && (
-              <p className="text-[11px] mt-1.5" style={{ color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
-                ✓ <span className="font-semibold">{data.carModel}</span> selected
-              </p>
-            )}
-            {errModel && (
-              <p className="text-[11px] text-red-300 mt-1.5">Pick a model or tap &ldquo;Other&rdquo; to type yours.</p>
-            )}
-          </motion.div>
+      <button
+        type="button"
+        onClick={useMyLocation}
+        disabled={geoLoading}
+        className="w-full py-3 rounded-xl text-sm font-semibold text-white border disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+        style={
+          errLocation
+            ? { borderColor: "rgba(248,113,113,0.70)", boxShadow: "0 0 0 1px rgba(248,113,113,0.30)", background: "rgba(255,255,255,0.02)" }
+            : { borderColor: `${accent}66`, background: `${accent}0D` }
+        }
+      >
+        {geoLoading ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : (
+          <LocateFixed size={14} style={{ color: accent }} />
         )}
-      </AnimatePresence>
+        {geoLoading
+          ? "Locating…"
+          : check.status === "idle" && !geoError
+          ? "Check availability with my location"
+          : "Re-check using my location"}
+      </button>
+      {!locationChecked && !geoLoading && !geoError && (
+        <p className={`text-[11px] mt-2 ${errLocation ? "text-red-300" : "text-white/40"}`}>
+          Required — we use your location only to confirm we serve your area. Tap above to allow.
+        </p>
+      )}
 
-      {/* ── Registration ── */}
-      <div className="mb-5">
+      {check.status === "done" && check.distanceKm <= radiusKm && (
+        <p className="flex items-center gap-1.5 text-[11px] mt-2" style={{ color: accent }}>
+          <CheckCircle size={12} className="flex-shrink-0" />
+          Great news — service is available in your area.
+        </p>
+      )}
+      {check.status === "done" && check.distanceKm > radiusKm && (
+        <div
+          className="flex items-start gap-2 text-[11px] text-amber-300 mt-2 px-3 py-2 rounded-lg"
+          style={{ background: "rgba(251, 191, 36, 0.08)", border: "1px solid rgba(251, 191, 36, 0.25)" }}
+        >
+          <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+          <span>
+            Your location looks outside our current service area for this service.
+            Please call us at{" "}
+            <a href={`tel:${SUPPORT_PHONE.replace(/\s|\(|\)|-/g, "")}`} className="underline font-semibold">
+              {SUPPORT_PHONE}
+            </a>
+            . You can still continue and we&apos;ll get back to you.
+          </span>
+        </div>
+      )}
+      {geoError?.kind === "retry" && (
+        <p className="flex items-center gap-1.5 text-[11px] text-amber-300 mt-2">
+          <AlertTriangle size={12} className="flex-shrink-0" /> {geoError.message}
+        </p>
+      )}
+      {geoError?.kind === "blocked" && (
+        <div
+          className="flex items-start gap-2 text-[11px] text-amber-200 mt-2 px-3 py-2 rounded-lg leading-snug"
+          style={{ background: "rgba(251, 191, 36, 0.08)", border: "1px solid rgba(251, 191, 36, 0.30)" }}
+        >
+          <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+          <span>
+            <strong className="text-amber-100">Location is required to continue.</strong>{" "}
+            {geoError.message}
+          </span>
+        </div>
+      )}
+
+      <div className="h-px bg-white/5 my-5" />
+
+      {/* Pincode — collected, not used for the check */}
+      <div className="mb-4">
         <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-          <Car size={11} className="inline mr-1" />
-          Registration Number *
+          <Hash size={10} className="inline mr-1" /> Pincode / Postcode *
         </label>
         <input
           type="text"
-          placeholder="e.g. KA 01 AB 1234"
-          value={data.carNumber}
-          onChange={(e) => update({ carNumber: e.target.value.toUpperCase() })}
-          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm font-mono tracking-wider focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors ${
-            errNumber ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
+          inputMode="numeric"
+          maxLength={6}
+          placeholder="e.g. 600001"
+          value={data.pincode}
+          onChange={(e) => update({ pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+          onFocus={(e) => {
+            if (!errPin) {
+              e.currentTarget.style.borderColor = accent;
+              e.currentTarget.style.boxShadow = `0 0 0 1px ${accent20}`;
+            }
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "";
+            e.currentTarget.style.boxShadow = "";
+          }}
+          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none transition-colors ${
+            errPin ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
           }`}
         />
-        {errNumber && <p className="text-[11px] text-red-300 mt-1">Enter the registration number.</p>}
+        {errPin && <p className="text-[11px] text-red-300 mt-1">Enter a 6-digit pincode.</p>}
+      </div>
+
+      {/* Address */}
+      <div className="mb-6">
+        <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
+          <MapPin size={10} className="inline mr-1" /> Full Address *
+        </label>
+        <textarea
+          rows={3}
+          placeholder="Flat no, Building, Street, Area, City"
+          value={data.address}
+          onChange={(e) => update({ address: e.target.value })}
+          onFocus={(e) => {
+            if (!errAddress) {
+              e.currentTarget.style.borderColor = accent;
+              e.currentTarget.style.boxShadow = `0 0 0 1px ${accent20}`;
+            }
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "";
+            e.currentTarget.style.boxShadow = "";
+          }}
+          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm focus:outline-none transition-colors resize-none ${
+            errAddress ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
+          }`}
+        />
+        {errAddress && <p className="text-[11px] text-red-300 mt-1">Please enter your full address (at least 8 characters).</p>}
       </div>
 
       {attempted && !valid && (

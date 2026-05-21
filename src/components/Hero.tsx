@@ -6,6 +6,7 @@ import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import BubbleParticles from "./BubbleParticles";
 import Magnetic from "./Magnetic";
+import AnimatedHeading from "./AnimatedHeading";
 
 const stats = [
   { value: "2,500+", label: "Cars Washed" },
@@ -122,14 +123,16 @@ export default function Hero() {
         ))}
       </motion.div>
 
-      {/* Bottom vignette so the headline / CTAs / stats stay readable, while
-          leaving the top half of the frame clear for the dirt-to-clean
-          transformation footage to actually show through. */}
+      {/* Top + bottom vignette: a moody dark band at the very top and bottom
+          of the frame (deep enough to hide the source watermark in either
+          corner) while the middle stays clear so the dirt-to-clean
+          transformation footage still reads. Bottom also keeps the
+          headline / CTAs / stats legible. */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "linear-gradient(to bottom, rgba(5,14,33,0.15) 0%, rgba(5,14,33,0.10) 35%, rgba(5,14,33,0.55) 70%, rgba(5,14,33,0.95) 90%, #050E21 100%)",
+            "linear-gradient(to bottom, #050E21 0%, rgba(5,14,33,0.95) 9%, rgba(5,14,33,0.6) 18%, rgba(5,14,33,0.3) 38%, rgba(5,14,33,0.75) 68%, rgba(5,14,33,0.98) 88%, #050E21 100%)",
         }}
       />
 
@@ -171,7 +174,7 @@ export default function Hero() {
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6 glass-blue text-sm font-medium text-white/80"
         >
           <Star size={14} className="text-[#C9A84C]" fill="#C9A84C" />
-          Premium Car Wash & Detailing Service
+          Premium Doorstep Car Care
           <Star size={14} className="text-[#C9A84C]" fill="#C9A84C" />
         </motion.div>
 
@@ -202,16 +205,17 @@ export default function Hero() {
         </motion.div>
 
         {/* Headline */}
-        <motion.h1
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+        <AnimatedHeading
+          as="h1"
+          trigger="mount"
+          delay={0.35}
           className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-tight tracking-tight mb-4"
           style={{ fontFamily: "var(--font-playfair)" }}
-        >
-          Your Car Deserves{" "}
-          <span className="block gold-shimmer">Luxury Care</span>
-        </motion.h1>
+          lines={[
+            { text: "Luxury Car Care," },
+            { text: "At Your Doorstep", shimmer: true },
+          ]}
+        />
 
         <motion.p
           initial={{ opacity: 0, y: 20 }}
@@ -219,9 +223,9 @@ export default function Hero() {
           transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
           className="text-base sm:text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-10 leading-relaxed"
         >
-          Experience the finest car wash and detailing service. We treat every
-          vehicle with the precision and care it deserves — leaving it
-          immaculate, every time.
+          No queues, no driving out. Our detailing studio comes to your
+          doorstep — washing, detailing, and protecting your car with showroom
+          precision while it stays right where you parked it.
         </motion.p>
 
         {/* Hero "Book Now from ₹19" pill. Background is a single brand-blue
@@ -251,7 +255,7 @@ export default function Hero() {
                 }}
               />
               <motion.a
-                href="/booking"
+                href="/booking?package=Daily"
                 whileHover={{ scale: 1.05, y: -2 }}
                 whileTap={{ scale: 0.97 }}
                 transition={{ type: "spring", stiffness: 320, damping: 20 }}

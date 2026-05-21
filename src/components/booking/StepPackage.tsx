@@ -2,18 +2,18 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, AlertCircle } from "lucide-react";
+import { Check, AlertCircle, PhoneCall } from "lucide-react";
 import TransformationLoop from "./TransformationLoop";
 import type { BookingData } from "./BookingWizard";
 import {
   OPTIONS_BY_CATEGORY,
   SERVICE_OPTIONS,
-  priceFor,
-  tierForVehicleType,
-  tierLabel,
+  isServiceOptionId,
   inr,
   CATEGORY_COLORS,
+  type ServiceOptionId,
 } from "@/lib/pricing";
+import { carPriceFor } from "@/lib/carPricing";
 
 const optionToPkg: Record<string, BookingData["pkg"]> = {
   Monthly:           "Daily",
@@ -33,12 +33,23 @@ interface Props {
 
 export default function StepPackage({ data, update, onNext, onBack }: Props) {
   const [attempted, setAttempted] = useState(false);
-  const tier = tierForVehicleType(data.vehicleType);
   const category = data.service;
   const optionIds = category ? OPTIONS_BY_CATEGORY[category] : [];
   const selectedOption = data.serviceOption;
   const selectedDef = selectedOption ? SERVICE_OPTIONS[selectedOption as keyof typeof SERVICE_OPTIONS] : undefined;
   const errOption = attempted && !selectedDef;
+  const accent = data.service ? CATEGORY_COLORS[data.service] : "#C9A84C";
+
+  // Per-car prices come from the catalog (set in the vehicle step). null when
+  // the car was entered manually / not found — then we show the call-back note.
+  const cp = data.carPrices;
+  function optPrice(id: string, withAddOn = false) {
+    if (!cp || !isServiceOptionId(id)) return null;
+    return carPriceFor(cp, id as ServiceOptionId, data.parkingLocation, withAddOn);
+  }
+
+  const carLabel = [data.carBrand, data.carModel].filter(Boolean).join(" ");
+  const selectedPriced = optPrice(selectedOption, data.interiorAddOn);
 
   function handleContinue() {
     if (selectedDef) {
@@ -67,20 +78,25 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
       <h2 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
         Your Package
       </h2>
-      <p className="text-white/45 text-sm mb-3">Pricing for your {tierLabel[tier]}.</p>
+      <p className="text-white/45 text-sm mb-3">
+        {cp && carLabel
+          ? `Pricing for your ${carLabel}.`
+          : carLabel
+          ? "We'll confirm your price on the call."
+          : "Choose your service."}
+      </p>
 
       <TransformationLoop label={selectedDef?.shortLabel} />
 
       {/* Vehicle summary — already chosen in the previous step */}
-      {data.vehicleType && (
+      {carLabel && (
         <div className="mt-3 mb-4 flex items-center justify-center gap-2 text-[11px] text-white/55">
           <span>Pricing for</span>
           <span className="px-2.5 py-1 rounded-md font-semibold text-[#050E21]"
                 style={{ background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#E8CC7A"})` }}>
-            {data.vehicleType}
+            {carLabel}
           </span>
           {data.parkingLocation === "outside" && <span className="text-white/40">· outside parked</span>}
-          {data.carModel && <span className="text-white/40">· {data.carModel}</span>}
         </div>
       )}
 
@@ -97,7 +113,8 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
         {optionIds.map((id) => {
           const opt = SERVICE_OPTIONS[id];
           const selected = selectedOption === id;
-          const p = priceFor(id, data.vehicleType, false, data.parkingLocation);
+          const p = optPrice(id, false);
+          const pAdd = optPrice(id, true);
           return (
             <motion.button
               key={id}
@@ -110,7 +127,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
               }`}
               style={
                 selected
-                  ? { 
+                  ? {
                       background: "linear-gradient(145deg,rgba(255,255,255,0.05),rgba(5,14,33,0.9))",
                       borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C",
                       boxShadow: `0 0 20px ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}40`
@@ -134,20 +151,20 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
                     )}
                   </div>
                   <p className="text-white/40 text-[11px] mb-1">{opt.blurb}</p>
-                  {opt.addOn && (
+                  {opt.addOn && pAdd && pAdd.addOn > 0 && (
                     <p className="text-[10px] text-white/35">
-                      {opt.addOn.label}: +{inr(opt.addOn.price[tier])}
+                      {opt.addOn.label}: +{inr(pAdd.addOn)}
                     </p>
                   )}
                 </div>
 
                 <div className="text-right flex-shrink-0 ml-1">
-                  <div className="text-lg sm:text-xl font-bold" 
+                  <div className="text-lg sm:text-xl font-bold"
                        style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
-                    {p ? inr(p.base) : "—"}
+                    {p ? inr(p.base) : "On call"}
                   </div>
                   <div className="text-white/35 text-[10px]">
-                    {opt.recurring === "monthly" ? "/mo" : "one time"}
+                    {p ? (opt.recurring === "monthly" ? "/mo" : "one time") : "price by team"}
                   </div>
                 </div>
               </div>
@@ -175,7 +192,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
                   ? ""
                   : "border-white/25"
               }`}
-              style={data.interiorAddOn ? { 
+              style={data.interiorAddOn ? {
                 background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#E8CC7A"})`,
                 borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"
               } : {}}
@@ -191,32 +208,45 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
               </p>
             </div>
           </div>
-          <span className="text-sm font-bold whitespace-nowrap" style={{ color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
-            +{inr(selectedDef.addOn.price[tier])}
+          <span className="text-sm font-bold whitespace-nowrap" style={{ color: accent }}>
+            {(() => {
+              const pAdd = optPrice(selectedOption, true);
+              return pAdd && pAdd.addOn > 0 ? `+${inr(pAdd.addOn)}` : "on call";
+            })()}
           </span>
         </button>
       )}
 
-      {/* Total preview */}
-      {selectedDef && (
+      {/* Total preview / call-back fallback */}
+      {selectedDef && selectedPriced && (
         <div
           className="flex items-center justify-between px-4 py-3 rounded-xl mb-5"
-          style={{ 
-            background: `${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}15`, 
-            border: `1px solid ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}40` 
+          style={{
+            background: `${accent}15`,
+            border: `1px solid ${accent}40`
           }}
         >
           <div>
             <p className="text-white/60 text-sm leading-none">Estimated total</p>
             <p className="text-white/35 text-[10px] mt-0.5">
-              {selectedDef.recurring === "monthly" ? "per month" : "one time"} · {tierLabel[tier]}
+              {selectedDef.recurring === "monthly" ? "per month" : "one time"}
+              {carLabel ? ` · ${carLabel}` : ""}
             </p>
           </div>
-          <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
-            {(() => {
-              const p = priceFor(selectedOption, data.vehicleType, data.interiorAddOn, data.parkingLocation);
-              return p ? inr(p.total) : "—";
-            })()}
+          <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: accent }}>
+            {inr(selectedPriced.total)}
+          </span>
+        </div>
+      )}
+      {selectedDef && !selectedPriced && (
+        <div
+          className="flex items-start gap-2 px-4 py-3 rounded-xl mb-5 text-[12px] leading-snug text-amber-200"
+          style={{ background: "rgba(251, 191, 36, 0.08)", border: "1px solid rgba(251, 191, 36, 0.30)" }}
+        >
+          <PhoneCall size={14} className="mt-0.5 flex-shrink-0" />
+          <span>
+            We don&apos;t have a listed price for this car &amp; service yet — our team will
+            call you back shortly with the exact price. You can still continue your booking.
           </span>
         </div>
       )}

@@ -71,6 +71,7 @@ function readLeadFromForm(formData: FormData) {
     service_option,
     interior_add_on,
     vehicle_type,
+    car_brand: String(formData.get("car_brand") ?? "") || null,
     car_model: String(formData.get("car_model") ?? "") || null,
     car_number: String(formData.get("car_number") ?? "") || null,
     pincode: String(formData.get("pincode") ?? "") || null,

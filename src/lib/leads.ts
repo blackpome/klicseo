@@ -18,6 +18,7 @@ export interface LeadRow {
   interior_add_on: boolean;
 
   vehicle_type: string | null;
+  car_brand: string | null;
   car_model: string | null;
   car_number: string | null;
 

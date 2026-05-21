@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+import AnimatedHeading from "./AnimatedHeading";
 import { Sparkles, ArrowRight } from "lucide-react";
 
 export default function BookingTeaser() {
@@ -73,13 +74,14 @@ export default function BookingTeaser() {
             Ready to shine?
           </motion.div>
 
-          <h2
+          <AnimatedHeading
             className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-5"
             style={{ fontFamily: "var(--font-playfair)" }}
-          >
-            Book Your Premium
-            <span className="gold-shimmer block mt-1">Car Wash Today</span>
-          </h2>
+            lines={[
+              { text: "Book Your Premium", block: true },
+              { text: "Car Wash Today", shimmer: true },
+            ]}
+          />
 
           <p className="text-white/50 text-sm sm:text-base max-w-xl mx-auto mb-10">
             We come to you — at home, work, or anywhere. Choose your package,

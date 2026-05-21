@@ -1,8 +1,24 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { useRef, useState, MouseEvent } from "react";
-import { motion, useSpring } from "framer-motion";
+import { useRef, useState, useEffect, MouseEvent } from "react";
+import { motion, useSpring, useInView } from "framer-motion";
+import AnimatedHeading from "./AnimatedHeading";
+
+// True below the Tailwind `sm` breakpoint (640px). Drives the spin behavior:
+// on mobile each card spins when it's fully on screen, on larger screens every
+// card spins at once.
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return isMobile;
+}
 
 // "From" prices reflect the Hatchback tier; the booking flow charges the
 // vehicle-tier-specific price from the same source (src/lib/pricing.ts).
@@ -175,7 +191,121 @@ function TiltPlanCard({
   );
 }
 
+type Plan = (typeof plans)[number];
+
+function PlanCard({
+  plan,
+  index,
+  isMobile,
+}: {
+  plan: Plan;
+  index: number;
+  isMobile: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Mobile: wait until the card is (nearly) fully on screen, so each one spins
+  // on its own as you scroll. Desktop/tablet: a low threshold means the whole
+  // row trips together → all cards spin at once. `once` so it spins a single
+  // time and settles.
+  const inView = useInView(ref, {
+    once: true,
+    amount: isMobile ? 0.85 : 0.3,
+  });
+
+  return (
+    <motion.div
+      ref={ref}
+      style={{ perspective: "1200px", transformStyle: "preserve-3d" }}
+      initial={{ opacity: 0, y: 40, rotateY: 0 }}
+      animate={
+        inView
+          ? { opacity: 1, y: 0, rotateY: [0, 360] }
+          : { opacity: 0, y: 40, rotateY: 0 }
+      }
+      transition={{
+        // Stagger only on desktop (mobile cards already fire one-by-one).
+        delay: isMobile ? 0 : index * 0.15,
+        opacity: { duration: 0.5 },
+        y: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
+        rotateY: { duration: 1.1, ease: [0.22, 1, 0.36, 1] },
+      }}
+      className="relative pt-3"
+    >
+      {/* "Most Popular" badge */}
+      {plan.highlight && (
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20">
+          <span
+            className="px-4 py-1 rounded-full text-[11px] font-bold tracking-widest uppercase text-[#050E21] whitespace-nowrap shadow-[0_4px_14px_rgba(201,168,76,0.4)]"
+            style={{ background: "linear-gradient(135deg, #9C7A2A, #C9A84C, #E8CC7A)" }}
+          >
+            Most Popular
+          </span>
+        </div>
+      )}
+
+      <TiltPlanCard highlight={plan.highlight} borderColor={plan.borderColor}>
+        <div className="mb-4">
+          <h3
+            className="text-xl font-bold text-white mb-1"
+            style={{ fontFamily: "var(--font-playfair)" }}
+          >
+            {plan.name}
+          </h3>
+          <p className="text-white/50 text-sm">{plan.tagline}</p>
+        </div>
+
+        <div className="mb-6">
+          <div className="flex items-baseline gap-1">
+            <span className="text-white/50 text-sm font-medium mr-1">From</span>
+            <span
+              className="text-4xl font-bold text-white"
+              style={{ fontFamily: "var(--font-playfair)" }}
+            >
+              ₹{plan.fromPrice.toLocaleString("en-IN")}
+            </span>
+            <span className="text-white/50 text-sm">/ {plan.billing}</span>
+          </div>
+        </div>
+
+        <ul className="space-y-3 mb-8 flex-1">
+          {plan.features.map((feature, idx) => (
+            <motion.li
+              key={feature}
+              initial={{ opacity: 0, x: -8 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, amount: 0.5 }}
+              transition={{ duration: 0.4, delay: 0.4 + idx * 0.06 }}
+              className="flex items-start gap-3 text-sm"
+            >
+              <div
+                className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center mt-0.5"
+                style={{ backgroundColor: `${plan.borderColor}30` }}
+              >
+                <Check size={11} style={{ color: plan.borderColor }} strokeWidth={3} />
+              </div>
+              <span className={plan.highlight ? "text-white/85" : "text-white/60"}>
+                {feature}
+              </span>
+            </motion.li>
+          ))}
+        </ul>
+
+        <a
+          href={plan.href}
+          className="w-full py-3.5 rounded-xl font-semibold text-sm text-center transition-all duration-300 hover:scale-[1.02] text-[#050E21] shadow-[0_4px_20px_rgba(201,168,76,0.3)] hover:shadow-[0_8px_32px_rgba(201,168,76,0.55)]"
+          style={{
+            background: "linear-gradient(135deg, #9C7A2A 0%, #C9A84C 50%, #E8CC7A 100%)",
+          }}
+        >
+          {plan.cta}
+        </a>
+      </TiltPlanCard>
+    </motion.div>
+  );
+}
+
 export default function Pricing() {
+  const isMobile = useIsMobile();
   return (
     <section id="pricing" className="relative py-20 sm:py-28 px-4">
       <div
@@ -198,12 +328,11 @@ export default function Pricing() {
           <p className="text-[#C9A84C] text-sm font-semibold tracking-[0.2em] uppercase mb-3">
             Transparent Pricing
           </p>
-          <h2
+          <AnimatedHeading
             className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4"
             style={{ fontFamily: "var(--font-playfair)" }}
-          >
-            Choose Your Plan
-          </h2>
+            lines={[{ text: "Choose Your Plan" }]}
+          />
           <p className="text-white/50 max-w-xl mx-auto text-sm sm:text-base">
             Pick a service — final price varies by vehicle type and is confirmed
             at checkout. No hidden fees, no contracts.
@@ -214,89 +343,7 @@ export default function Pricing() {
         {/* Pricing cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pt-5">
           {plans.map((plan, i) => (
-            <motion.div
-              key={plan.id}
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.15 }}
-              transition={{ duration: 0.6, delay: i * 0.12, ease: [0.22, 1, 0.36, 1] }}
-              className="relative pt-3"
-            >
-              {/* "Most Popular" badge */}
-              {plan.highlight && (
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20">
-                  <span
-                    className="px-4 py-1 rounded-full text-[11px] font-bold tracking-widest uppercase text-[#050E21] whitespace-nowrap shadow-[0_4px_14px_rgba(201,168,76,0.4)]"
-                    style={{ background: "linear-gradient(135deg, #9C7A2A, #C9A84C, #E8CC7A)" }}
-                  >
-                    Most Popular
-                  </span>
-                </div>
-              )}
-
-              <TiltPlanCard highlight={plan.highlight} borderColor={plan.borderColor}>
-                <div className="mb-4">
-                  <h3
-                    className="text-xl font-bold text-white mb-1"
-                    style={{ fontFamily: "var(--font-playfair)" }}
-                  >
-                    {plan.name}
-                  </h3>
-                  <p className="text-white/50 text-sm">{plan.tagline}</p>
-                </div>
-
-                <div className="mb-6">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-white/50 text-sm font-medium mr-1">From</span>
-                    <span
-                      className="text-4xl font-bold text-white"
-                      style={{ fontFamily: "var(--font-playfair)" }}
-                    >
-                      ₹{plan.fromPrice.toLocaleString("en-IN")}
-                    </span>
-                    <span className="text-white/50 text-sm">/ {plan.billing}</span>
-                  </div>
-                </div>
-
-                <ul className="space-y-3 mb-8 flex-1">
-                  {plan.features.map((feature, idx) => (
-                    <motion.li
-                      key={feature}
-                      initial={{ opacity: 0, x: -8 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true, amount: 0.5 }}
-                      transition={{ duration: 0.4, delay: 0.4 + idx * 0.06 }}
-                      className="flex items-start gap-3 text-sm"
-                    >
-                      <div
-                        className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center mt-0.5"
-                        style={{ backgroundColor: `${plan.borderColor}30` }}
-                      >
-                        <Check
-                          size={11}
-                          style={{ color: plan.borderColor }}
-                          strokeWidth={3}
-                        />
-                      </div>
-                      <span className={plan.highlight ? "text-white/85" : "text-white/60"}>
-                        {feature}
-                      </span>
-                    </motion.li>
-                  ))}
-                </ul>
-
-                <a
-                  href={plan.href}
-                  className="w-full py-3.5 rounded-xl font-semibold text-sm text-center transition-all duration-300 hover:scale-[1.02] text-[#050E21] shadow-[0_4px_20px_rgba(201,168,76,0.3)] hover:shadow-[0_8px_32px_rgba(201,168,76,0.55)]"
-                  style={{
-                    background:
-                      "linear-gradient(135deg, #9C7A2A 0%, #C9A84C 50%, #E8CC7A 100%)",
-                  }}
-                >
-                  {plan.cta}
-                </a>
-              </TiltPlanCard>
-            </motion.div>
+            <PlanCard key={plan.id} plan={plan} index={i} isMobile={isMobile} />
           ))}
         </div>
 

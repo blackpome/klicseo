@@ -7,7 +7,8 @@ import { CheckCircle, Car, User, MapPin, Calendar, Sparkles, Home, Sunrise, Suns
 import TransformationLoop from "./TransformationLoop";
 import type { BookingData } from "./BookingWizard";
 import { clearBookingDraft } from "./BookingWizard";
-import { SERVICE_OPTIONS, isServiceOptionId, priceFor, tierLabel, tierForVehicleType, inr, CATEGORY_COLORS } from "@/lib/pricing";
+import { SERVICE_OPTIONS, isServiceOptionId, inr, CATEGORY_COLORS, type ServiceOptionId } from "@/lib/pricing";
+import { carPriceFor } from "@/lib/carPricing";
 
 interface Props {
   data: BookingData;
@@ -39,11 +40,14 @@ export default function StepConfirm({ data, onBack }: Props) {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const tier = tierForVehicleType(data.vehicleType);
   const optionDef = isServiceOptionId(data.serviceOption) ? SERVICE_OPTIONS[data.serviceOption] : null;
-  const priced = priceFor(data.serviceOption, data.vehicleType, data.interiorAddOn, data.parkingLocation);
-  const total = priced?.total ?? 0;
+  const priced =
+    data.carPrices && isServiceOptionId(data.serviceOption)
+      ? carPriceFor(data.carPrices, data.serviceOption as ServiceOptionId, data.parkingLocation, data.interiorAddOn)
+      : null;
+  const total = priced?.total ?? null;
   const isMonthly = optionDef?.recurring === "monthly";
+  const carLabel = [data.carBrand, data.carModel].filter(Boolean).join(" ");
 
   async function handleSubmit() {
     setLoading(true);
@@ -174,7 +178,7 @@ export default function StepConfirm({ data, onBack }: Props) {
         <Row
           icon={Car}
           label="Vehicle"
-          value={[data.vehicleType, data.carModel, data.carNumber].filter(Boolean).join(" · ")}
+          value={[carLabel, data.carNumber].filter(Boolean).join(" · ")}
         />
         <Row icon={User}    label="Contact"  value={`${data.name} · ${data.phone}`} />
         <Row icon={MapPin}  label="Location" value={`${data.address}, ${data.pincode}`} />
@@ -203,25 +207,36 @@ export default function StepConfirm({ data, onBack }: Props) {
         )}
       </div>
 
-      {/* Price */}
-      <div
-        className="flex items-center justify-between px-4 py-3 rounded-xl mb-5"
-        style={{ 
-          background: `${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}15`, 
-          border: `1px solid ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}40` 
-        }}
-      >
-        <div>
-          <p className="text-white/60 text-sm leading-none">Total</p>
-          <p className="text-white/35 text-[10px] mt-0.5">
-            {isMonthly ? "per month" : "one time"} · {tierLabel[tier]}
-            {data.parkingLocation === "outside" ? " · outside parked" : ""}
-          </p>
+      {/* Price — or call-back fallback when this car/service has no listed price */}
+      {total != null ? (
+        <div
+          className="flex items-center justify-between px-4 py-3 rounded-xl mb-5"
+          style={{
+            background: `${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}15`,
+            border: `1px solid ${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}40`
+          }}
+        >
+          <div>
+            <p className="text-white/60 text-sm leading-none">Total</p>
+            <p className="text-white/35 text-[10px] mt-0.5">
+              {isMonthly ? "per month" : "one time"}
+              {carLabel ? ` · ${carLabel}` : ""}
+              {data.parkingLocation === "outside" ? " · outside parked" : ""}
+            </p>
+          </div>
+          <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
+            {inr(total)}
+          </span>
         </div>
-        <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
-          {inr(total)}
-        </span>
-      </div>
+      ) : (
+        <div
+          className="px-4 py-3 rounded-xl mb-5 text-[12px] leading-snug text-amber-200"
+          style={{ background: "rgba(251, 191, 36, 0.08)", border: "1px solid rgba(251, 191, 36, 0.30)" }}
+        >
+          <p className="font-semibold text-amber-100 mb-0.5">Price to be confirmed</p>
+          <p>Our team will call you back shortly with the exact price for your car.</p>
+        </div>
+      )}
 
       {submitError && (
         <div

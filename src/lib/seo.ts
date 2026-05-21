@@ -23,7 +23,7 @@ export const seoKeywords = [
   "klicseo car wash",
   "klicseo doorstep car wash",
   "doorstep car wash chennai",
-  "mobile car wash chennai",
+  "doorstep car care chennai",
   "car wash chennai",
   "car detailing chennai",
   "one time car wash chennai",

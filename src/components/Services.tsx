@@ -4,6 +4,7 @@ import { Droplets, Sparkles, Car, CalendarDays, Building2, Gift } from "lucide-r
 import { useRef, useState, MouseEvent } from "react";
 import { motion } from "framer-motion";
 import { SUPPORT_PHONE } from "@/lib/serviceability";
+import AnimatedHeading from "./AnimatedHeading";
 
 const phoneDigits = SUPPORT_PHONE.replace(/[\s()\-+]/g, "");
 
@@ -123,11 +124,13 @@ export default function Services() {
           className="text-center mb-14"
         >
           <p className="text-[#C9A84C] text-sm font-semibold tracking-[0.2em] uppercase mb-3">What We Offer</p>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4" style={{ fontFamily: "var(--font-playfair)" }}>
-            Premium Services
-          </h2>
+          <AnimatedHeading
+            className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4"
+            style={{ fontFamily: "var(--font-playfair)" }}
+            lines={[{ text: "Premium Services" }]}
+          />
           <p className="text-white/50 max-w-xl mx-auto text-sm sm:text-base leading-relaxed">
-            Every service is performed by trained professionals using the finest products.
+            Every service is performed at your doorstep by trained professionals using the finest products.
           </p>
           <div className="divider-gold w-24 mx-auto mt-6" />
         </motion.div>

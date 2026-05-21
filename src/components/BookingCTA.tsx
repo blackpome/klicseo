@@ -76,7 +76,7 @@ export default function BookingCTA() {
                   "Guaranteed satisfaction or free redo",
                   "Trained & insured professionals",
                   "Eco-friendly premium products",
-                  "Mobile — we come to you",
+                  "Doorstep service — we come to you",
                   "Flexible scheduling, 7 days",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-3 text-sm text-white/70">

@@ -3,49 +3,50 @@
 import { Star, Quote } from "lucide-react";
 import { useRef, useState, MouseEvent } from "react";
 import { motion, useSpring } from "framer-motion";
+import AnimatedHeading from "./AnimatedHeading";
 
 const testimonials = [
   {
-    name: "Michael T.",
-    vehicle: "BMW 5 Series",
+    name: "Dinesh K.",
+    vehicle: "Hyundai Creta",
     rating: 5,
-    text: "Absolutely incredible service. My BMW looked better than the day I picked it up from the dealership. The attention to detail is unmatched.",
-    initials: "MT",
+    text: "Absolutely incredible service. My Creta looked better than the day I picked it up from the dealership. The attention to detail is unmatched.",
+    initials: "DK",
   },
   {
-    name: "Sarah K.",
-    vehicle: "Mercedes GLE",
+    name: "Lakshmi N.",
+    vehicle: "Honda City",
     rating: 5,
     text: "I booked the Prestige package and couldn't be happier. The team was professional, punctual, and the ceramic coating result is stunning.",
+    initials: "LN",
+  },
+  {
+    name: "Arun V.",
+    vehicle: "Tata Nexon",
+    rating: 5,
+    text: "The doorstep service is a game-changer. They came to my office, and when I finished work, my car was immaculate. Will never go to a regular wash again.",
+    initials: "AV",
+  },
+  {
+    name: "Kavya S.",
+    vehicle: "Maruti Swift",
+    rating: 5,
+    text: "Genuinely the best car wash experience I've had. Professional, thorough, and they treated my Swift with the care it deserves.",
+    initials: "KS",
+  },
+  {
+    name: "Senthil K.",
+    vehicle: "Toyota Innova",
+    rating: 5,
+    text: "Used Klicseo three times now. Consistent quality every single visit. The Premium package for my Innova is worth every rupee.",
     initials: "SK",
   },
   {
-    name: "James R.",
-    vehicle: "Audi Q7",
+    name: "Divya R.",
+    vehicle: "Hyundai i20",
     rating: 5,
-    text: "The mobile service is a game-changer. They came to my office, and when I finished work, my car was immaculate. Will never go to a regular wash again.",
-    initials: "JR",
-  },
-  {
-    name: "Priya N.",
-    vehicle: "Tesla Model 3",
-    rating: 5,
-    text: "Genuinely the best car wash experience I've had. Professional, thorough, and they treated my Tesla with the care it deserves.",
-    initials: "PN",
-  },
-  {
-    name: "David L.",
-    vehicle: "Range Rover Sport",
-    rating: 5,
-    text: "Used Klicseo three times now. Consistent quality every single visit. The Premium package for my Range Rover is worth every cent.",
-    initials: "DL",
-  },
-  {
-    name: "Emma W.",
-    vehicle: "Porsche Cayenne",
-    rating: 5,
-    text: "The paint decontamination and clay bar treatment on my Cayenne was flawless. You can tell these guys genuinely love what they do.",
-    initials: "EW",
+    text: "The paint decontamination and clay bar treatment on my i20 was flawless. You can tell these guys genuinely love what they do.",
+    initials: "DR",
   },
 ];
 
@@ -175,12 +176,11 @@ export default function Testimonials() {
           <p className="text-[#C9A84C] text-sm font-semibold tracking-[0.2em] uppercase mb-3">
             Client Stories
           </p>
-          <h2
+          <AnimatedHeading
             className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4"
             style={{ fontFamily: "var(--font-playfair)" }}
-          >
-            What Our Clients Say
-          </h2>
+            lines={[{ text: "What Our Clients Say" }]}
+          />
           <p className="text-white/50 max-w-xl mx-auto text-sm sm:text-base">
             Join thousands of satisfied customers who trust Klicseo with their
             prized vehicles.
