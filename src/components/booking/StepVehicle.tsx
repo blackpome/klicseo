@@ -19,33 +19,10 @@ import {
 } from "@/lib/serviceability";
 
 // Detect the user's platform so the recovery instructions match the menus
-// they'll actually see. We can't open OS settings from the web, so the best
-// we can do is name the right path. Falls back to a generic message when
-// the UA isn't recognisable.
-function blockedMessage(): string {
-  if (typeof navigator === "undefined") return GENERIC_BLOCKED;
-  const ua = navigator.userAgent;
-
-  if (/iPhone|iPad|iPod/.test(ua)) {
-    return "Location is turned off for this site on iOS. To enable it: open the AA / page-settings menu next to the URL → Website Settings → Location → Allow. Or, in iOS Settings → Privacy & Security → Location Services → Safari → While Using the App. Then come back and tap the button again.";
-  }
-  if (/Android/.test(ua)) {
-    return "Location is turned off for this site on Android. Tap the lock icon next to the URL → Permissions → Location → Allow. If Location is off system-wide, also enable it in Settings → Location, then tap the button again.";
-  }
-  if (/Mac OS X/.test(ua) && /Safari/.test(ua) && !/Chrome/.test(ua)) {
-    return "Location is blocked for this site in Safari. Open Safari → Settings → Websites → Location → set this site to Allow. Also confirm macOS System Settings → Privacy & Security → Location Services is on for Safari. Then tap the button again.";
-  }
-  if (/Chrome/.test(ua)) {
-    return "Location is blocked for this site in Chrome. Click the lock icon next to the URL → Site settings → Location → Allow, then reload the page and tap the button again.";
-  }
-  if (/Firefox/.test(ua)) {
-    return "Location is blocked for this site in Firefox. Click the lock icon next to the URL → Clear permission, then tap the button again and choose Allow when prompted.";
-  }
-  return GENERIC_BLOCKED;
-}
-
-const GENERIC_BLOCKED =
-  "Location access is blocked for this site. Open your browser's site settings, allow Location for this site, then tap the button again.";
+// Short, plain instruction. We can't open OS settings from the web, so just
+// tell the user to turn location on and try again.
+const TURN_ON_LOCATION =
+  "Please turn on your location (GPS) and allow location access, then tap the button again.";
 
 interface Props {
   data: BookingData;
@@ -111,26 +88,15 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
       },
       (err) => {
         setGeoLoading(false);
-        if (err.code === err.PERMISSION_DENIED) {
-          // Hard-denied (or device location off): the browser won't re-prompt,
-          // so guide the user to re-enable it for their specific platform.
-          setGeoError({ kind: "blocked", message: blockedMessage() });
-        } else if (err.code === err.TIMEOUT) {
+        if (err.code === err.TIMEOUT) {
           setGeoError({
             kind: "retry",
             message: "Location request timed out. Please tap the button to try again.",
           });
         } else {
-          // POSITION_UNAVAILABLE — often means device location services are
-          // turned off. On Android the dialog above usually offers to enable
-          // it; otherwise point the user at their device settings.
-          setGeoError({
-            kind: "blocked",
-            message:
-              "We couldn't get a location fix — your device's location/GPS may be turned off. " +
-              "Turn on Location (Settings → Location on Android, Settings → Privacy & Security → " +
-              "Location Services on iOS), then tap the button again.",
-          });
+          // PERMISSION_DENIED or POSITION_UNAVAILABLE (location/GPS off):
+          // one simple instruction.
+          setGeoError({ kind: "blocked", message: TURN_ON_LOCATION });
         }
       },
       // Long timeout: on Android, getCurrentPosition pops the system
