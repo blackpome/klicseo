@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BookingWizard from "@/components/booking/BookingWizard";
+import OfferBadge from "@/components/OfferBadge";
 import { bookingDescription, siteUrl } from "@/lib/seo";
 
 export const metadata = {
@@ -31,7 +32,7 @@ export default function BookingPage() {
           {/* Header */}
           <div className="text-center mb-1 w-full max-w-2xl">
             <p className="text-[#C9A84C] text-xs font-semibold tracking-[0.2em] uppercase mb-1.5">
-              Premium Car Wash
+              Premium Car Care at your doorstep
             </p>
             <h1
               className="text-2xl sm:text-3xl font-bold text-white"
@@ -39,6 +40,7 @@ export default function BookingPage() {
             >
               Book Your Service
             </h1>
+            <OfferBadge className="mt-3" note="Listed prices already include the 30% off" />
           </div>
 
           <Suspense fallback={null}>

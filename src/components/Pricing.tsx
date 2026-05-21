@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 import { useRef, useState, MouseEvent } from "react";
 import { motion, useSpring } from "framer-motion";
 import AnimatedHeading from "./AnimatedHeading";
+import OfferBadge from "./OfferBadge";
 
 // "From" prices reflect the Hatchback tier; the booking flow charges the
 // vehicle-tier-specific price from the same source (src/lib/pricing.ts).
@@ -292,6 +293,7 @@ export default function Pricing() {
             Pick a service — final price varies by vehicle type and is confirmed
             at checkout. No hidden fees, no contracts.
           </p>
+          <OfferBadge className="mt-6" />
           <div className="divider-gold w-24 mx-auto mt-6" />
         </motion.div>
 
