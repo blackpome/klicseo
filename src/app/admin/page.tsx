@@ -1,29 +1,32 @@
+import { redirect } from "next/navigation";
 import AdminShell from "./AdminShell";
 import AdminError from "./AdminError";
-import { listLeads, type LeadStatus } from "@/lib/leads";
+import { listLeads } from "@/lib/leads";
+import { LEAD_STATUSES, LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type LeadStatus } from "@/lib/leads-shared";
+import { currentAdmin } from "@/lib/admin-auth";
 import LeadStatusControl from "./LeadStatusControl";
 import Link from "next/link";
 
 const STATUS_TABS: { id: LeadStatus | "all"; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "new", label: "New" },
-  { id: "contacted", label: "Contacted" },
-  { id: "booked", label: "Booked" },
-  { id: "cancelled", label: "Cancelled" },
+  ...LEAD_STATUSES.map((s) => ({ id: s, label: LEAD_STATUS_LABEL[s] })),
 ];
 
-const STATUS_COLOR: Record<LeadStatus, string> = {
-  new: "#3B82F6",
-  contacted: "#C9A84C",
-  booked: "#10b981",
-  cancelled: "#EF4444",
-};
+const STATUS_COLOR = LEAD_STATUS_COLOR;
 
 export default async function AdminLeadsPage({
   searchParams,
 }: {
   searchParams: Promise<{ status?: string; q?: string }>;
 }) {
+  // Leads is the default landing page. Route users who can't see leads to a
+  // section they can, so they don't hit a dead "no access" screen on sign-in.
+  const me = await currentAdmin();
+  if (me && !me.permissions.includes("leads.view")) {
+    if (me.permissions.includes("employees.view")) redirect("/admin/employees");
+    if (me.role === "super_admin" || me.role === "admin") redirect("/admin/access");
+  }
+
   const { status, q } = await searchParams;
   const filter = (STATUS_TABS.find((t) => t.id === status)?.id ?? "all") as LeadStatus | "all";
 
@@ -32,7 +35,7 @@ export default async function AdminLeadsPage({
     leads = await listLeads({ status: filter, search: q });
   } catch (err) {
     return (
-      <AdminShell>
+      <AdminShell require="leads.view">
         <div className="max-w-3xl space-y-4">
           <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
             Leads
@@ -44,7 +47,7 @@ export default async function AdminLeadsPage({
   }
 
   return (
-    <AdminShell>
+    <AdminShell require="leads.view">
       <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>

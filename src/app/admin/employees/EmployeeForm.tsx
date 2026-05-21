@@ -79,7 +79,7 @@ export default function EmployeeForm({
   const busy = pending || compressBusy;
 
   return (
-    <form action={formAction} encType="multipart/form-data" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <form action={formAction} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {hiddenId && <input type="hidden" name="id" value={hiddenId} />}
 
       <Section title="Role" icon={Briefcase}>

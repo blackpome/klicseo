@@ -18,7 +18,7 @@ export default async function AdminLoginPage({
         >
           Admin Login
         </h1>
-        <p className="text-white/45 text-sm mb-6">Enter the admin password to continue.</p>
+        <p className="text-white/45 text-sm mb-6">Enter your email and password to continue.</p>
         <LoginForm next={next ?? "/admin"} error={error} />
       </div>
     </div>

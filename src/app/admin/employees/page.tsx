@@ -38,7 +38,7 @@ export default async function AdminEmployeesPage({
     employees = await listEmployees({ status: filter, search: q });
   } catch (err) {
     return (
-      <AdminShell>
+      <AdminShell require="employees.view">
         <div className="max-w-3xl space-y-4">
           <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
             Employees
@@ -50,7 +50,7 @@ export default async function AdminEmployeesPage({
   }
 
   return (
-    <AdminShell>
+    <AdminShell require="employees.view">
       <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>

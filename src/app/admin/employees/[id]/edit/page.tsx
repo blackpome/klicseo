@@ -18,7 +18,7 @@ export default async function EditEmployeePage({
     employee = await getEmployee(id);
   } catch (err) {
     return (
-      <AdminShell>
+      <AdminShell require="employees.manage">
         <AdminError err={err} />
       </AdminShell>
     );
@@ -26,7 +26,7 @@ export default async function EditEmployeePage({
   if (!employee) notFound();
 
   return (
-    <AdminShell>
+    <AdminShell require="employees.manage">
       <div className="max-w-5xl">
         <Link
           href={`/admin/employees/${id}`}

@@ -3,7 +3,7 @@ import NewLeadForm from "./NewLeadForm";
 
 export default function NewLeadPage() {
   return (
-    <AdminShell>
+    <AdminShell require="leads.manage">
       <div className="max-w-5xl">
         <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
           Add Lead

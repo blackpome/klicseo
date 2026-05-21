@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { isAdmin } from "@/lib/admin-auth";
+import { requirePermission } from "@/lib/admin-auth";
 import {
   deleteLead,
   insertLead,
@@ -14,12 +14,8 @@ import {
 import { supabase } from "@/lib/supabase";
 import { priceFor } from "@/lib/pricing";
 
-async function requireAdmin() {
-  if (!(await isAdmin())) throw new Error("Unauthorized");
-}
-
 export async function setStatusAction(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("leads.manage");
   const id = String(formData.get("id") ?? "");
   const status = String(formData.get("status") ?? "") as LeadStatus;
   if (!id || !status) return;
@@ -28,7 +24,7 @@ export async function setStatusAction(formData: FormData) {
 }
 
 export async function deleteLeadAction(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("leads.manage");
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await deleteLead(id);
@@ -37,7 +33,7 @@ export async function deleteLeadAction(formData: FormData) {
 }
 
 export async function updateNotesAction(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("leads.manage");
   const id = String(formData.get("id") ?? "");
   const notes = String(formData.get("notes") ?? "");
   if (!id) return;
@@ -92,7 +88,7 @@ export async function createLeadAction(
   _prev: { error?: string },
   formData: FormData,
 ): Promise<{ error?: string }> {
-  await requireAdmin();
+  await requirePermission("leads.manage");
   const data = readLeadFromForm(formData);
 
   await insertLead({
@@ -108,7 +104,7 @@ export async function createLeadAction(
 }
 
 export async function updateLeadAction(_prev: { error?: string }, formData: FormData) {
-  await requireAdmin();
+  await requirePermission("leads.manage");
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Missing lead id." };
 

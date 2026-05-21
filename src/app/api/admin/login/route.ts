@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  buildAdminSessionCookie,
-  isAdmin,
-  passwordMatches,
-} from "@/lib/admin-auth";
+import { buildAdminSessionCookie, isAdmin, verifyCredentials } from "@/lib/admin-auth";
 
 // Receives a plain HTML form POST from /admin/login. Returns 303 + Set-Cookie
 // + Location — a single atomic response the browser handles natively. This
@@ -29,6 +25,7 @@ export async function POST(req: Request) {
     return loginRedirect(req, { error: "Invalid form submission.", next: "/admin" });
   }
 
+  const email = String(form.get("email") ?? "");
   const password = String(form.get("password") ?? "");
   const next = safeNext(String(form.get("next") ?? "/admin"));
 
@@ -37,17 +34,18 @@ export async function POST(req: Request) {
     return NextResponse.redirect(new URL(next, req.url), { status: 303 });
   }
 
-  if (!passwordMatches(password)) {
-    // Tiny artificial delay so response-time doesn't leak whether the password
-    // was empty vs. wrong vs. correct.
+  const principal = await verifyCredentials(email, password);
+  if (!principal) {
+    // Tiny artificial delay so response-time doesn't leak whether the email was
+    // unknown vs. password wrong vs. access revoked. One generic message for all.
     await new Promise((r) => setTimeout(r, 200));
-    return loginRedirect(req, { error: "Incorrect password.", next });
+    return loginRedirect(req, { error: "Incorrect email or password, or access not granted.", next });
   }
 
   // Build the cookie and attach it to the redirect response itself. This is
   // the critical bit: Set-Cookie + Location ship in the same 303, and the
   // browser commits the cookie before following the Location.
-  const { name, value, options } = buildAdminSessionCookie();
+  const { name, value, options } = buildAdminSessionCookie(principal.email);
   const response = NextResponse.redirect(new URL(next, req.url), { status: 303 });
   response.cookies.set(name, value, options);
   return response;

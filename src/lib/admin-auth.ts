@@ -1,11 +1,20 @@
 import "server-only";
+import { cache } from "react";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { supabaseAuth } from "./supabase-auth";
+import { normalizeEmail, resolvePrincipal } from "./admin-users";
+import type { AdminPrincipal, Permission } from "./admin-users-shared";
 
-// Single-admin auth via HMAC-signed cookie.
-// Token format: `<expiry_ms>.<hex_signature>`. Signature is HMAC-SHA256 of the
-// expiry string keyed by ADMIN_COOKIE_SECRET — so a leaked cookie can't be
-// extended without the secret, and rotating the secret invalidates all sessions.
+// Multi-admin auth. Credentials + reset/invite emails are owned by Supabase
+// Auth; this module owns the *session* (an HMAC-signed cookie) and the gate.
+//
+// Token format: `<expiry_ms>.<email_b64url>.<hex_signature>`. The signature is
+// HMAC-SHA256 of `<expiry>.<email_b64url>` keyed by ADMIN_COOKIE_SECRET, so a
+// leaked cookie can't be edited (different email/expiry) without the secret,
+// and rotating the secret invalidates all sessions. The email is carried so we
+// can re-resolve the principal (role + permissions) and honour live revocation
+// on every request.
 
 const COOKIE_NAME = "klicseo-admin";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12; // 12h
@@ -18,38 +27,60 @@ function secret(): string {
   return s;
 }
 
+function b64url(s: string): string {
+  return Buffer.from(s, "utf8").toString("base64url");
+}
+function unb64url(s: string): string {
+  return Buffer.from(s, "base64url").toString("utf8");
+}
+
 function sign(value: string): string {
   return createHmac("sha256", secret()).update(value).digest("hex");
 }
 
-function parseToken(token: string | undefined): { expiry: number; valid: boolean } | null {
+interface ParsedToken {
+  expiry: number;
+  email: string;
+  valid: boolean;
+}
+
+function parseToken(token: string | undefined): ParsedToken | null {
   if (!token) return null;
-  const idx = token.indexOf(".");
-  if (idx < 0) return null;
-  const expiryStr = token.slice(0, idx);
-  const sig = token.slice(idx + 1);
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [expiryStr, emailPart, sig] = parts;
   const expiry = Number(expiryStr);
   if (!Number.isFinite(expiry)) return null;
-  const expected = sign(expiryStr);
+  const expected = sign(`${expiryStr}.${emailPart}`);
   if (expected.length !== sig.length) return null;
   const ok = timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(sig, "hex"));
-  return { expiry, valid: ok && expiry > Date.now() };
+  let email = "";
+  try {
+    email = unb64url(emailPart);
+  } catch {
+    return null;
+  }
+  return { expiry, email, valid: ok && expiry > Date.now() };
 }
 
-export function passwordMatches(input: string): boolean {
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) return false;
-  const a = Buffer.from(input);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+// Verify email+password against Supabase Auth, then require an active allowlist
+// row. Returns the resolved principal on success, or null on any failure (bad
+// password, unknown user, not allowlisted, revoked).
+export async function verifyCredentials(
+  emailRaw: string,
+  password: string,
+): Promise<AdminPrincipal | null> {
+  const email = normalizeEmail(emailRaw);
+  if (!email || !password) return null;
+
+  const { data, error } = await supabaseAuth().auth.signInWithPassword({ email, password });
+  if (error || !data.user) return null;
+
+  // Credentials are valid — but are they still allowed in?
+  return resolvePrincipal(email);
 }
 
-// Cookie spec helpers — return the {name,value,options} tuple so the caller
-// can attach them directly to a NextResponse. Using `cookies().set(...)` from
-// inside an async Route Handler has had quirks across Next versions
-// (especially around redirects on mobile Safari); attaching to the response
-// object explicitly is the most reliable path.
+// --- cookie spec helpers (attached directly to a NextResponse) ----------
 
 export interface CookieSpec {
   name: string;
@@ -64,9 +95,10 @@ export interface CookieSpec {
   };
 }
 
-export function buildAdminSessionCookie(): CookieSpec {
+export function buildAdminSessionCookie(email: string): CookieSpec {
   const expiry = Date.now() + SESSION_TTL_MS;
-  const token = `${expiry}.${sign(String(expiry))}`;
+  const emailPart = b64url(normalizeEmail(email));
+  const token = `${expiry}.${emailPart}.${sign(`${expiry}.${emailPart}`)}`;
   return {
     name: COOKIE_NAME,
     value: token,
@@ -94,36 +126,38 @@ export function buildAdminLogoutCookie(): CookieSpec {
   };
 }
 
-// Kept for backward compat with any callers that need the cookies()-API path
-// (e.g. Server Actions or layouts). Route handlers should prefer the build*
-// helpers above.
-export async function createAdminSession(): Promise<void> {
-  const { name, value, options } = buildAdminSessionCookie();
-  const jar = await cookies();
-  jar.set(name, value, options);
-}
-
 export async function destroyAdminSession(): Promise<void> {
   const jar = await cookies();
   jar.delete(COOKIE_NAME);
 }
 
-export async function isAdmin(): Promise<boolean> {
+// Resolve the current admin from the session cookie. Re-checks the allowlist on
+// every call (deduped per-request via React cache) so revoked users are kicked
+// out on their next request rather than waiting for the cookie to expire.
+export const currentAdmin = cache(async (): Promise<AdminPrincipal | null> => {
   const jar = await cookies();
   const parsed = parseToken(jar.get(COOKIE_NAME)?.value);
-  return !!parsed?.valid;
+  if (!parsed?.valid || !parsed.email) return null;
+  return resolvePrincipal(parsed.email);
+});
+
+export async function isAdmin(): Promise<boolean> {
+  return (await currentAdmin()) !== null;
 }
 
-// Edge-runtime-safe check used by the root proxy (proxy.ts). The proxy can't
-// call `cookies()`, but it has access to NextRequest.cookies — so we expose a
-// pure-string variant that takes the raw token in.
+// Server-action guard. Throws "Unauthorized" if not signed in, or "Forbidden"
+// if signed in without the required permission.
+export async function requirePermission(perm: Permission): Promise<AdminPrincipal> {
+  const me = await currentAdmin();
+  if (!me) throw new Error("Unauthorized");
+  if (!me.permissions.includes(perm)) throw new Error("Forbidden");
+  return me;
+}
+
+// Edge-runtime-safe shape check used by proxy.ts (no node:crypto there).
 export function verifyTokenString(token: string | undefined): boolean {
   if (!token) return false;
-  // proxy runs on the edge runtime, which doesn't expose node:crypto.
-  // To keep the proxy ultra-simple, we just check token *shape* there and
-  // re-validate the signature in the server-component layout. This means the
-  // proxy is a coarse gate (presence) and the layout is the real auth check.
-  return /^\d{10,}\.[0-9a-f]{64}$/.test(token);
+  return /^\d{10,}\.[A-Za-z0-9_-]+\.[0-9a-f]{64}$/.test(token);
 }
 
 export const ADMIN_COOKIE_NAME = COOKIE_NAME;

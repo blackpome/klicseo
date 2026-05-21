@@ -7,13 +7,21 @@ import type { NextRequest } from "next/server";
 // src/app/admin/layout.tsx via `isAdmin()` before rendering anything sensitive.
 
 const COOKIE_NAME = "klicseo-admin";
-const TOKEN_SHAPE = /^\d{10,}\.[0-9a-f]{64}$/;
+// `<expiry>.<email_b64url>.<hex_sig>` — see lib/admin-auth.ts. Coarse shape
+// check only; the signature + allowlist are verified server-side.
+const TOKEN_SHAPE = /^\d{10,}\.[A-Za-z0-9_-]+\.[0-9a-f]{64}$/;
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Public sub-paths under /admin
-  if (pathname === "/admin/login") return NextResponse.next();
+  // Public sub-paths under /admin (login + password-recovery flows)
+  if (
+    pathname === "/admin/login" ||
+    pathname === "/admin/forgot" ||
+    pathname === "/admin/reset"
+  ) {
+    return NextResponse.next();
+  }
 
   if (pathname.startsWith("/admin")) {
     const token = request.cookies.get(COOKIE_NAME)?.value;

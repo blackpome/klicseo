@@ -4,7 +4,7 @@ import { createEmployeeAction } from "../actions";
 
 export default function NewEmployeePage() {
   return (
-    <AdminShell>
+    <AdminShell require="employees.manage">
       <div className="max-w-5xl">
         <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
           Add Employee

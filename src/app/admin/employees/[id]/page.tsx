@@ -78,7 +78,7 @@ export default async function EmployeeDetailPage({
     emp = await getEmployee(id);
   } catch (err) {
     return (
-      <AdminShell>
+      <AdminShell require="employees.view">
         <AdminError err={err} />
       </AdminShell>
     );
@@ -94,7 +94,7 @@ export default async function EmployeeDetailPage({
   const job = jobByRole(emp.job_role);
 
   return (
-    <AdminShell>
+    <AdminShell require="employees.view">
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <Link href="/admin/employees" className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white">
           <ArrowLeft size={13} /> All employees

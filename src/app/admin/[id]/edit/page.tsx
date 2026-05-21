@@ -18,7 +18,7 @@ export default async function EditLeadPage({
     lead = await getLead(id);
   } catch (err) {
     return (
-      <AdminShell>
+      <AdminShell require="leads.manage">
         <AdminError err={err} />
       </AdminShell>
     );
@@ -34,7 +34,7 @@ export default async function EditLeadPage({
   }
 
   return (
-    <AdminShell>
+    <AdminShell require="leads.manage">
       <div className="max-w-5xl">
         <Link href={`/admin/${id}`} className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4">
           <ArrowLeft size={13} /> Back to lead

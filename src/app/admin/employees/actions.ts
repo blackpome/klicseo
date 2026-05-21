@@ -3,7 +3,7 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { isAdmin } from "@/lib/admin-auth";
+import { requirePermission } from "@/lib/admin-auth";
 import { supabase } from "@/lib/supabase";
 import {
   BUCKET,
@@ -17,12 +17,8 @@ import {
   type JobRole,
 } from "@/lib/employees";
 
-async function requireAdmin() {
-  if (!(await isAdmin())) throw new Error("Unauthorized");
-}
-
 export async function setEmployeeStatusAction(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("employees.manage");
   const id = String(formData.get("id") ?? "");
   const status = String(formData.get("status") ?? "") as EmployeeStatus;
   if (!id || !status) return;
@@ -32,7 +28,7 @@ export async function setEmployeeStatusAction(formData: FormData) {
 }
 
 export async function deleteEmployeeAction(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("employees.manage");
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await deleteEmployee(id);
@@ -98,7 +94,7 @@ function validate(name: string, phone: string): string | null {
 }
 
 export async function createEmployeeAction(_prev: { error?: string }, formData: FormData) {
-  await requireAdmin();
+  await requirePermission("employees.manage");
   const data = readCommonFields(formData);
   const err = validate(data.name, data.phone);
   if (err) return { error: err };
@@ -120,7 +116,7 @@ export async function createEmployeeAction(_prev: { error?: string }, formData: 
 }
 
 export async function updateEmployeeAction(_prev: { error?: string }, formData: FormData) {
-  await requireAdmin();
+  await requirePermission("employees.manage");
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Missing employee id." };
 

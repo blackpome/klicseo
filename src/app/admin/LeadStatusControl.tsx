@@ -1,10 +1,8 @@
 "use client";
 
 import { useTransition } from "react";
-import type { LeadStatus } from "@/lib/leads";
+import { LEAD_STATUSES, LEAD_STATUS_LABEL, type LeadStatus } from "@/lib/leads-shared";
 import { setStatusAction } from "./actions";
-
-const STATUSES: LeadStatus[] = ["new", "contacted", "booked", "cancelled"];
 
 export default function LeadStatusControl({
   id,
@@ -30,9 +28,9 @@ export default function LeadStatusControl({
       className="text-xs font-semibold rounded-md px-2 py-1 bg-transparent border focus:outline-none cursor-pointer"
       style={{ borderColor: `${color}80`, color }}
     >
-      {STATUSES.map((s) => (
+      {LEAD_STATUSES.map((s) => (
         <option key={s} value={s} className="bg-[#050E21]">
-          {s}
+          {LEAD_STATUS_LABEL[s]}
         </option>
       ))}
     </select>

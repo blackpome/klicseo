@@ -5,15 +5,11 @@ import AdminError from "../AdminError";
 import LeadStatusControl from "../LeadStatusControl";
 import LeadNotesEditor from "./LeadNotesEditor";
 import DeleteLeadButton from "./DeleteLeadButton";
-import { getLead, type LeadStatus } from "@/lib/leads";
+import { getLead } from "@/lib/leads";
+import { LEAD_STATUS_COLOR } from "@/lib/leads-shared";
 import { ArrowLeft, Phone, MapPin, User, Car, Calendar, Sunrise, Sunset, Sparkles, Pencil } from "lucide-react";
 
-const STATUS_COLOR: Record<LeadStatus, string> = {
-  new: "#3B82F6",
-  contacted: "#C9A84C",
-  booked: "#10b981",
-  cancelled: "#EF4444",
-};
+const STATUS_COLOR = LEAD_STATUS_COLOR;
 
 function fmt(value: string | number | boolean | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
@@ -56,7 +52,7 @@ export default async function LeadDetailPage({
     lead = await getLead(id);
   } catch (err) {
     return (
-      <AdminShell>
+      <AdminShell require="leads.view">
         <AdminError err={err} />
       </AdminShell>
     );
@@ -72,7 +68,7 @@ export default async function LeadDetailPage({
       : "—";
 
   return (
-    <AdminShell>
+    <AdminShell require="leads.view">
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <Link href="/admin" className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white">
           <ArrowLeft size={13} /> All leads
