@@ -136,6 +136,16 @@ export default function Hero() {
         }}
       />
 
+      {/* Radial edge vignette — fades the video into the navy on all four
+          edges (left/right included) so the footage has no hard borders. */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse 75% 80% at 50% 45%, transparent 40%, rgba(5,14,33,0.45) 75%, rgba(5,14,33,0.85) 100%)",
+        }}
+      />
+
       {/* Brand radial accents — kept light so the video stays visible. */}
       <div className="absolute inset-0 pointer-events-none" style={{
         background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(26,95,212,0.18) 0%, transparent 70%)",
