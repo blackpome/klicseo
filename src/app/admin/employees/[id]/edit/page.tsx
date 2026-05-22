@@ -6,6 +6,7 @@ import AdminError from "../../../AdminError";
 import EmployeeForm from "../../EmployeeForm";
 import { updateEmployeeAction } from "../../actions";
 import { getEmployee } from "@/lib/employees";
+import { listJobs } from "@/lib/jobs";
 
 export default async function EditEmployeePage({
   params,
@@ -24,6 +25,8 @@ export default async function EditEmployeePage({
     );
   }
   if (!employee) notFound();
+
+  const jobs = await listJobs();
 
   return (
     <AdminShell require="employees.manage">
@@ -44,6 +47,7 @@ export default async function EditEmployeePage({
           hiddenId={employee.id}
           submitLabel="Save changes"
           pendingLabel="Saving…"
+          jobs={jobs}
         />
       </div>
     </AdminShell>

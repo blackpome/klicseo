@@ -2,9 +2,8 @@
 
 import { Phone } from "lucide-react";
 import { motion } from "framer-motion";
-import { SUPPORT_PHONE } from "@/lib/serviceability";
+import { useSiteSettings, digits } from "./SiteSettingsContext";
 
-const phoneDigits = SUPPORT_PHONE.replace(/[\s()\-+]/g, "");
 const waMessage = encodeURIComponent("Hi Klicseo, I'd like to book a car wash.");
 
 // Canonical WhatsApp brand mark. lucide-react ships no brand icons (by
@@ -26,12 +25,15 @@ function WhatsAppIcon({ size = 24 }: { size?: number }) {
 }
 
 export default function FloatingContact() {
+  const { phone, whatsapp } = useSiteSettings();
+  const telDigits = digits(phone);
+  const waDigits = digits(whatsapp);
   // On mobile we sit above the StickyMobileCTA bar (~76px tall incl. its
   // bottom-3 inset). On desktop the CTA bar is hidden, so we drop down.
   return (
     <div className="fixed bottom-24 right-3 z-40 flex flex-col gap-2 sm:bottom-5 sm:right-5">
       <motion.a
-        href={`https://wa.me/${phoneDigits}?text=${waMessage}`}
+        href={`https://wa.me/${waDigits}?text=${waMessage}`}
         target="_blank"
         rel="noopener noreferrer"
         whileHover={{ scale: 1.08 }}
@@ -42,10 +44,10 @@ export default function FloatingContact() {
         <WhatsAppIcon size={26} />
       </motion.a>
       <motion.a
-        href={`tel:${phoneDigits}`}
+        href={`tel:${telDigits}`}
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.95 }}
-        aria-label={`Call ${SUPPORT_PHONE}`}
+        aria-label={`Call ${phone}`}
         className="w-12 h-12 sm:w-14 sm:h-14 rounded-full shadow-[0_8px_24px_rgba(201,168,76,0.45)] flex items-center justify-center text-[#050E21]"
         style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
       >

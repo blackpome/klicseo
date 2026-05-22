@@ -39,9 +39,19 @@ export default async function AdminShell({
   if (employeeItems.length) groups.push({ title: "Employees", items: employeeItems });
 
   if (canManageAccess) {
+    // Jobs (careers) management lives with the Employees group.
+    const empGroup = groups.find((g) => g.title === "Employees");
+    if (empGroup) empGroup.items.push({ href: "/admin/jobs", label: "Jobs", icon: "Briefcase" });
+    else groups.push({ title: "Employees", items: [{ href: "/admin/jobs", label: "Jobs", icon: "Briefcase" }] });
+
     groups.push({
       title: "Settings",
-      items: [{ href: "/admin/access", label: "Team", icon: "UserCog" }],
+      items: [
+        { href: "/admin/cars", label: "Cars", icon: "Car" },
+        { href: "/admin/discount", label: "Discount", icon: "Tag" },
+        { href: "/admin/settings", label: "Site", icon: "Settings2" },
+        { href: "/admin/access", label: "Team", icon: "UserCog" },
+      ],
     });
   }
 

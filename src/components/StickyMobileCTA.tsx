@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { useSiteSettings } from "./SiteSettingsContext";
 
 // Always-visible mobile booking CTA across every section EXCEPT the hero —
 // the hero has its own dedicated cyan/blue Book Now pill, so showing this
@@ -11,6 +12,7 @@ import { useEffect, useState } from "react";
 // on #hero to know when to slide ourselves out of the way; when the user
 // scrolls past the hero, the sticky CTA returns.
 export default function StickyMobileCTA() {
+  const { startPrice } = useSiteSettings();
   const [inHero, setInHero] = useState(true);
 
   useEffect(() => {
@@ -84,7 +86,7 @@ export default function StickyMobileCTA() {
               Doorstep Car Wash
             </span>
             <span className="block text-base font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
-              Book Now · Starts @ ₹19/day
+              Book Now · Starts @ ₹{startPrice}/day
             </span>
           </span>
 

@@ -2,7 +2,8 @@ import Link from "next/link";
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
 import EmployeeStatusControl from "./EmployeeStatusControl";
-import { JOB_CATALOG, listEmployees, type EmployeeStatus } from "@/lib/employees";
+import { listEmployees, type EmployeeStatus } from "@/lib/employees";
+import { jobTitleMap } from "@/lib/jobs";
 
 const STATUS_TABS: { id: EmployeeStatus | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -23,8 +24,6 @@ const STATUS_COLOR: Record<EmployeeStatus, string> = {
   rejected: "#EF4444",
 };
 
-const ROLE_LABEL = Object.fromEntries(JOB_CATALOG.map((j) => [j.id, j.label]));
-
 export default async function AdminEmployeesPage({
   searchParams,
 }: {
@@ -34,8 +33,10 @@ export default async function AdminEmployeesPage({
   const filter = (STATUS_TABS.find((t) => t.id === status)?.id ?? "all") as EmployeeStatus | "all";
 
   let employees;
+  let roleLabel: Record<string, string> = {};
   try {
     employees = await listEmployees({ status: filter, search: q });
+    roleLabel = await jobTitleMap();
   } catch (err) {
     return (
       <AdminShell require="employees.view">
@@ -127,7 +128,7 @@ export default async function AdminEmployeesPage({
                   <td className="px-3 py-2">
                     <a href={`tel:${e.phone}`} className="text-[#C9A84C] hover:underline">{e.phone}</a>
                   </td>
-                  <td className="px-3 py-2 text-xs">{ROLE_LABEL[e.job_role] ?? e.job_role}</td>
+                  <td className="px-3 py-2 text-xs">{roleLabel[e.job_role] ?? e.job_role}</td>
                   <td className="px-3 py-2 text-xs text-white/70">{e.location ?? "—"}</td>
                   <td className="px-3 py-2 text-right font-semibold">
                     {e.salary != null ? `₹${e.salary.toLocaleString("en-IN")}` : "—"}

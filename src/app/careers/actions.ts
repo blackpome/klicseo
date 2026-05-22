@@ -4,12 +4,8 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { supabase } from "@/lib/supabase";
 import { friendlyDbError } from "@/lib/db-errors";
-import {
-  BUCKET,
-  JOB_CATALOG,
-  insertEmployee,
-  type JobRole,
-} from "@/lib/employees";
+import { BUCKET, insertEmployee } from "@/lib/employees";
+import { getJobBySlug } from "@/lib/jobs";
 
 // Public endpoint — no admin check. Validates inputs, uploads files to the
 // private bucket, and inserts the row. Returns a small status object so the
@@ -18,9 +14,11 @@ export async function submitApplicationAction(
   _prev: { error?: string; ok?: boolean },
   formData: FormData,
 ): Promise<{ error?: string; ok?: boolean }> {
-  const role = String(formData.get("job_role") ?? "") as JobRole;
-  if (!JOB_CATALOG.some((j) => j.id === role)) return { error: "Invalid job role." };
+  const role = String(formData.get("job_role") ?? "");
+  const job = role ? await getJobBySlug(role) : null;
+  if (!job || !job.active) return { error: "Invalid job role." };
 
+  const fields = job.application_fields;
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   const location = String(formData.get("location") ?? "").trim();
@@ -28,32 +26,43 @@ export async function submitApplicationAction(
   const termsAccepted = formData.get("terms_accepted") === "on";
   const signatureDataUrl = String(formData.get("signature_data_url") ?? "");
 
+  // Name & phone are always required.
   if (!name) return { error: "Name is required." };
   if (!phone || phone.length < 8) return { error: "A valid phone number is required." };
-  if (!location) return { error: "Location is required." };
   if (!termsAccepted) return { error: "Please accept the terms to continue." };
-  if (!signatureDataUrl.startsWith("data:image/")) return { error: "Please sign before submitting." };
+
+  // Optional fields are required only when enabled + required for this job.
+  const req = (k: keyof typeof fields) => fields[k].enabled && fields[k].required;
+  if (req("location") && !location) return { error: "Location is required." };
+  if (req("aadhaar_number") && !aadhaarNumber) return { error: "Aadhaar number is required." };
+
+  const hasSignature = signatureDataUrl.startsWith("data:image/");
+  if (req("signature") && !hasSignature) return { error: "Please sign before submitting." };
 
   const aadhaarFile = formData.get("aadhaar_photo");
   const profileFile = formData.get("profile_photo");
-  if (!(aadhaarFile instanceof File) || aadhaarFile.size === 0)
-    return { error: "Aadhaar photo is required." };
-  if (!(profileFile instanceof File) || profileFile.size === 0)
-    return { error: "Profile photo is required." };
+  const hasAadhaar = aadhaarFile instanceof File && aadhaarFile.size > 0;
+  const hasProfile = profileFile instanceof File && profileFile.size > 0;
+  if (req("aadhaar_photo") && !hasAadhaar) return { error: "Aadhaar photo is required." };
+  if (req("profile_photo") && !hasProfile) return { error: "Profile photo is required." };
 
   // Each applicant gets a folder so the files are co-located + easy to clean up.
   const applicantId = randomUUID();
   try {
-    const aadhaarPath = await uploadInto(applicantId, "aadhaar", aadhaarFile);
-    const profilePath = await uploadInto(applicantId, "profile", profileFile);
-    const signaturePath = await uploadDataUrl(applicantId, "signature", signatureDataUrl);
+    // Upload only the enabled fields that were actually provided.
+    const aadhaarPath = fields.aadhaar_photo.enabled && hasAadhaar
+      ? await uploadInto(applicantId, "aadhaar", aadhaarFile as File) : null;
+    const profilePath = fields.profile_photo.enabled && hasProfile
+      ? await uploadInto(applicantId, "profile", profileFile as File) : null;
+    const signaturePath = fields.signature.enabled && hasSignature
+      ? await uploadDataUrl(applicantId, "signature", signatureDataUrl) : null;
 
     await insertEmployee({
       job_role: role,
       name,
       phone,
-      location,
-      aadhaar_number: aadhaarNumber || null,
+      location: fields.location.enabled ? location || null : null,
+      aadhaar_number: fields.aadhaar_number.enabled ? aadhaarNumber || null : null,
       aadhaar_photo_path: aadhaarPath,
       profile_photo_path: profilePath,
       signature_path: signaturePath,

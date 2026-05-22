@@ -3,7 +3,8 @@
 import Image from "next/image";
 import { Globe, Share2, ExternalLink, MapPin, Phone, Mail } from "lucide-react";
 import { motion } from "framer-motion";
-import { businessEmail, businessPhone, primaryCity, serviceAreaText } from "@/lib/seo";
+import { businessEmail, primaryCity, serviceAreaText } from "@/lib/seo";
+import { useSiteSettings } from "./SiteSettingsContext";
 
 const footerLinks = {
   Services: ["Exterior Wash", "Interior Detail", "Ceramic Coating", "Full Detail", "Express Wash", "Engine Bay Clean"],
@@ -12,6 +13,7 @@ const footerLinks = {
 };
 
 export default function Footer() {
+  const { phone: businessPhone } = useSiteSettings();
   return (
     <footer className="relative border-t border-white/5">
       <div className="divider-gold" />

@@ -1,7 +1,6 @@
 import {
   businessEmail,
   businessName,
-  businessPhone,
   homeDescription,
   primaryCity,
   serviceAreas,
@@ -9,6 +8,7 @@ import {
   siteUrl,
 } from "@/lib/seo";
 import { SUPPORT_PHONE } from "@/lib/serviceability";
+import { getSiteSettings } from "@/lib/site-settings";
 
 const faqs = [
   {
@@ -80,7 +80,8 @@ const jsonLd = {
   ],
 };
 
-export default function LocalSeoContent() {
+export default async function LocalSeoContent() {
+  const { phone: businessPhone } = await getSiteSettings();
   return (
     <section className="relative px-4 py-20 sm:py-24">
       <div

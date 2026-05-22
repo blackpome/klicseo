@@ -2,7 +2,9 @@
 
 import { useActionState, useState } from "react";
 import { User, Briefcase, MapPin, Calendar, IndianRupee, FileText, Loader2 } from "lucide-react";
-import { JOB_CATALOG, type EmployeeRow } from "@/lib/employees-shared";
+import { type EmployeeRow } from "@/lib/employees-shared";
+
+interface JobOption { slug: string; title: string; type: "PartTime" | "FullTime" }
 import { attachCompressedFileTo, type CompressOptions } from "@/lib/compress-image";
 
 const COMPRESS_AADHAAR: CompressOptions = { maxDim: 2000, quality: 0.85 };
@@ -50,12 +52,14 @@ export default function EmployeeForm({
   submitLabel,
   pendingLabel,
   hiddenId,
+  jobs,
 }: {
   action: Action;
   initial?: Partial<EmployeeRow> | null;
   submitLabel: string;
   pendingLabel: string;
   hiddenId?: string;
+  jobs: JobOption[];
 }) {
   const [state, formAction, pending] = useActionState<State, FormData>(action, {});
   const [compressing, setCompressing] = useState<Record<string, boolean>>({});
@@ -91,11 +95,15 @@ export default function EmployeeForm({
             className={fieldCls}
           >
             <option value="">— Select role —</option>
-            {JOB_CATALOG.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.label} ({j.type === "FullTime" ? "Full time" : "Part time"})
+            {jobs.map((j) => (
+              <option key={j.slug} value={j.slug}>
+                {j.title} ({j.type === "FullTime" ? "Full time" : "Part time"})
               </option>
             ))}
+            {/* Keep an existing role selectable even if its job was removed/renamed */}
+            {initial?.job_role && !jobs.some((j) => j.slug === initial.job_role) && (
+              <option value={initial.job_role as string}>{initial.job_role as string}</option>
+            )}
           </select>
         </Field>
       </Section>

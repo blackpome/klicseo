@@ -3,10 +3,8 @@
 import { Droplets, Sparkles, Car, CalendarDays, Building2, Gift } from "lucide-react";
 import { useRef, useState, MouseEvent } from "react";
 import { motion } from "framer-motion";
-import { SUPPORT_PHONE } from "@/lib/serviceability";
 import AnimatedHeading from "./AnimatedHeading";
-
-const phoneDigits = SUPPORT_PHONE.replace(/[\s()\-+]/g, "");
+import { useSiteSettings, digits } from "./SiteSettingsContext";
 
 const services = [
   {
@@ -108,6 +106,8 @@ function TiltCard({ children, highlight }: { children: React.ReactNode; highligh
 }
 
 export default function Services() {
+  const { whatsapp } = useSiteSettings();
+  const phoneDigits = digits(whatsapp);
   return (
     <section id="services" className="relative py-20 sm:py-28 px-4">
       <div className="absolute inset-0" style={{

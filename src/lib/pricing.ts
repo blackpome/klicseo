@@ -8,6 +8,88 @@
 export type PriceTier = "hatchback" | "sedan" | "compactSUV" | "suv" | "xuv";
 export type ParkingLocation = "" | "inside" | "outside";
 
+// --- Per-line discounts -------------------------------------------------
+// One discount per price line (mirrors the cars table price columns and the
+// service_discounts table). A "line" is finer-grained than a ServiceOptionId:
+// Monthly has separate inside/outside lines, and add-ons are their own lines.
+
+export type PriceLine =
+  | "monthly"
+  | "weekly_thrice"
+  | "outside_monthly"
+  | "outside_weekly_thrice"
+  | "one_time_manual"
+  | "one_time_machine"
+  | "interior"
+  | "car_detailing"
+  | "interior_detailing";
+
+export type ServiceDiscounts = Record<PriceLine, number>;
+
+export const ALL_PRICE_LINES: PriceLine[] = [
+  "monthly", "weekly_thrice", "outside_monthly", "outside_weekly_thrice",
+  "one_time_manual", "one_time_machine", "interior",
+  "car_detailing", "interior_detailing",
+];
+
+export const ZERO_DISCOUNTS: ServiceDiscounts = {
+  monthly: 0, weekly_thrice: 0, outside_monthly: 0, outside_weekly_thrice: 0,
+  one_time_manual: 0, one_time_machine: 0, interior: 0,
+  car_detailing: 0, interior_detailing: 0,
+};
+
+export const PRICE_LINE_LABEL: Record<PriceLine, string> = {
+  monthly: "Monthly Car Wash",
+  weekly_thrice: "Weekly Thrice",
+  outside_monthly: "Outside Monthly Car Wash",
+  outside_weekly_thrice: "Outside Weekly Thrice",
+  one_time_manual: "One Time Manual",
+  one_time_machine: "One Time Machine",
+  interior: "Interior (add-on)",
+  car_detailing: "Car Detailing",
+  interior_detailing: "Interior Detailing",
+};
+
+// Grouping for the admin editor UI.
+export const PRICE_LINE_GROUPS: { category: ServiceCategory; title: string; lines: PriceLine[] }[] = [
+  { category: "CarWash", title: "Car Wash", lines: ["monthly", "weekly_thrice", "outside_monthly", "outside_weekly_thrice"] },
+  { category: "OneTimeCarWash", title: "One-Time Wash", lines: ["one_time_manual", "one_time_machine", "interior"] },
+  { category: "CarDetailing", title: "Car Detailing", lines: ["car_detailing", "interior_detailing"] },
+];
+
+export function isPriceLine(v: unknown): v is PriceLine {
+  return typeof v === "string" && (ALL_PRICE_LINES as string[]).includes(v);
+}
+
+/** Apply a percent discount, rounded to whole rupees. */
+export function discountedPrice(amount: number, percent: number): number {
+  if (!percent || percent <= 0) return amount;
+  return Math.round((amount * (100 - percent)) / 100);
+}
+
+/** The base price line an option resolves to (honours outside parking). */
+export function baseLineFor(optionId: ServiceOptionId, parking: ParkingLocation): PriceLine {
+  const outside = parking === "outside";
+  switch (optionId) {
+    case "Monthly": return outside ? "outside_monthly" : "monthly";
+    case "WeeklyThrice": return outside ? "outside_weekly_thrice" : "weekly_thrice";
+    case "OneTimeManual": return "one_time_manual";
+    case "OneTimeMachine": return "one_time_machine";
+    case "CeramicSealant": return "car_detailing";
+    case "InteriorDetailing": return "interior_detailing";
+  }
+}
+
+/** The add-on price line for an option, if any. */
+export function addOnLineFor(optionId: ServiceOptionId): PriceLine | null {
+  switch (optionId) {
+    case "OneTimeManual":
+    case "OneTimeMachine": return "interior";
+    case "CeramicSealant": return "interior_detailing";
+    default: return null;
+  }
+}
+
 export const tierLabel: Record<PriceTier, string> = {
   hatchback: "Hatchback",
   sedan: "Sedan",
@@ -171,19 +253,53 @@ export function fromPrice(id: ServiceOptionId): number {
   return Math.min(...Object.values(SERVICE_OPTIONS[id].price));
 }
 
+export interface PriceResult {
+  tier: PriceTier;
+  // Original (full list) prices.
+  base: number;
+  addOn: number;
+  total: number;
+  // Discounted prices + the percents applied.
+  basePercent: number;
+  addOnPercent: number;
+  discountedBase: number;
+  discountedAddOn: number;
+  discountedTotal: number;
+  hasDiscount: boolean;
+}
+
 export function priceFor(
   optionId: string,
   vehicleType: string,
   withAddOn = false,
   parkingLocation: ParkingLocation = "",
-): { base: number; addOn: number; total: number; tier: PriceTier } | null {
+  discounts?: ServiceDiscounts,
+): PriceResult | null {
   if (!isServiceOptionId(optionId)) return null;
   const def = SERVICE_OPTIONS[optionId];
   const tier = tierForVehicleType(vehicleType);
   const outsideGrid = parkingLocation === "outside" ? OUTSIDE_CAR_WASH_PRICES[optionId] : undefined;
   const base = (outsideGrid ?? def.price)[tier];
   const addOn = withAddOn && def.addOn ? def.addOn.price[tier] : 0;
-  return { base, addOn, total: base + addOn, tier };
+
+  const basePercent = discounts?.[baseLineFor(optionId, parkingLocation)] ?? 0;
+  const addOnLine = addOnLineFor(optionId);
+  const addOnPercent = withAddOn && addOnLine ? discounts?.[addOnLine] ?? 0 : 0;
+  const discountedBase = discountedPrice(base, basePercent);
+  const discountedAddOn = discountedPrice(addOn, addOnPercent);
+
+  return {
+    tier,
+    base,
+    addOn,
+    total: base + addOn,
+    basePercent,
+    addOnPercent,
+    discountedBase,
+    discountedAddOn,
+    discountedTotal: discountedBase + discountedAddOn,
+    hasDiscount: basePercent > 0 || addOnPercent > 0,
+  };
 }
 
 /** INR formatter — uses Indian digit grouping (1,00,000). */

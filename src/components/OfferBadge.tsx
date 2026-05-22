@@ -2,16 +2,26 @@
 
 import { motion } from "framer-motion";
 import { Flame } from "lucide-react";
+import { useMaxDiscount } from "./DiscountContext";
 
-// Marketing badge: the listed prices already include the 30% off, so this is
-// purely a visual urgency marker — no price math anywhere.
+// Marketing badge driven by the live discounts. By default it shows the highest
+// active discount ("Up to 25% OFF") and hides itself when nothing is discounted.
+// Pass `percent` to show a specific service's discount (e.g. on a pricing card).
 export default function OfferBadge({
   className = "",
   note = "Prices already include the discount",
+  percent,
+  prefix,
 }: {
   className?: string;
   note?: string | null;
+  percent?: number;
+  prefix?: string;
 }) {
+  const maxDiscount = useMaxDiscount();
+  const pct = percent ?? maxDiscount;
+  if (!pct || pct <= 0) return null;
+  const label = `${prefix ? `${prefix} ` : percent == null ? "Up to " : ""}${pct}% OFF`;
   return (
     <div className={`flex flex-col items-center gap-1.5 ${className}`}>
       <motion.div
@@ -29,7 +39,7 @@ export default function OfferBadge({
         >
           <Flame size={15} fill="#FFE08A" className="text-[#FFE08A]" />
         </motion.span>
-        <span className="tracking-wide">30% OFF</span>
+        <span className="tracking-wide">{label}</span>
         <span className="w-px h-3.5 bg-white/40" />
         <motion.span
           animate={{ opacity: [1, 0.55, 1] }}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { insertLead } from "@/lib/leads";
 import { isServiceOptionId, type ServiceOptionId, type ParkingLocation } from "@/lib/pricing";
 import { carPriceFor, type CarPrices } from "@/lib/carPricing";
+import { getServiceDiscounts } from "@/lib/discounts";
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
   // is null → we save price_total null and the team confirms by call.
   const serviceOption = String(body.serviceOption ?? "");
   const carPrices = (body.carPrices ?? null) as CarPrices | null;
+  const discounts = await getServiceDiscounts();
   const priced =
     carPrices && isServiceOptionId(serviceOption)
       ? carPriceFor(
@@ -29,6 +31,7 @@ export async function POST(req: NextRequest) {
           serviceOption as ServiceOptionId,
           ((body.parkingLocation as ParkingLocation) || "") as ParkingLocation,
           Boolean(body.interiorAddOn),
+          discounts,
         )
       : null;
 
@@ -56,7 +59,8 @@ export async function POST(req: NextRequest) {
       callback_time: String(body.time ?? "") || null,
       latitude: typeof body.latitude === "number" ? body.latitude : null,
       longitude: typeof body.longitude === "number" ? body.longitude : null,
-      price_total: priced?.total ?? null,
+      price_total: priced?.discountedTotal ?? null,
+      discount_percent: priced?.basePercent ?? null,
       notes: null,
     });
     return NextResponse.json({ success: true, id: lead.id });

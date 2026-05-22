@@ -9,6 +9,10 @@ import {
   Users,
   UserPlus,
   UserCog,
+  Tag,
+  Car,
+  Settings2,
+  Briefcase,
   LogOut,
   Menu,
   X,
@@ -29,7 +33,7 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-const ICONS = { Inbox, PlusCircle, Users, UserPlus, UserCog } as const;
+const ICONS = { Inbox, PlusCircle, Users, UserPlus, UserCog, Tag, Car, Settings2, Briefcase } as const;
 
 export default function Sidebar({
   groups,

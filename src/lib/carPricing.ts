@@ -6,7 +6,14 @@
 // resolver returns null and the UI shows the "our team will call you back"
 // fallback instead of a number.
 
-import type { ServiceOptionId, ParkingLocation } from "./pricing";
+import {
+  addOnLineFor,
+  baseLineFor,
+  discountedPrice,
+  type ServiceOptionId,
+  type ParkingLocation,
+  type ServiceDiscounts,
+} from "./pricing";
 
 // Mirrors the price columns on public.cars (see migration 0004). Null = the
 // sheet had no price for that service on this car.
@@ -32,9 +39,17 @@ export interface CarRecord extends CarPrices {
 }
 
 export interface CarPriceResult {
+  // Original (full list) prices.
   base: number;
   addOn: number;
   total: number;
+  // Discounted prices + the percents applied.
+  basePercent: number;
+  addOnPercent: number;
+  discountedBase: number;
+  discountedAddOn: number;
+  discountedTotal: number;
+  hasDiscount: boolean;
 }
 
 // Resolve the base price column for an option, honouring outside parking for
@@ -87,9 +102,27 @@ export function carPriceFor(
   optionId: ServiceOptionId,
   parking: ParkingLocation,
   withAddOn: boolean,
+  discounts?: ServiceDiscounts,
 ): CarPriceResult | null {
   const base = basePriceColumn(prices, optionId, parking);
   if (base == null) return null;
   const addOn = withAddOn ? addOnColumn(prices, optionId) ?? 0 : 0;
-  return { base, addOn, total: base + addOn };
+
+  const basePercent = discounts?.[baseLineFor(optionId, parking)] ?? 0;
+  const addOnLine = addOnLineFor(optionId);
+  const addOnPercent = withAddOn && addOnLine ? discounts?.[addOnLine] ?? 0 : 0;
+  const discountedBase = discountedPrice(base, basePercent);
+  const discountedAddOn = discountedPrice(addOn, addOnPercent);
+
+  return {
+    base,
+    addOn,
+    total: base + addOn,
+    basePercent,
+    addOnPercent,
+    discountedBase,
+    discountedAddOn,
+    discountedTotal: discountedBase + discountedAddOn,
+    hasDiscount: basePercent > 0 || addOnPercent > 0,
+  };
 }

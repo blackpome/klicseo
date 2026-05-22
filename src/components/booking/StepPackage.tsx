@@ -10,10 +10,12 @@ import {
   SERVICE_OPTIONS,
   isServiceOptionId,
   inr,
+  baseLineFor,
   CATEGORY_COLORS,
   type ServiceOptionId,
 } from "@/lib/pricing";
 import { carPriceFor } from "@/lib/carPricing";
+import { useServiceDiscounts, useBadges } from "@/components/DiscountContext";
 
 const optionToPkg: Record<string, BookingData["pkg"]> = {
   Monthly:           "Daily",
@@ -42,10 +44,12 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
 
   // Per-car prices come from the catalog (set in the vehicle step). null when
   // the car was entered manually / not found — then we show the call-back note.
+  const discounts = useServiceDiscounts();
+  const badges = useBadges();
   const cp = data.carPrices;
   function optPrice(id: string, withAddOn = false) {
     if (!cp || !isServiceOptionId(id)) return null;
-    return carPriceFor(cp, id as ServiceOptionId, data.parkingLocation, withAddOn);
+    return carPriceFor(cp, id as ServiceOptionId, data.parkingLocation, withAddOn, discounts);
   }
 
   const carLabel = [data.carBrand, data.carModel].filter(Boolean).join(" ");
@@ -153,17 +157,31 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
                   <p className="text-white/40 text-[11px] mb-1">{opt.blurb}</p>
                   {opt.addOn && pAdd && pAdd.addOn > 0 && (
                     <p className="text-[10px] text-white/35">
-                      {opt.addOn.label}: +{inr(pAdd.addOn)}
+                      {opt.addOn.label}: +{inr(pAdd.discountedAddOn)}
                     </p>
                   )}
                 </div>
 
                 <div className="text-right flex-shrink-0 ml-1">
-                  <div className="text-lg sm:text-xl font-bold"
+                  <div className="text-lg sm:text-xl font-bold leading-tight"
                        style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
-                    {p ? inr(p.base) : "On call"}
+                    {p ? (
+                      p.basePercent > 0 ? (
+                        <>
+                          <span className="text-white/40 text-xs line-through mr-1 font-medium">{inr(p.base)}</span>
+                          {inr(p.discountedBase)}
+                        </>
+                      ) : (
+                        inr(p.base)
+                      )
+                    ) : (
+                      "On call"
+                    )}
                   </div>
                   <div className="text-white/35 text-[10px]">
+                    {p && p.basePercent > 0 && badges[baseLineFor(id, data.parkingLocation)] ? (
+                      <span className="text-[#F97316] font-bold">{p.basePercent}% OFF · </span>
+                    ) : null}
                     {p ? (opt.recurring === "monthly" ? "/mo" : "one time") : "price by team"}
                   </div>
                 </div>
@@ -211,7 +229,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
           <span className="text-sm font-bold whitespace-nowrap" style={{ color: accent }}>
             {(() => {
               const pAdd = optPrice(selectedOption, true);
-              return pAdd && pAdd.addOn > 0 ? `+${inr(pAdd.addOn)}` : "on call";
+              return pAdd && pAdd.addOn > 0 ? `+${inr(pAdd.discountedAddOn)}` : "on call";
             })()}
           </span>
         </button>
@@ -234,7 +252,10 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
             </p>
           </div>
           <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: accent }}>
-            {inr(selectedPriced.total)}
+            {selectedPriced.hasDiscount && (
+              <span className="text-white/40 text-base line-through mr-2 font-medium">{inr(selectedPriced.total)}</span>
+            )}
+            {inr(selectedPriced.discountedTotal)}
           </span>
         </div>
       )}

@@ -4,7 +4,10 @@ import { Check } from "lucide-react";
 import { useRef, useState, MouseEvent } from "react";
 import { motion, useSpring } from "framer-motion";
 import AnimatedHeading from "./AnimatedHeading";
-import OfferBadge from "./OfferBadge";
+import { useServiceDiscounts, useLineBadge } from "./DiscountContext";
+import { useSiteSettings } from "./SiteSettingsContext";
+import { discountedPrice, type PriceLine } from "@/lib/pricing";
+import { isCardId } from "@/lib/card-prices-shared";
 
 // "From" prices reflect the Hatchback tier; the booking flow charges the
 // vehicle-tier-specific price from the same source (src/lib/pricing.ts).
@@ -12,6 +15,7 @@ const plans = [
   {
     id: "CarDetailing",
     name: "Car Detailing",
+    line: "car_detailing" as PriceLine,
     fromPrice: 4999,
     billing: "package",
     tagline: "Premium paint & interior care",
@@ -31,6 +35,7 @@ const plans = [
   {
     id: "CarWash",
     name: "Car Wash - Monthly Subscription",
+    line: "monthly" as PriceLine,
     fromPrice: 19,
     billing: "day",
     tagline: "Doorstep wash subscriptions",
@@ -51,6 +56,7 @@ const plans = [
   {
     id: "OneTimeCarWash",
     name: "One-Time Wash",
+    line: "one_time_manual" as PriceLine,
     fromPrice: 249,
     tagline: "Single visit, no commitment",
     badge: null as string | null,
@@ -75,8 +81,10 @@ function TiltPlanCard({
   children,
   highlight,
   borderColor,
+  ribbon,
 }: {
   children: React.ReactNode;
+  ribbon?: React.ReactNode;
   highlight: boolean;
   borderColor: string;
 }) {
@@ -169,6 +177,9 @@ function TiltPlanCard({
             }}
           />
 
+          {/* Corner offer ribbon (clipped to the card's rounded corner) */}
+          {ribbon}
+
           {/* Content */}
           <div className="relative flex flex-col h-full z-10 p-7">{children}</div>
         </div>
@@ -180,6 +191,27 @@ function TiltPlanCard({
 type Plan = (typeof plans)[number];
 
 function PlanCard({ plan, index }: { plan: Plan; index: number }) {
+  const discounts = useServiceDiscounts();
+  const { cardPrices } = useSiteSettings();
+  const showBadge = useLineBadge(plan.line);
+  const pct = discounts[plan.line] ?? 0;
+  // Use the admin's custom card price when its toggle is on; else the default.
+  const cp = isCardId(plan.id) ? cardPrices[plan.id] : undefined;
+  const basePrice = cp?.enabled ? cp.price : plan.fromPrice;
+  const discounted = discountedPrice(basePrice, pct);
+
+  // Diagonal corner ribbon — clips itself to the card's top-right corner.
+  const ribbon = showBadge ? (
+    <div aria-hidden className="pointer-events-none absolute top-0 right-0 z-20 h-[92px] w-[92px] overflow-hidden rounded-tr-[15px]">
+      <div
+        className="absolute top-[18px] right-[-38px] w-[150px] rotate-45 py-1 text-center text-[10px] font-extrabold uppercase tracking-wider text-white shadow-[0_2px_10px_rgba(0,0,0,0.45)]"
+        style={{ background: "linear-gradient(135deg,#DC2626 0%,#F97316 100%)" }}
+      >
+        {pct}% OFF
+      </div>
+    </div>
+  ) : null;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 40 }}
@@ -200,7 +232,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
         </div>
       )}
 
-      <TiltPlanCard highlight={plan.highlight} borderColor={plan.borderColor}>
+      <TiltPlanCard highlight={plan.highlight} borderColor={plan.borderColor} ribbon={ribbon}>
         <div className="mb-4">
           <h3
             className="text-xl font-bold text-white mb-1"
@@ -212,13 +244,18 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
         </div>
 
         <div className="mb-6">
-          <div className="flex items-baseline gap-1">
+          <div className="flex items-baseline gap-1 flex-wrap">
             <span className="text-white/50 text-sm font-medium mr-1">Starts @</span>
+            {pct > 0 && (
+              <span className="text-white/40 text-lg font-medium line-through mr-1" style={{ fontFamily: "var(--font-playfair)" }}>
+                ₹{basePrice.toLocaleString("en-IN")}
+              </span>
+            )}
             <span
               className="text-4xl font-bold text-white"
               style={{ fontFamily: "var(--font-playfair)" }}
             >
-              ₹{plan.fromPrice.toLocaleString("en-IN")}
+              ₹{(pct > 0 ? discounted : basePrice).toLocaleString("en-IN")}
             </span>
             <span className="text-white/50 text-sm">/ {plan.billing}</span>
           </div>
@@ -293,7 +330,6 @@ export default function Pricing() {
             Pick a service — final price varies by vehicle type and is confirmed
             at checkout. No hidden fees, no contracts.
           </p>
-          <OfferBadge className="mt-6" />
           <div className="divider-gold w-24 mx-auto mt-6" />
         </motion.div>
 

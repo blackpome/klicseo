@@ -40,7 +40,7 @@ export default function BookingPage() {
             >
               Book Your Service
             </h1>
-            <OfferBadge className="mt-3" note="Listed prices already include the 30% off" />
+            <OfferBadge className="mt-3" note="Discount already applied to the prices below" />
           </div>
 
           <Suspense fallback={null}>

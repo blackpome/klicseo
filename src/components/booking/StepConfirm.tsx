@@ -6,8 +6,9 @@ import confetti from "canvas-confetti";
 import { CheckCircle, Car, User, MapPin, Calendar, Sparkles, Home, Sunrise, Sunset } from "lucide-react";
 import type { BookingData } from "./BookingWizard";
 import { clearBookingDraft } from "./BookingWizard";
-import { SERVICE_OPTIONS, isServiceOptionId, inr, CATEGORY_COLORS, type ServiceOptionId } from "@/lib/pricing";
+import { SERVICE_OPTIONS, isServiceOptionId, inr, baseLineFor, CATEGORY_COLORS, type ServiceOptionId } from "@/lib/pricing";
 import { carPriceFor } from "@/lib/carPricing";
+import { useServiceDiscounts, useBadges } from "@/components/DiscountContext";
 
 interface Props {
   data: BookingData;
@@ -39,12 +40,16 @@ export default function StepConfirm({ data, onBack }: Props) {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const discounts = useServiceDiscounts();
+  const badges = useBadges();
   const optionDef = isServiceOptionId(data.serviceOption) ? SERVICE_OPTIONS[data.serviceOption] : null;
+  const showOffLabel =
+    isServiceOptionId(data.serviceOption) && badges[baseLineFor(data.serviceOption as ServiceOptionId, data.parkingLocation)];
   const priced =
     data.carPrices && isServiceOptionId(data.serviceOption)
-      ? carPriceFor(data.carPrices, data.serviceOption as ServiceOptionId, data.parkingLocation, data.interiorAddOn)
+      ? carPriceFor(data.carPrices, data.serviceOption as ServiceOptionId, data.parkingLocation, data.interiorAddOn, discounts)
       : null;
-  const total = priced?.total ?? null;
+  const total = priced?.discountedTotal ?? null;
   const isMonthly = optionDef?.recurring === "monthly";
   const carLabel = [data.carBrand, data.carModel].filter(Boolean).join(" ");
 
@@ -219,9 +224,17 @@ export default function StepConfirm({ data, onBack }: Props) {
               {data.parkingLocation === "outside" ? " · outside parked" : ""}
             </p>
           </div>
-          <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
-            {inr(total)}
-          </span>
+          <div className="text-right">
+            {priced?.hasDiscount && (
+              <span className="block text-white/40 text-sm line-through leading-none">{inr(priced.total)}</span>
+            )}
+            <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
+              {inr(total)}
+            </span>
+            {priced?.hasDiscount && showOffLabel && (
+              <span className="block text-[10px] font-bold text-[#F97316]">{priced.basePercent}% OFF</span>
+            )}
+          </div>
         </div>
       ) : (
         <div

@@ -16,9 +16,9 @@ import AdminShell from "../../AdminShell";
 import AdminError from "../../AdminError";
 import EmployeeStatusControl from "../EmployeeStatusControl";
 import DeleteEmployeeButton from "./DeleteEmployeeButton";
+import { getJobBySlug } from "@/lib/jobs";
 import {
   getEmployee,
-  jobByRole,
   signedUrlFor,
   type EmployeeStatus,
 } from "@/lib/employees";
@@ -91,7 +91,7 @@ export default async function EmployeeDetailPage({
     signedUrlFor(emp.signature_path).catch(() => null),
   ]);
 
-  const job = jobByRole(emp.job_role);
+  const job = await getJobBySlug(emp.job_role);
 
   return (
     <AdminShell require="employees.view">
@@ -133,7 +133,7 @@ export default async function EmployeeDetailPage({
               <Phone size={12} /> {emp.phone}
             </a>
             <span className="text-white/30">·</span>
-            <span>{job?.label ?? emp.job_role}</span>
+            <span>{job?.title ?? emp.job_role}</span>
             <span className="text-white/30">·</span>
             <span>
               Applied{" "}
@@ -148,7 +148,7 @@ export default async function EmployeeDetailPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Section title="Role" icon={Briefcase}>
-          <Field label="Job role" value={job?.label ?? emp.job_role} />
+          <Field label="Job role" value={job?.title ?? emp.job_role} />
           <Field label="Type" value={job?.type === "FullTime" ? "Full time" : job?.type === "PartTime" ? "Part time" : "—"} />
         </Section>
 

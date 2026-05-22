@@ -7,14 +7,12 @@ import { requirePermission } from "@/lib/admin-auth";
 import { supabase } from "@/lib/supabase";
 import {
   BUCKET,
-  JOB_CATALOG,
   deleteEmployee,
   insertEmployee,
   updateEmployee,
   updateEmployeeStatus,
   type EmployeeStatus,
   type EmployeeUpdate,
-  type JobRole,
 } from "@/lib/employees";
 
 export async function setEmployeeStatusAction(formData: FormData) {
@@ -37,8 +35,8 @@ export async function deleteEmployeeAction(formData: FormData) {
 }
 
 function readCommonFields(formData: FormData) {
-  const role = String(formData.get("job_role") ?? "") as JobRole;
-  if (!JOB_CATALOG.some((j) => j.id === role)) throw new Error("Invalid job role.");
+  const role = String(formData.get("job_role") ?? "").trim();
+  if (!role) throw new Error("Job role is required.");
 
   const salaryRaw = String(formData.get("salary") ?? "").trim();
   const salary = salaryRaw === "" ? null : Number(salaryRaw);

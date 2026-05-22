@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { Calendar, Clock, Car, CheckCircle, Phone, Mail } from "lucide-react";
+import { useSiteSettings, digits } from "./SiteSettingsContext";
 
 const packages = ["Essential", "Premium", "Prestige"];
 const vehicleTypes = ["Sedan / Hatch", "SUV / 4WD", "Truck / Van", "Luxury / Exotic"];
 const timeSlots = ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"];
 
 export default function BookingCTA() {
+  const { phone } = useSiteSettings();
   const [submitted, setSubmitted] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -91,11 +93,11 @@ export default function BookingCTA() {
               <h3 className="text-sm font-semibold text-white/60 uppercase tracking-widest">
                 Contact Us
               </h3>
-              <a href="tel:+917904332212" className="flex items-center gap-3 text-white hover:text-[#C9A84C] transition-colors group">
+              <a href={`tel:${digits(phone)}`} className="flex items-center gap-3 text-white hover:text-[#C9A84C] transition-colors group">
                 <div className="w-9 h-9 rounded-lg bg-[#1A5FD4]/20 flex items-center justify-center group-hover:bg-[#C9A84C]/20 transition-colors">
                   <Phone size={16} className="text-[#C9A84C]" />
                 </div>
-                <span className="font-medium">+91 79043 32212</span>
+                <span className="font-medium">{phone}</span>
               </a>
               <a href="mailto:klicseo@gmail.com" className="flex items-center gap-3 text-white hover:text-[#C9A84C] transition-colors group">
                 <div className="w-9 h-9 rounded-lg bg-[#1A5FD4]/20 flex items-center justify-center group-hover:bg-[#C9A84C]/20 transition-colors">

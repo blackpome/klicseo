@@ -12,7 +12,8 @@ import {
   type LeadUpdate,
 } from "@/lib/leads";
 import { supabase } from "@/lib/supabase";
-import { priceFor } from "@/lib/pricing";
+import { priceFor, type ServiceDiscounts } from "@/lib/pricing";
+import { getServiceDiscounts } from "@/lib/discounts";
 
 export async function setStatusAction(formData: FormData) {
   await requirePermission("leads.manage");
@@ -45,7 +46,7 @@ export async function updateNotesAction(formData: FormData) {
 // Build the lead payload shared between create and update. The price override
 // input is only applied when the user didn't pick a service+option combo we can
 // auto-price; on edit, a blank field means "clear the override".
-function readLeadFromForm(formData: FormData) {
+function readLeadFromForm(formData: FormData, discounts: ServiceDiscounts) {
   const service = String(formData.get("service") ?? "") || null;
   const service_option = String(formData.get("service_option") ?? "") || null;
   const interior_add_on = formData.get("interior_add_on") === "on";
@@ -54,7 +55,7 @@ function readLeadFromForm(formData: FormData) {
 
   const priced =
     service_option && vehicle_type
-      ? priceFor(service_option, vehicle_type, interior_add_on, (parking_location as "" | "inside" | "outside") || "")
+      ? priceFor(service_option, vehicle_type, interior_add_on, (parking_location as "" | "inside" | "outside") || "", discounts)
       : null;
 
   const overrideRaw = String(formData.get("price_total") ?? "").trim();
@@ -79,7 +80,8 @@ function readLeadFromForm(formData: FormData) {
     shift: String(formData.get("shift") ?? "") || null,
     callback_date: String(formData.get("callback_date") ?? "") || null,
     callback_time: String(formData.get("callback_time") ?? "") || null,
-    price_total: priced?.total ?? (override != null && Number.isFinite(override) ? override : null),
+    price_total: priced?.discountedTotal ?? (override != null && Number.isFinite(override) ? override : null),
+    discount_percent: priced?.basePercent ?? null,
     notes: String(formData.get("notes") ?? "") || null,
   };
 }
@@ -89,7 +91,7 @@ export async function createLeadAction(
   formData: FormData,
 ): Promise<{ error?: string }> {
   await requirePermission("leads.manage");
-  const data = readLeadFromForm(formData);
+  const data = readLeadFromForm(formData, await getServiceDiscounts());
 
   await insertLead({
     source: "admin",
@@ -108,7 +110,7 @@ export async function updateLeadAction(_prev: { error?: string }, formData: Form
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Missing lead id." };
 
-  const data = readLeadFromForm(formData);
+  const data = readLeadFromForm(formData, await getServiceDiscounts());
   await updateLead(id, data as LeadUpdate);
 
   revalidatePath("/admin");

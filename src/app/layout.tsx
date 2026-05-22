@@ -8,6 +8,10 @@ import {
   seoKeywords,
   siteUrl,
 } from "@/lib/seo";
+import { DiscountProvider } from "@/components/DiscountContext";
+import { getDiscountConfig } from "@/lib/discounts";
+import { SiteSettingsProvider } from "@/components/SiteSettingsContext";
+import { getSiteSettings } from "@/lib/site-settings";
 
 const playfair = Playfair_Display({
   variable: "--font-playfair",
@@ -59,11 +63,12 @@ export const metadata: Metadata = {
   category: "Automotive Services",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [{ percents, badges }, site] = await Promise.all([getDiscountConfig(), getSiteSettings()]);
   return (
     <html
       lang="en"
@@ -71,7 +76,11 @@ export default function RootLayout({
       style={{ fontFamily: "var(--font-inter)" }}
     >
       <body className="min-h-full flex flex-col bg-[#050E21] text-white">
-        {children}
+        <SiteSettingsProvider value={site}>
+          <DiscountProvider discounts={percents} badges={badges}>
+            {children}
+          </DiscountProvider>
+        </SiteSettingsProvider>
       </body>
     </html>
   );

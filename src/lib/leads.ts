@@ -40,6 +40,7 @@ export interface LeadRow {
   longitude: number | null;
 
   price_total: number | null;
+  discount_percent: number | null;
   notes: string | null;
 }
 

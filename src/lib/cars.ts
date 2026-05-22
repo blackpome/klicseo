@@ -1,6 +1,87 @@
 import "server-only";
 import { supabase } from "./supabase";
-import type { CarRecord } from "./carPricing";
+import type { CarRecord, CarPrices } from "./carPricing";
+import { ALL_PRICE_LINES } from "./pricing";
+
+// Columns selected for admin list / edit (CarRecord shape + the price lines).
+const CAR_COLUMNS = `id,brand,model,body_type,segment_name,${ALL_PRICE_LINES.join(",")}`;
+
+export interface CarInput {
+  brand: string;
+  model: string;
+  body_type: string | null;
+  segment_name: string | null;
+  prices: Partial<CarPrices>;
+}
+
+/** Admin list: fuzzy search when `search` is set, else the first N by name. */
+export async function listCars(opts: { search?: string; limit?: number } = {}): Promise<CarRecord[]> {
+  const limit = opts.limit ?? 60;
+  const s = opts.search?.trim();
+  if (s) return searchCars(s, limit);
+  const { data, error } = await supabase()
+    .from("cars")
+    .select(CAR_COLUMNS)
+    .order("brand", { ascending: true })
+    .order("model", { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as unknown as CarRecord[];
+}
+
+/** All cars (capped), ordered by monthly price then name — for the grouped view. */
+export async function listAllCars(limit = 2000): Promise<CarRecord[]> {
+  const { data, error } = await supabase()
+    .from("cars")
+    .select(CAR_COLUMNS)
+    .order("monthly", { ascending: true, nullsFirst: false })
+    .order("brand", { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as unknown as CarRecord[];
+}
+
+export async function getCar(id: string): Promise<CarRecord | null> {
+  const { data, error } = await supabase().from("cars").select(CAR_COLUMNS).eq("id", id).maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as unknown as CarRecord | null;
+}
+
+function rowFromInput(input: CarInput) {
+  const row: Record<string, unknown> = {
+    brand: input.brand,
+    model: input.model,
+    body_type: input.body_type,
+    segment_name: input.segment_name,
+  };
+  for (const line of ALL_PRICE_LINES) {
+    if (line in input.prices) row[line] = input.prices[line] ?? null;
+  }
+  return row;
+}
+
+export async function insertCar(input: CarInput): Promise<CarRecord> {
+  const { data, error } = await supabase().from("cars").insert(rowFromInput(input)).select(CAR_COLUMNS).single();
+  if (error) throw error;
+  return data as unknown as CarRecord;
+}
+
+export async function updateCar(id: string, input: CarInput): Promise<void> {
+  const { error } = await supabase().from("cars").update(rowFromInput(input)).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteCar(id: string): Promise<void> {
+  const { error } = await supabase().from("cars").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Group price: set only the provided price lines across the selected cars. */
+export async function bulkSetCarPrices(ids: string[], prices: Partial<CarPrices>): Promise<void> {
+  if (ids.length === 0 || Object.keys(prices).length === 0) return;
+  const { error } = await supabase().from("cars").update(prices).in("id", ids);
+  if (error) throw error;
+}
 
 /**
  * Fuzzy type-ahead search over the car catalog (see migration 0005's

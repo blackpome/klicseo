@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import BubbleParticles from "./BubbleParticles";
 import Magnetic from "./Magnetic";
 import AnimatedHeading from "./AnimatedHeading";
+import { useSiteSettings } from "./SiteSettingsContext";
 
 const stats = [
   { value: "2,500+", label: "Cars Washed" },
@@ -19,6 +20,7 @@ const stats = [
 const HERO_VIDEOS = ["/car-detail-1.mp4", "/car-detail-2.mp4"];
 
 export default function Hero() {
+  const { startPrice } = useSiteSettings();
   // Both clips are mounted permanently; we just swap which one is active.
   // The inactive video stays paused at frame 0 with the file already cached,
   // so play() returns within a frame or two — seamless handoff, no black gap
@@ -314,7 +316,7 @@ export default function Hero() {
                     className="inline-block text-4xl sm:text-5xl font-extrabold leading-none drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]"
                     style={{ fontFamily: "var(--font-playfair)", color: "#FFFFFF" }}
                   >
-                    ₹19
+                    ₹{startPrice}
                   </motion.span>
                   <span className="leading-none text-white/85">/day</span>
                 </span>
