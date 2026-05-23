@@ -24,9 +24,22 @@ export default function TierCarsPanel({
   const router = useRouter();
   const sp = useSearchParams();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [picked, setPicked] = useState<Set<string>>(new Set()); // add-picker
+  const [selectedAssigned, setSelectedAssigned] = useState<Set<string>>(new Set()); // bulk ops
+  const [bulkTarget, setBulkTarget] = useState<string>("");
   const [searchInput, setSearchInput] = useState(search);
   const [pending, startTransition] = useTransition();
+
+  const toggleAssigned = (id: string) =>
+    setSelectedAssigned((p) => {
+      const n = new Set(p);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const allAssignedSelected = assigned.length > 0 && assigned.every((c) => selectedAssigned.has(c.id));
+  const toggleAllAssigned = (on: boolean) =>
+    setSelectedAssigned(on ? new Set(assigned.map((c) => c.id)) : new Set());
 
   const togglePick = (id: string) =>
     setPicked((p) => {
@@ -79,12 +92,36 @@ export default function TierCarsPanel({
     });
   };
 
+  const handleBulkMove = () => {
+    if (!bulkTarget || bulkTarget === tierId || selectedAssigned.size === 0) return;
+    const fd = new FormData();
+    fd.set("tier_id", bulkTarget);
+    for (const id of selectedAssigned) fd.append("car_ids", id);
+    startTransition(async () => {
+      await assignCarsAction(fd);
+      setSelectedAssigned(new Set());
+      setBulkTarget("");
+      router.refresh();
+    });
+  };
+
   return (
     <div className="space-y-4">
       {/* Assigned cars */}
       <div className="rounded-2xl border border-white/10 overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white/[0.03]">
-          <h2 className="text-sm font-bold">Cars in this tier <span className="text-white/40 font-normal">({assigned.length})</span></h2>
+          <label className="inline-flex items-center gap-2 text-sm font-bold">
+            {assigned.length > 0 && (
+              <input
+                type="checkbox"
+                checked={allAssignedSelected}
+                onChange={(e) => toggleAllAssigned(e.target.checked)}
+                className="accent-[#C9A84C]"
+                aria-label="Select all cars in this tier"
+              />
+            )}
+            Cars in this tier <span className="text-white/40 font-normal">({assigned.length})</span>
+          </label>
           {!pickerOpen && (
             <button
               onClick={() => setPickerOpen(true)}
@@ -96,15 +133,58 @@ export default function TierCarsPanel({
           )}
         </div>
 
+        {/* Bulk-move bar — shows only when something is selected */}
+        {selectedAssigned.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-white/10 bg-[#C9A84C]/[0.06]">
+            <span className="text-xs font-semibold">{selectedAssigned.size} selected</span>
+            <span className="text-white/30">·</span>
+            {otherTiers.length > 0 ? (
+              <>
+                <label className="inline-flex items-center gap-1 text-xs text-white/55">
+                  <ArrowRightLeft size={12} className="text-white/40" /> Move to
+                </label>
+                <select
+                  value={bulkTarget}
+                  onChange={(e) => setBulkTarget(e.target.value)}
+                  className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-[#C9A84C]"
+                >
+                  <option value="">Choose tier…</option>
+                  {otherTiers.map((t) => <option key={t.id} value={t.id} className="bg-[#071029]">{t.name}</option>)}
+                </select>
+                <button
+                  onClick={handleBulkMove}
+                  disabled={pending || !bulkTarget}
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold text-[#050E21] disabled:opacity-50"
+                  style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
+                >
+                  <Check size={12} /> Move
+                </button>
+              </>
+            ) : (
+              <span className="text-xs text-white/40">No other tiers to move to — create one first.</span>
+            )}
+            <button onClick={() => setSelectedAssigned(new Set())} className="ml-auto text-xs text-white/50 hover:text-white">Clear</button>
+          </div>
+        )}
+
         {assigned.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-white/40">No cars yet — click <span className="text-white/70 font-semibold">Add cars</span> to assign.</p>
         ) : (
           <ul className="divide-y divide-white/5">
             {assigned.map((c) => (
               <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm hover:bg-white/[0.02]">
-                <div className="min-w-0">
-                  <span className="font-medium">{c.brand} {c.model}</span>
-                  {c.body_type && <span className="text-white/35 text-xs ml-2">{c.body_type}</span>}
+                <div className="flex items-center gap-3 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={selectedAssigned.has(c.id)}
+                    onChange={() => toggleAssigned(c.id)}
+                    className="accent-[#C9A84C]"
+                    aria-label={`Select ${c.brand} ${c.model}`}
+                  />
+                  <div className="min-w-0">
+                    <span className="font-medium">{c.brand} {c.model}</span>
+                    {c.body_type && <span className="text-white/35 text-xs ml-2">{c.body_type}</span>}
+                  </div>
                 </div>
                 <div className="flex items-center gap-1.5">
                   {otherTiers.length > 0 && (
