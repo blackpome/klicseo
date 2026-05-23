@@ -18,6 +18,19 @@ const SOCIAL_ICON: Record<SocialKey, IconType> = {
   linkedin: FaLinkedin,
 };
 
+// Each platform's official brand color, applied as the tile background.
+// Instagram uses its signature radial gradient; X is black (its official mark
+// on light surfaces) — we keep a faint ring so it reads on the dark footer.
+const SOCIAL_BG: Record<SocialKey, string> = {
+  instagram:
+    "radial-gradient(circle at 30% 110%, #FFDB7A 0%, #FFC758 8%, #F09433 25%, #E6683C 45%, #DC2743 60%, #CC2366 75%, #BC1888 90%)",
+  facebook: "#1877F2",
+  youtube: "#FF0000",
+  x: "#000000",
+  whatsapp: "#25D366",
+  linkedin: "#0A66C2",
+};
+
 const footerLinks = {
   Services: ["Exterior Wash", "Interior Detail", "Ceramic Coating", "Full Detail", "Express Wash", "Engine Bay Clean"],
   Company:  ["About Us", "Our Team", "Careers", "Blog", "Press"],
@@ -81,7 +94,8 @@ export default function Footer() {
                       whileHover={{ scale: 1.15, y: -3, rotate: -4 }}
                       whileTap={{ scale: 0.92 }}
                       transition={{ type: "spring", stiffness: 380, damping: 18 }}
-                      className="w-9 h-9 rounded-lg glass-card flex items-center justify-center text-white/40 hover:text-[#C9A84C] hover:border-[#C9A84C]/40 transition-colors duration-200"
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-white ring-1 ring-white/10 shadow-sm"
+                      style={{ background: SOCIAL_BG[p.key] }}
                     >
                       <Icon size={16} />
                     </motion.a>
