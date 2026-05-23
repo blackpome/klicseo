@@ -4,7 +4,10 @@ import { useState } from "react";
 import { Car, AlertTriangle, Check, Lock, Clock, Home, Trees } from "lucide-react";
 import type { BookingData } from "./BookingWizard";
 import { CATEGORY_COLORS } from "@/lib/pricing";
+import { useSiteSettings } from "@/components/SiteSettingsContext";
+import { stepCopy, builtinCfg, msg } from "@/lib/site-settings-shared";
 import CarPicker from "./CarPicker";
+import CustomFields from "./CustomFields";
 
 // Callback availability slots. The service visit is confirmed later by the team.
 const TIME_SLOTS = [
@@ -30,6 +33,12 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
   // their existing brand-gold to stay consistent with the rest of the wizard.
   const accent = data.service ? CATEGORY_COLORS[data.service] : "#C9A84C";
   const accent20 = `${accent}33`; // 20% alpha — focus ring / soft glow
+  const booking = useSiteSettings().booking;
+  const copy = stepCopy(booking, "schedule");
+  // Built-in field toggles (admin-controlled).
+  const numCfg = builtinCfg(booking, "schedule", "carNumber");
+  const coverCfg = builtinCfg(booking, "schedule", "carCover");
+  const gateCfg = builtinCfg(booking, "schedule", "gateAccess");
 
   const [attempted, setAttempted] = useState(false);
 
@@ -37,21 +46,27 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
   const modelValid = data.carModel.trim().length >= 1;
   const numberValid = data.carNumber.trim().length >= 3;
 
+  // A built-in field only blocks progress when it's both enabled and required.
+  const numberOk = !numCfg.enabled || !numCfg.required || numberValid;
+  const coverOk =
+    !coverCfg.enabled || !coverCfg.required || data.parkingLocation !== "outside" || data.carCoverChoice !== "";
+  const gateOk = !gateCfg.enabled || !gateCfg.required || data.gateAccessConsent;
+
   const valid =
     brandValid &&
     modelValid &&
-    numberValid &&
+    numberOk &&
     data.parkingLocation !== "" &&
-    (data.parkingLocation !== "outside" || data.carCoverChoice !== "") &&
-    data.gateAccessConsent &&
+    coverOk &&
+    gateOk &&
     data.date.length > 0;
 
   const errBrand    = attempted && !brandValid;
   const errModel    = attempted && !modelValid;
-  const errNumber   = attempted && !numberValid;
+  const errNumber   = attempted && numCfg.enabled && numCfg.required && !numberValid;
   const errParking  = attempted && data.parkingLocation === "";
-  const errCarCover = attempted && data.parkingLocation === "outside" && data.carCoverChoice === "";
-  const errGate     = attempted && !data.gateAccessConsent;
+  const errCarCover = attempted && coverCfg.enabled && coverCfg.required && data.parkingLocation === "outside" && data.carCoverChoice === "";
+  const errGate     = attempted && gateCfg.enabled && gateCfg.required && !data.gateAccessConsent;
   const errDate     = attempted && data.date.length === 0;
 
   function handleContinue() {
@@ -66,37 +81,39 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
   return (
     <div>
       <h2 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
-        Vehicle & Schedule
+        {copy.title}
       </h2>
-      <p className="text-white/45 text-sm mb-4">Tell us about your car and when our team should visit.</p>
+      <p className="text-white/45 text-sm mb-4">{copy.subtitle}</p>
 
       {/* ── Car Brand + Model (DB-backed search, manual fallback) ── */}
       <CarPicker data={data} update={update} accent={accent} errBrand={errBrand} errModel={errModel} />
 
       {/* ── Registration ── */}
-      <div className="mb-5">
-        <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-          <Car size={11} className="inline mr-1" />
-          Registration Number *
-        </label>
-        <input
-          type="text"
-          placeholder="e.g. KA 01 AB 1234"
-          value={data.carNumber}
-          onChange={(e) => update({ carNumber: e.target.value.toUpperCase() })}
-          className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm font-mono tracking-wider focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors ${
-            errNumber ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
-          }`}
-        />
-        {errNumber && <p className="text-[11px] text-red-300 mt-1">Enter the registration number.</p>}
-      </div>
+      {numCfg.enabled && (
+        <div className="mb-5">
+          <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
+            <Car size={11} className="inline mr-1" />
+            Registration Number{numCfg.required && " *"}
+          </label>
+          <input
+            type="text"
+            placeholder="e.g. KA 01 AB 1234"
+            value={data.carNumber}
+            onChange={(e) => update({ carNumber: e.target.value.toUpperCase() })}
+            className={`w-full bg-white/5 border rounded-xl px-4 py-3.5 text-white placeholder-white/25 text-sm font-mono tracking-wider focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]/30 transition-colors ${
+              errNumber ? "border-red-400/70 ring-1 ring-red-400/30" : "border-white/10"
+            }`}
+          />
+          {errNumber && <p className="text-[11px] text-red-300 mt-1">Enter the registration number.</p>}
+        </div>
+      )}
 
       <div className="h-px bg-white/5 my-5" />
 
       {/* Parking — Inside / Outside */}
       <div className="mb-4">
         <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-          Where is the car parked? *
+          {msg(booking, "schedule", "parking_prompt")} *
         </p>
         <div className={`grid grid-cols-2 gap-2 ${errParking ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
           {([
@@ -138,11 +155,11 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         {errParking && <p className="text-[11px] text-red-300 mt-2">Pick where the car will be parked.</p>}
       </div>
 
-      {data.parkingLocation === "outside" && (
+      {coverCfg.enabled && data.parkingLocation === "outside" && (
         <>
           <div className="mb-4">
             <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-              Do you have a car cover? *
+              {msg(booking, "schedule", "cover_prompt")}{coverCfg.required && " *"}
             </p>
             <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${errCarCover ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
               {([
@@ -215,6 +232,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
       )}
 
       {/* Gate / access consent */}
+      {gateCfg.enabled && (
       <button
         type="button"
         onClick={() => update({ gateAccessConsent: !data.gateAccessConsent })}
@@ -239,21 +257,20 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         </div>
         <div className="flex-1">
           <p className="text-sm font-semibold text-white leading-tight flex items-center gap-1.5">
-            <Lock size={11} className="text-[#C9A84C]" /> Gate / parking access *
+            <Lock size={11} className="text-[#C9A84C]" /> Gate / parking access{gateCfg.required && " *"}
           </p>
           <p className="text-[11px] text-white/55 mt-1 leading-snug">
-            I confirm someone will arrange gate, security or parking-area access during the
-            8 PM – 10 AM service window. If the gate is locked or restricted at the time of
-            visit, the booking may be rescheduled.
+            {msg(booking, "schedule", "gate_text")}
           </p>
           {errGate && <p className="text-[11px] text-red-300 mt-2">Tick this box to confirm gate access.</p>}
         </div>
       </button>
+      )}
 
       {/* Callback availability */}
       <div className="mb-4">
         <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-          When should our team call you? *
+          {msg(booking, "schedule", "callback_prompt")} *
         </label>
         <p className="text-[11px] text-white/45 mb-2">
           Choose a date when you&apos;re free for a quick confirmation call.
@@ -321,6 +338,8 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         </p>
       )}
 
+      <CustomFields stepKey="schedule" data={data} update={update} />
+
       <div className="flex gap-3">
         <button
           onClick={onBack}
@@ -333,7 +352,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
           className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
           style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
         >
-          Continue →
+          {msg(booking, "schedule", "continue")}
         </button>
       </div>
     </div>

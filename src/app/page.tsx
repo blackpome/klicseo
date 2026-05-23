@@ -24,12 +24,13 @@ export default function Home() {
     <main className="flex flex-col bg-[#050E21]">
       <Navbar />
       <Hero />
-      <Services />
-      <HowItWorks />
-      <Pricing />
-      <Testimonials />
-      <BookingTeaser />
-      <LocalSeoContent />
+      {/* Below-the-fold sections skip off-screen rendering for smoother scroll */}
+      <div className="cv-section"><Services /></div>
+      <div className="cv-section"><HowItWorks /></div>
+      <div className="cv-section"><Pricing /></div>
+      <div className="cv-section"><Testimonials /></div>
+      <div className="cv-section"><BookingTeaser /></div>
+      <div className="cv-section"><LocalSeoContent /></div>
       <Footer />
       <StickyMobileCTA />
       <FloatingContact />

@@ -14,6 +14,7 @@ import {
   type EmployeeStatus,
   type EmployeeUpdate,
 } from "@/lib/employees";
+import { logAudit } from "@/lib/audit";
 
 export async function setEmployeeStatusAction(formData: FormData) {
   await requirePermission("employees.manage");
@@ -21,6 +22,7 @@ export async function setEmployeeStatusAction(formData: FormData) {
   const status = String(formData.get("status") ?? "") as EmployeeStatus;
   if (!id || !status) return;
   await updateEmployeeStatus(id, status);
+  await logAudit("employee.status", { entity: "employee", entityId: id, summary: `Set employee status → ${status}` });
   revalidatePath("/admin/employees");
   revalidatePath(`/admin/employees/${id}`);
 }
@@ -30,6 +32,7 @@ export async function deleteEmployeeAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await deleteEmployee(id);
+  await logAudit("employee.delete", { entity: "employee", entityId: id, summary: "Deleted employee" });
   revalidatePath("/admin/employees");
   redirect("/admin/employees");
 }
@@ -101,7 +104,7 @@ export async function createEmployeeAction(_prev: { error?: string }, formData: 
   const aadhaar_photo_path = await uploadIfPresent(applicantId, "aadhaar", formData, "aadhaar_photo");
   const profile_photo_path = await uploadIfPresent(applicantId, "profile", formData, "profile_photo");
 
-  await insertEmployee({
+  const emp = await insertEmployee({
     ...data,
     aadhaar_photo_path,
     profile_photo_path,
@@ -109,6 +112,7 @@ export async function createEmployeeAction(_prev: { error?: string }, formData: 
     terms_accepted_at: null,
   });
 
+  await logAudit("employee.create", { entity: "employee", entityId: emp.id, summary: `Added employee ${data.name}` });
   revalidatePath("/admin/employees");
   redirect("/admin/employees");
 }
@@ -135,6 +139,7 @@ export async function updateEmployeeAction(_prev: { error?: string }, formData: 
 
   await updateEmployee(id, patch);
 
+  await logAudit("employee.update", { entity: "employee", entityId: id, summary: `Edited employee ${data.name}` });
   revalidatePath("/admin/employees");
   revalidatePath(`/admin/employees/${id}`);
   redirect(`/admin/employees/${id}`);

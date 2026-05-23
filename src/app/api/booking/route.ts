@@ -3,6 +3,7 @@ import { insertLead } from "@/lib/leads";
 import { isServiceOptionId, type ServiceOptionId, type ParkingLocation } from "@/lib/pricing";
 import { carPriceFor, type CarPrices } from "@/lib/carPricing";
 import { getServiceDiscounts } from "@/lib/discounts";
+import { getSiteSettings } from "@/lib/site-settings";
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -35,6 +36,29 @@ export async function POST(req: NextRequest) {
         )
       : null;
 
+  // Custom fields (admin-defined per step). Validate required, store {label: value}.
+  const booking = (await getSiteSettings()).booking;
+  const customAnswers = (body.customFields ?? {}) as Record<string, unknown>;
+  const custom_fields: Record<string, string> = {};
+  for (const stepKey of Object.keys(booking)) {
+    for (const f of booking[stepKey as keyof typeof booking].fields) {
+      if (!f.enabled) continue;
+      const raw = customAnswers[f.id];
+      if (f.type === "checkbox") {
+        if (f.required && raw !== true) {
+          return NextResponse.json({ success: false, error: `Please confirm "${f.label}".` }, { status: 400 });
+        }
+        if (raw === true) custom_fields[f.label] = "Yes";
+      } else {
+        const val = String(raw ?? "").trim();
+        if (f.required && !val) {
+          return NextResponse.json({ success: false, error: `Please fill "${f.label}".` }, { status: 400 });
+        }
+        if (val) custom_fields[f.label] = val;
+      }
+    }
+  }
+
   try {
     const lead = await insertLead({
       source: "wizard",
@@ -61,6 +85,7 @@ export async function POST(req: NextRequest) {
       longitude: typeof body.longitude === "number" ? body.longitude : null,
       price_total: priced?.discountedTotal ?? null,
       discount_percent: priced?.basePercent ?? null,
+      custom_fields: Object.keys(custom_fields).length ? custom_fields : null,
       notes: null,
     });
     return NextResponse.json({ success: true, id: lead.id });

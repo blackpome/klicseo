@@ -14,6 +14,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { priceFor, type ServiceDiscounts } from "@/lib/pricing";
 import { getServiceDiscounts } from "@/lib/discounts";
+import { logAudit } from "@/lib/audit";
 
 export async function setStatusAction(formData: FormData) {
   await requirePermission("leads.manage");
@@ -21,6 +22,7 @@ export async function setStatusAction(formData: FormData) {
   const status = String(formData.get("status") ?? "") as LeadStatus;
   if (!id || !status) return;
   await updateLeadStatus(id, status);
+  await logAudit("lead.status", { entity: "lead", entityId: id, summary: `Set lead status → ${status}` });
   revalidatePath("/admin");
 }
 
@@ -29,6 +31,7 @@ export async function deleteLeadAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await deleteLead(id);
+  await logAudit("lead.delete", { entity: "lead", entityId: id, summary: "Deleted lead" });
   revalidatePath("/admin");
   redirect("/admin");
 }
@@ -40,6 +43,7 @@ export async function updateNotesAction(formData: FormData) {
   if (!id) return;
   const { error } = await supabase().from("leads").update({ notes: notes || null }).eq("id", id);
   if (error) throw error;
+  await logAudit("lead.notes", { entity: "lead", entityId: id, summary: "Updated lead notes" });
   revalidatePath(`/admin/${id}`);
 }
 
@@ -93,14 +97,16 @@ export async function createLeadAction(
   await requirePermission("leads.manage");
   const data = readLeadFromForm(formData, await getServiceDiscounts());
 
-  await insertLead({
+  const lead = await insertLead({
     source: "admin",
     ...data,
     gate_access_consent: false,
     latitude: null,
     longitude: null,
+    custom_fields: null,
   });
 
+  await logAudit("lead.create", { entity: "lead", entityId: lead.id, summary: `Created lead ${data.name ?? ""}`.trim() });
   revalidatePath("/admin");
   redirect("/admin");
 }
@@ -113,6 +119,7 @@ export async function updateLeadAction(_prev: { error?: string }, formData: Form
   const data = readLeadFromForm(formData, await getServiceDiscounts());
   await updateLead(id, data as LeadUpdate);
 
+  await logAudit("lead.update", { entity: "lead", entityId: id, summary: "Edited lead" });
   revalidatePath("/admin");
   revalidatePath(`/admin/${id}`);
   redirect(`/admin/${id}`);

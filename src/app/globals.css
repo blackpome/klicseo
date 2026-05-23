@@ -109,3 +109,14 @@ body {
 
 .animate-float { animation: floatAnim 4s ease-in-out infinite; }
 .animate-fade-up { animation: fadeUp 0.7s ease-out forwards; }
+
+/* Skip rendering/painting off-screen sections until they're near the viewport.
+   Big scroll-smoothness win on long pages; `auto` remembers each section's
+   measured height so there's no scrollbar jump after the first pass. */
+.cv-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-float { animation: none; }
+}

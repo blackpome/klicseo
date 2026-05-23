@@ -44,6 +44,8 @@ export interface BookingData {
   shift: "" | "morning" | "evening";
   latitude: number | null;
   longitude: number | null;
+  // Answers to admin-defined custom fields, keyed by field id.
+  customFields: Record<string, string | boolean>;
 }
 
 const TOTAL_STEPS = 5;
@@ -110,6 +112,7 @@ export default function BookingWizard() {
     shift: "",
     latitude: null,
     longitude: null,
+    customFields: {},
   });
 
   // Hydrate from localStorage draft once on mount. Deep-link query params

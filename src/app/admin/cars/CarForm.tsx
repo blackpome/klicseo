@@ -2,32 +2,14 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import { PRICE_LINE_GROUPS, PRICE_LINE_LABEL } from "@/lib/pricing";
+import { Tag } from "lucide-react";
 import type { CarRecord } from "@/lib/carPricing";
+import type { PriceTier } from "@/lib/priceTiers-shared";
 import { createCarAction, updateCarAction } from "./actions";
 
 const BODY_TYPES = ["Hatchback", "Sedan", "Compact SUV", "SUV", "XUV & Large SUV", "MUV", "Luxury"];
 
-function PriceField({ line, defaultValue }: { line: string; defaultValue: number | null }) {
-  return (
-    <label className="block">
-      <span className="text-[11px] text-white/45">{PRICE_LINE_LABEL[line as keyof typeof PRICE_LINE_LABEL]}</span>
-      <div className="mt-1 flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-[#C9A84C] overflow-hidden">
-        <span className="pl-3 text-sm text-white/40 select-none">₹</span>
-        <input
-          type="text"
-          inputMode="numeric"
-          name={line}
-          defaultValue={defaultValue ?? ""}
-          placeholder="—"
-          className="w-full bg-transparent px-2 py-2 text-sm focus:outline-none"
-        />
-      </div>
-    </label>
-  );
-}
-
-export default function CarForm({ car }: { car?: CarRecord }) {
+export default function CarForm({ car, tiers }: { car?: CarRecord; tiers: PriceTier[] }) {
   const editing = !!car;
   const [state, action, pending] = useActionState(
     editing ? updateCarAction : createCarAction,
@@ -80,17 +62,26 @@ export default function CarForm({ car }: { car?: CarRecord }) {
         </label>
       </div>
 
-      {/* Prices, grouped */}
-      {PRICE_LINE_GROUPS.map((group) => (
-        <div key={group.category} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-white/50 mb-3">{group.title}</h2>
-          <div className="grid sm:grid-cols-2 gap-3">
-            {group.lines.map((line) => (
-              <PriceField key={line} line={line} defaultValue={car ? (car[line as keyof CarRecord] as number | null) : null} />
-            ))}
-          </div>
+      {/* Tier picker — prices are now defined by the tier */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <Tag size={14} className="text-[#C9A84C]" />
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-white/60">Pricing tier</h2>
         </div>
-      ))}
+        <label className="block">
+          <select
+            name="tier_id"
+            defaultValue={car?.tier_id ?? ""}
+            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C]"
+          >
+            <option value="">— No tier yet —</option>
+            {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </label>
+        <p className="text-[11px] text-white/40">
+          The car&apos;s prices are taken from the tier. You can leave this blank and assign a tier later from <span className="text-white/60">Cars without a tier</span>.
+        </p>
+      </div>
 
       {state.error && <p className="text-[12px] text-red-300">{state.error}</p>}
 
@@ -105,7 +96,7 @@ export default function CarForm({ car }: { car?: CarRecord }) {
         </button>
         <Link href="/admin/cars" className="text-sm text-white/50 hover:text-white">Cancel</Link>
       </div>
-      <p className="text-[11px] text-white/30">Leave a price blank for “price on request”. Discounts are set on the Discount page and apply on top of these.</p>
+      <p className="text-[11px] text-white/30">To edit prices, open the tier on the <span className="text-white/50">Pricing tiers</span> page — changes apply to every car in that tier.</p>
     </form>
   );
 }

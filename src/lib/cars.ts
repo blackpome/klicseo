@@ -4,7 +4,29 @@ import type { CarRecord, CarPrices } from "./carPricing";
 import { ALL_PRICE_LINES } from "./pricing";
 
 // Columns selected for admin list / edit (CarRecord shape + the price lines).
-const CAR_COLUMNS = `id,brand,model,body_type,segment_name,${ALL_PRICE_LINES.join(",")}`;
+const CAR_COLUMNS = `id,brand,model,body_type,segment_name,tier_id,${ALL_PRICE_LINES.join(",")}`;
+
+/** Cars in a specific tier (no search; ordered by name). */
+export async function listCarsByTier(tierId: string): Promise<CarRecord[]> {
+  const { data, error } = await supabase()
+    .from("cars")
+    .select(CAR_COLUMNS)
+    .eq("tier_id", tierId)
+    .order("brand")
+    .order("model");
+  if (error) throw error;
+  return (data ?? []) as unknown as CarRecord[];
+}
+
+/** Cars not yet assigned to any tier (used by the "add cars" picker). */
+export async function listUnassignedCars(search?: string, limit = 200): Promise<CarRecord[]> {
+  let q = supabase().from("cars").select(CAR_COLUMNS).is("tier_id", null);
+  const s = search?.trim();
+  if (s) q = q.or(`brand.ilike.%${s}%,model.ilike.%${s}%`);
+  const { data, error } = await q.order("brand").order("model").limit(limit);
+  if (error) throw error;
+  return (data ?? []) as unknown as CarRecord[];
+}
 
 export interface CarInput {
   brand: string;

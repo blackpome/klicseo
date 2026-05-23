@@ -14,6 +14,7 @@ import {
   type AdminRole,
   type Permission,
 } from "@/lib/admin-users";
+import { logAudit } from "@/lib/audit";
 
 async function requireManager() {
   const me = await currentAdmin();
@@ -53,6 +54,7 @@ export async function grantAccessAction(
     return { error: err instanceof Error ? err.message : "Could not grant access." };
   }
 
+  await logAudit("access.grant", { entity: "access", entityId: email, summary: `Granted ${role} access to ${email}`, metadata: { role, permissions } });
   revalidatePath("/admin/access");
 
   // Row is created either way; only the email may have failed.
@@ -78,6 +80,7 @@ export async function revokeAccessAction(formData: FormData) {
   const email = normalizeEmail(String(formData.get("email") ?? ""));
   await loadManageable(email);
   await deleteAccess(email);
+  await logAudit("access.revoke", { entity: "access", entityId: email, summary: `Removed access for ${email}` });
   revalidatePath("/admin/access");
 }
 
@@ -105,6 +108,7 @@ export async function updatePermissionsAction(
     if (target.role !== "staff") return { error: "Only staff have editable permissions." };
     const permissions = readPermissions(formData);
     await updatePermissions(email, permissions);
+    await logAudit("access.permissions", { entity: "access", entityId: email, summary: `Updated permissions for ${email}`, metadata: { permissions } });
     revalidatePath("/admin/access");
     const n = permissions.length;
     return {

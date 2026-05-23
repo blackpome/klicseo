@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { currentAdmin } from "@/lib/admin-auth";
 import { insertJob, updateJob, deleteJob, APP_FIELD_DEFS, type ApplicationFields, type JobInput } from "@/lib/jobs";
+import { logAudit } from "@/lib/audit";
 
 async function requireManager() {
   const me = await currentAdmin();
@@ -59,7 +60,8 @@ export async function createJobAction(_prev: { error?: string }, formData: FormD
   const job = readJob(formData);
   if (!job.title) return { error: "Title is required." };
   try {
-    await insertJob(job);
+    const created = await insertJob(job);
+    await logAudit("job.create", { entity: "job", entityId: created.id, summary: `Created job "${job.title}"` });
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not create job." };
   }
@@ -75,6 +77,7 @@ export async function updateJobAction(_prev: { error?: string }, formData: FormD
   if (!job.title) return { error: "Title is required." };
   try {
     await updateJob(id, job);
+    await logAudit("job.update", { entity: "job", entityId: id, summary: `Edited job "${job.title}"` });
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not save job." };
   }
@@ -87,6 +90,7 @@ export async function deleteJobAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await deleteJob(id);
+  await logAudit("job.delete", { entity: "job", entityId: id, summary: "Deleted job" });
   revalidateAll();
   redirect("/admin/jobs");
 }

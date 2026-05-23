@@ -36,6 +36,7 @@ export interface CarRecord extends CarPrices {
   model: string;
   body_type: string | null;
   segment_name: string | null;
+  tier_id?: string | null;
 }
 
 export interface CarPriceResult {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildAdminSessionCookie, isAdmin, verifyCredentials } from "@/lib/admin-auth";
+import { logAudit } from "@/lib/audit";
 
 // Receives a plain HTML form POST from /admin/login. Returns 303 + Set-Cookie
 // + Location — a single atomic response the browser handles natively. This
@@ -48,5 +49,6 @@ export async function POST(req: Request) {
   const { name, value, options } = buildAdminSessionCookie(principal.email);
   const response = NextResponse.redirect(new URL(next, req.url), { status: 303 });
   response.cookies.set(name, value, options);
+  await logAudit("auth.login", { entity: "auth", actorEmail: principal.email, actorRole: principal.role, summary: "Signed in" });
   return response;
 }

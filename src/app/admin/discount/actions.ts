@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { currentAdmin } from "@/lib/admin-auth";
 import { isPriceLine, type PriceLine } from "@/lib/pricing";
 import { setServiceDiscount } from "@/lib/discounts";
+import { logAudit } from "@/lib/audit";
 
 async function requireManager() {
   const me = await currentAdmin();
@@ -29,6 +30,7 @@ export async function saveDiscountAction(
 
     const badgeEnabled = String(formData.get("badge") ?? "") === "on";
     await setServiceDiscount(line as PriceLine, pct, badgeEnabled);
+    await logAudit("discount.save", { entity: "discount", entityId: line, summary: `${line} → ${pct}%${badgeEnabled ? "" : " (badge off)"}` });
 
     // Refresh everything that reads discounts (layout-level provider + pages).
     revalidatePath("/", "layout");

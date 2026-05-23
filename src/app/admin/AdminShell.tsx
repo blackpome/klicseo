@@ -29,6 +29,7 @@ export default async function AdminShell({
   const leadsItems = [
     can("leads.view") && { href: "/admin", label: "All Leads", icon: "Inbox" as const, exact: true },
     can("leads.manage") && { href: "/admin/new", label: "Add Lead", icon: "PlusCircle" as const },
+    can("leads.view") && { href: "/admin/payments", label: "Payments", icon: "Wallet" as const },
   ].filter(Boolean) as NavGroup["items"];
   if (leadsItems.length) groups.push({ title: "Leads", items: leadsItems });
 
@@ -49,8 +50,10 @@ export default async function AdminShell({
       items: [
         { href: "/admin/cars", label: "Cars", icon: "Car" },
         { href: "/admin/discount", label: "Discount", icon: "Tag" },
+        { href: "/admin/booking", label: "Booking", icon: "ClipboardList" },
         { href: "/admin/settings", label: "Site", icon: "Settings2" },
         { href: "/admin/access", label: "Team", icon: "UserCog" },
+        { href: "/admin/logs", label: "Audit logs", icon: "ScrollText" },
       ],
     });
   }

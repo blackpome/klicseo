@@ -43,9 +43,16 @@ export default function BubbleParticles({ count = 28 }: { count?: number }) {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [mounted, setMounted] = useState(false);
 
-  // Client-only — avoids SSR/hydration mismatch
+  // Client-only — avoids SSR/hydration mismatch. Fewer bubbles on small screens
+  // and none when the user prefers reduced motion (decorative only).
   useEffect(() => {
-    setBubbles(makeBubbles(count));
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const isMobile = window.matchMedia("(max-width: 640px)").matches;
+    const n = reduce ? 0 : isMobile ? Math.round(count / 2) : count;
+    // Client-only init (random values + media queries) — must run post-mount to
+    // avoid a hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBubbles(makeBubbles(n));
     setMounted(true);
   }, [count]);
 

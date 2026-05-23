@@ -1,8 +1,8 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { useRef, useState, MouseEvent } from "react";
-import { motion, useSpring } from "framer-motion";
+import { useRef, MouseEvent } from "react";
+import { motion, useSpring, useMotionValue, useMotionTemplate } from "framer-motion";
 import AnimatedHeading from "./AnimatedHeading";
 import { useServiceDiscounts, useLineBadge } from "./DiscountContext";
 import { useSiteSettings } from "./SiteSettingsContext";
@@ -91,7 +91,11 @@ function TiltPlanCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const rx = useSpring(0, { stiffness: 200, damping: 20 });
   const ry = useSpring(0, { stiffness: 200, damping: 20 });
-  const [glare, setGlare] = useState({ x: 50, y: 50, o: 0 });
+  // Glare via motion values (no React re-render on mousemove).
+  const gx = useMotionValue(50);
+  const gy = useMotionValue(50);
+  const go = useSpring(0, { stiffness: 150, damping: 22 });
+  const glareBg = useMotionTemplate`radial-gradient(circle at ${gx}% ${gy}%, rgba(255,255,255,${go}) 0%, transparent 60%)`;
 
   function onMove(e: MouseEvent<HTMLDivElement>) {
     const card = cardRef.current;
@@ -101,13 +105,15 @@ function TiltPlanCard({
     const y = (e.clientY - top) / height;
     rx.set((0.5 - y) * 7);
     ry.set((x - 0.5) * 7);
-    setGlare({ x: x * 100, y: y * 100, o: 0.14 });
+    gx.set(x * 100);
+    gy.set(y * 100);
+    go.set(0.14);
   }
 
   function onLeave() {
     rx.set(0);
     ry.set(0);
-    setGlare({ x: 50, y: 50, o: 0 });
+    go.set(0);
   }
 
   return (
@@ -167,14 +173,11 @@ function TiltPlanCard({
             />
           )}
 
-          {/* Mouse-following glare */}
-          <div
+          {/* Mouse-following glare (motion value — no re-render on move) */}
+          <motion.div
             aria-hidden
             className="absolute inset-0 pointer-events-none"
-            style={{
-              background: `radial-gradient(circle at ${glare.x}% ${glare.y}%, rgba(255,255,255,${glare.o}) 0%, transparent 60%)`,
-              transition: "opacity 0.18s ease",
-            }}
+            style={{ background: glareBg }}
           />
 
           {/* Corner offer ribbon (clipped to the card's rounded corner) */}

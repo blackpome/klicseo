@@ -41,6 +41,7 @@ export interface LeadRow {
 
   price_total: number | null;
   discount_percent: number | null;
+  custom_fields: Record<string, string> | null;
   notes: string | null;
 }
 

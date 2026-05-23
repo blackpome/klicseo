@@ -2,19 +2,21 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useRef } from "react";
+import { useSiteSettings } from "@/components/SiteSettingsContext";
+import { resolveMedia } from "@/lib/site-settings-shared";
 
 interface Props {
-  // Defaults to the first hero clip; the file is already cached after the
-  // home page hero so reaching step 4 typically loads it from cache.
+  // Overrides the admin-managed package media if provided (always a video).
   src?: string;
   // Optional caption rendered under the frame in gold tracking-wide caps.
   label?: string;
 }
 
-export default function TransformationLoop({
-  src = "/car-detail-1.mp4",
-  label,
-}: Props) {
+export default function TransformationLoop({ src, label }: Props) {
+  const { media } = useSiteSettings();
+  const resolved = resolveMedia(media, "packageVideo");
+  const videoSrc = src ?? resolved.url;
+  const isImage = !src && resolved.type === "image";
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -25,7 +27,7 @@ export default function TransformationLoop({
     v.muted = true;
     v.defaultMuted = true;
     v.play().catch(() => {});
-  }, []);
+  }, [videoSrc, isImage]);
 
   return (
     <div className="relative">
@@ -47,19 +49,24 @@ export default function TransformationLoop({
         transition={{ duration: 0.6, ease: "easeOut" }}
         className="relative rounded-2xl overflow-hidden border border-[#C9A84C]/30 shadow-[0_8px_32px_rgba(201,168,76,0.18)]"
       >
-        <video
-          ref={videoRef}
-          src={src}
-          muted
-          autoPlay
-          loop
-          playsInline
-          webkit-playsinline="true"
-          preload="auto"
-          poster="/car_wash.jpeg"
-          aria-hidden
-          className="w-full h-[260px] sm:h-[320px] object-cover"
-        />
+        {isImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={videoSrc} alt="" aria-hidden className="w-full h-[260px] sm:h-[320px] object-cover" />
+        ) : (
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            muted
+            autoPlay
+            loop
+            playsInline
+            webkit-playsinline="true"
+            preload="auto"
+            poster="/car_wash.jpeg"
+            aria-hidden
+            className="w-full h-[260px] sm:h-[320px] object-cover"
+          />
+        )}
 
         {/* Bottom vignette so the brand pill below stays readable on bright
             frames of the video. */}

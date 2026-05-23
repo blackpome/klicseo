@@ -1,10 +1,22 @@
 "use client";
 
 import Image from "next/image";
-import { Globe, Share2, ExternalLink, MapPin, Phone, Mail } from "lucide-react";
+import { MapPin, Phone, Mail } from "lucide-react";
+import { FaInstagram, FaFacebook, FaYoutube, FaXTwitter, FaWhatsapp, FaLinkedin } from "react-icons/fa6";
+import type { IconType } from "react-icons";
 import { motion } from "framer-motion";
 import { businessEmail, primaryCity, serviceAreaText } from "@/lib/seo";
 import { useSiteSettings } from "./SiteSettingsContext";
+import { SOCIAL_PLATFORMS, type SocialKey } from "@/lib/site-settings-shared";
+
+const SOCIAL_ICON: Record<SocialKey, IconType> = {
+  instagram: FaInstagram,
+  facebook: FaFacebook,
+  youtube: FaYoutube,
+  x: FaXTwitter,
+  whatsapp: FaWhatsapp,
+  linkedin: FaLinkedin,
+};
 
 const footerLinks = {
   Services: ["Exterior Wash", "Interior Detail", "Ceramic Coating", "Full Detail", "Express Wash", "Engine Bay Clean"],
@@ -13,7 +25,8 @@ const footerLinks = {
 };
 
 export default function Footer() {
-  const { phone: businessPhone } = useSiteSettings();
+  const { phone: businessPhone, social } = useSiteSettings();
+  const socialLinks = SOCIAL_PLATFORMS.filter((p) => social[p.key].enabled && social[p.key].url.trim());
   return (
     <footer className="relative border-t border-white/5">
       <div className="divider-gold" />
@@ -53,21 +66,29 @@ export default function Footer() {
               experience to your doorstep.
             </p>
 
-            {/* Social — magnetic hover */}
-            <div className="flex gap-3">
-              {[Globe, Share2, ExternalLink].map((Icon, i) => (
-                <motion.a
-                  key={i}
-                  href="#"
-                  whileHover={{ scale: 1.15, y: -3, rotate: -4 }}
-                  whileTap={{ scale: 0.92 }}
-                  transition={{ type: "spring", stiffness: 380, damping: 18 }}
-                  className="w-9 h-9 rounded-lg glass-card flex items-center justify-center text-white/40 hover:text-[#C9A84C] hover:border-[#C9A84C]/40 transition-colors duration-200"
-                >
-                  <Icon size={16} />
-                </motion.a>
-              ))}
-            </div>
+            {/* Social — only the platforms toggled on in admin */}
+            {socialLinks.length > 0 && (
+              <div className="flex gap-3">
+                {socialLinks.map((p) => {
+                  const Icon = SOCIAL_ICON[p.key];
+                  return (
+                    <motion.a
+                      key={p.key}
+                      href={social[p.key].url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={p.label}
+                      whileHover={{ scale: 1.15, y: -3, rotate: -4 }}
+                      whileTap={{ scale: 0.92 }}
+                      transition={{ type: "spring", stiffness: 380, damping: 18 }}
+                      className="w-9 h-9 rounded-lg glass-card flex items-center justify-center text-white/40 hover:text-[#C9A84C] hover:border-[#C9A84C]/40 transition-colors duration-200"
+                    >
+                      <Icon size={16} />
+                    </motion.a>
+                  );
+                })}
+              </div>
+            )}
           </motion.div>
 
           {/* Nav columns */}

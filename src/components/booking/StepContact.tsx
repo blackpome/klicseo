@@ -5,6 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Phone, User, Sparkles, Droplets, Wrench, Check } from "lucide-react";
 import type { BookingData, ServiceCategory } from "./BookingWizard";
 import { OPTIONS_BY_CATEGORY, SERVICE_OPTIONS, inr, isServiceOptionId, CATEGORY_COLORS } from "@/lib/pricing";
+import { useSiteSettings } from "@/components/SiteSettingsContext";
+import { stepCopy, msg } from "@/lib/site-settings-shared";
+import CustomFields from "./CustomFields";
 
 interface Props {
   data: BookingData;
@@ -66,6 +69,8 @@ const PREMIUM_GOLD_LIGHT = "#E8CC7A";
 const PREMIUM_GRADIENT = `linear-gradient(135deg, ${PREMIUM_GOLD_DARK}, ${PREMIUM_GOLD}, ${PREMIUM_GOLD_LIGHT})`;
 
 export default function StepContact({ data, update, onNext }: Props) {
+  const booking = useSiteSettings().booking;
+  const copy = stepCopy(booking, "contact");
   const [attempted, setAttempted] = useState(false);
 
   const phoneValid = data.phone.trim().length >= 8;
@@ -113,14 +118,14 @@ export default function StepContact({ data, update, onNext }: Props) {
   return (
     <div>
       <h2 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
-        Contact Details
+        {copy.title}
       </h2>
-      <p className="text-white/45 text-sm mb-5">We&apos;ll use this to confirm your booking.</p>
+      <p className="text-white/45 text-sm mb-5">{copy.subtitle}</p>
 
       {/* Name */}
       <div className="mb-4">
         <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-          <User size={10} className="inline mr-1" /> Full Name *
+          <User size={10} className="inline mr-1" /> {msg(booking, "contact", "name_label")} *
         </label>
         <input
           type="text"
@@ -141,7 +146,7 @@ export default function StepContact({ data, update, onNext }: Props) {
       {/* Phone */}
       <div className="mb-4">
         <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-          <Phone size={10} className="inline mr-1" /> Phone Number *
+          <Phone size={10} className="inline mr-1" /> {msg(booking, "contact", "phone_label")} *
         </label>
         <input
           type="tel"
@@ -163,7 +168,7 @@ export default function StepContact({ data, update, onNext }: Props) {
       {/* Service required */}
       <div className="mb-5">
         <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-          Service Required *
+          {msg(booking, "contact", "service_label")} *
         </p>
         <div className={`flex flex-col gap-3 ${errCategory ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
           {categories.map((c) => {
@@ -371,6 +376,8 @@ export default function StepContact({ data, update, onNext }: Props) {
         )}
       </div>
 
+      <CustomFields stepKey="contact" data={data} update={update} />
+
       {attempted && !canProceed && (
         <p className="text-[12px] text-red-300 text-center mt-4">
           Please complete the highlighted fields above.
@@ -382,7 +389,7 @@ export default function StepContact({ data, update, onNext }: Props) {
         className="w-full mt-3 py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
         style={{ background: PREMIUM_GRADIENT }}
       >
-        Continue →
+        {msg(booking, "contact", "continue")}
       </button>
     </div>
   );

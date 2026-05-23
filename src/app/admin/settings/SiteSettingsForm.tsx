@@ -3,14 +3,20 @@
 import { useActionState, useState } from "react";
 import { Check, AlertCircle } from "lucide-react";
 import { saveSiteSettingsAction } from "./actions";
-import type { SiteSettings } from "@/lib/site-settings";
+import type { SiteSettings } from "@/lib/site-settings-shared";
 import { CARD_DEFS, type CardId } from "@/lib/card-prices-shared";
+import { SOCIAL_PLATFORMS, type SocialKey } from "@/lib/site-settings-shared";
 
 export default function SiteSettingsForm({ current }: { current: SiteSettings }) {
   const [state, action, pending] = useActionState(saveSiteSettingsAction, {} as { error?: string; ok?: string });
   const [cardOn, setCardOn] = useState<Record<CardId, boolean>>(() => {
     const init = {} as Record<CardId, boolean>;
     for (const d of CARD_DEFS) init[d.id] = current.cardPrices[d.id].enabled;
+    return init;
+  });
+  const [socialOn, setSocialOn] = useState<Record<SocialKey, boolean>>(() => {
+    const init = {} as Record<SocialKey, boolean>;
+    for (const p of SOCIAL_PLATFORMS) init[p.key] = current.social[p.key].enabled;
     return init;
   });
 
@@ -98,6 +104,40 @@ export default function SiteSettingsForm({ current }: { current: SiteSettings })
                 <span className="pr-3 text-xs text-white/35">{d.suffix}</span>
               </div>
               <span className="text-[11px] text-white/25 w-24">default ₹{d.default.toLocaleString("en-IN")}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Social links */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-white/50">Social links</h2>
+          <p className="text-[11px] text-white/35">Toggle on the ones you want shown in the footer, and paste the link.</p>
+        </div>
+        {SOCIAL_PLATFORMS.map((p) => {
+          const on = socialOn[p.key];
+          return (
+            <div key={p.key} className="flex items-center gap-3 flex-wrap">
+              <input type="hidden" name={`social_${p.key}_on`} value={on ? "on" : "off"} />
+              <button
+                type="button"
+                role="switch"
+                aria-checked={on}
+                aria-label={`Show ${p.label}`}
+                onClick={() => setSocialOn((s) => ({ ...s, [p.key]: !s[p.key] }))}
+                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-[#10b981]" : "bg-white/15"}`}
+              >
+                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${on ? "left-[18px]" : "left-0.5"}`} />
+              </button>
+              <span className="w-20 text-sm text-white/80">{p.label}</span>
+              <input
+                type="url"
+                name={`social_${p.key}_url`}
+                defaultValue={current.social[p.key].url}
+                placeholder={p.placeholder}
+                className={`flex-1 min-w-[180px] bg-white/5 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C] ${on ? "border-white/10" : "border-white/5 opacity-50"}`}
+              />
             </div>
           );
         })}

@@ -9,6 +9,8 @@ import { clearBookingDraft } from "./BookingWizard";
 import { SERVICE_OPTIONS, isServiceOptionId, inr, baseLineFor, CATEGORY_COLORS, type ServiceOptionId } from "@/lib/pricing";
 import { carPriceFor } from "@/lib/carPricing";
 import { useServiceDiscounts, useBadges } from "@/components/DiscountContext";
+import { useSiteSettings } from "@/components/SiteSettingsContext";
+import { stepCopy, msg } from "@/lib/site-settings-shared";
 
 interface Props {
   data: BookingData;
@@ -42,6 +44,8 @@ export default function StepConfirm({ data, onBack }: Props) {
 
   const discounts = useServiceDiscounts();
   const badges = useBadges();
+  const booking = useSiteSettings().booking;
+  const copy = stepCopy(booking, "confirm");
   const optionDef = isServiceOptionId(data.serviceOption) ? SERVICE_OPTIONS[data.serviceOption] : null;
   const showOffLabel =
     isServiceOptionId(data.serviceOption) && badges[baseLineFor(data.serviceOption as ServiceOptionId, data.parkingLocation)];
@@ -54,6 +58,18 @@ export default function StepConfirm({ data, onBack }: Props) {
   const carLabel = [data.carBrand, data.carModel].filter(Boolean).join(" ");
 
   async function handleSubmit() {
+    // Validate required custom fields across all steps before submitting.
+    for (const step of Object.values(booking)) {
+      for (const f of step.fields) {
+        if (!f.enabled || !f.required) continue;
+        const v = data.customFields?.[f.id];
+        const empty = f.type === "checkbox" ? v !== true : !String(v ?? "").trim();
+        if (empty) {
+          setSubmitError(`Please complete "${f.label}".`);
+          return;
+        }
+      }
+    }
     setLoading(true);
     setSubmitError(null);
     try {
@@ -143,7 +159,7 @@ export default function StepConfirm({ data, onBack }: Props) {
         </motion.div>
 
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-2" style={{ fontFamily: "var(--font-playfair)" }}>
-          Booking Confirmed!
+          {msg(booking, "confirm", "success_title")}
         </h2>
         <p className="text-white/50 text-sm mb-1.5">
           Thank you, <span className="font-semibold" style={{ color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>{data.name}</span>. Our team will call you at your selected time.
@@ -158,9 +174,9 @@ export default function StepConfirm({ data, onBack }: Props) {
   return (
     <div>
       <h2 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
-        Review & Confirm
+        {copy.title}
       </h2>
-      <p className="text-white/45 text-sm mb-4">Everything look right?</p>
+      <p className="text-white/45 text-sm mb-4">{copy.subtitle}</p>
 
       {/* Summary */}
       <div className="glass-card rounded-2xl px-3 py-0.5 mb-4">
@@ -277,7 +293,7 @@ export default function StepConfirm({ data, onBack }: Props) {
               Confirming…
             </span>
           ) : (
-            "Confirm Booking ✓"
+            msg(booking, "confirm", "submit_btn")
           )}
         </button>
       </div>

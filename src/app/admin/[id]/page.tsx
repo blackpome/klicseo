@@ -7,7 +7,9 @@ import LeadNotesEditor from "./LeadNotesEditor";
 import DeleteLeadButton from "./DeleteLeadButton";
 import { getLead } from "@/lib/leads";
 import { LEAD_STATUS_COLOR } from "@/lib/leads-shared";
-import { ArrowLeft, Phone, MapPin, User, Car, Calendar, Sunrise, Sunset, Sparkles, Pencil } from "lucide-react";
+import { getCustomerPayments } from "@/lib/payments";
+import { inr } from "@/lib/pricing";
+import { ArrowLeft, Phone, MapPin, User, Car, Calendar, Sunrise, Sunset, Sparkles, Pencil, Wallet } from "lucide-react";
 
 const STATUS_COLOR = LEAD_STATUS_COLOR;
 
@@ -58,6 +60,8 @@ export default async function LeadDetailPage({
     );
   }
   if (!lead) notFound();
+
+  const paymentHistory = await getCustomerPayments(id).catch(() => []);
 
   const ShiftIcon = lead.shift === "morning" ? Sunrise : Sunset;
   const shiftLabel =
@@ -206,6 +210,40 @@ export default async function LeadDetailPage({
           />
           <Field label="Callback date" value={fmt(lead.callback_date)} />
           <Field label="Callback time" value={fmt(lead.callback_time)} />
+        </Section>
+
+        {lead.custom_fields && Object.keys(lead.custom_fields).length > 0 && (
+          <Section title="Additional details" icon={Sparkles}>
+            {Object.entries(lead.custom_fields).map(([label, value]) => (
+              <Field key={label} label={label} value={fmt(value)} />
+            ))}
+          </Section>
+        )}
+
+        <Section title="Payments" icon={Wallet}>
+          {paymentHistory.length === 0 ? (
+            <p className="text-sm text-white/40 py-1">
+              No payments recorded.{" "}
+              <Link href="/admin/payments" className="text-[#C9A84C] hover:underline">Open payment tracker →</Link>
+            </p>
+          ) : (
+            <div className="space-y-1.5 py-1">
+              {paymentHistory.map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-3 text-sm border-b border-white/5 pb-1.5 last:border-0">
+                  <span className="text-white/70">{p.period}</span>
+                  <span className="text-white/50 text-xs">
+                    {p.amount != null ? inr(p.amount) : "—"}
+                    {p.method ? ` · ${p.method.toUpperCase()}` : ""}
+                    {p.paid_at ? ` · ${p.paid_at}` : ""}
+                  </span>
+                  <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${p.status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>
+                    {p.status}
+                  </span>
+                </div>
+              ))}
+              <Link href="/admin/payments" className="inline-block text-[#C9A84C] text-xs hover:underline mt-1">Open payment tracker →</Link>
+            </div>
+          )}
         </Section>
 
         <Section title="Internal notes" icon={User}>

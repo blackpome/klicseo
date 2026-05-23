@@ -16,6 +16,9 @@ import {
 } from "@/lib/pricing";
 import { carPriceFor } from "@/lib/carPricing";
 import { useServiceDiscounts, useBadges } from "@/components/DiscountContext";
+import { useSiteSettings } from "@/components/SiteSettingsContext";
+import { stepCopy, msg } from "@/lib/site-settings-shared";
+import CustomFields from "./CustomFields";
 
 const optionToPkg: Record<string, BookingData["pkg"]> = {
   Monthly:           "Daily",
@@ -46,6 +49,8 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
   // the car was entered manually / not found — then we show the call-back note.
   const discounts = useServiceDiscounts();
   const badges = useBadges();
+  const booking = useSiteSettings().booking;
+  const packageTitle = stepCopy(booking, "package").title;
   const cp = data.carPrices;
   function optPrice(id: string, withAddOn = false) {
     if (!cp || !isServiceOptionId(id)) return null;
@@ -80,7 +85,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
   return (
     <div>
       <h2 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
-        Your Package
+        {packageTitle}
       </h2>
       <p className="text-white/45 text-sm mb-3">
         {cp && carLabel
@@ -278,6 +283,8 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
         </p>
       )}
 
+      <CustomFields stepKey="package" data={data} update={update} />
+
       <div className="flex gap-3">
         <button
           onClick={onBack}
@@ -290,7 +297,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
           className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
           style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
         >
-          Review Booking →
+          {msg(booking, "package", "continue")}
         </button>
       </div>
     </div>

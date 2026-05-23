@@ -11,12 +11,15 @@ import {
 } from "lucide-react";
 import type { BookingData } from "./BookingWizard";
 import { CATEGORY_COLORS } from "@/lib/pricing";
+import { useSiteSettings } from "@/components/SiteSettingsContext";
+import { stepCopy, builtinCfg, msg } from "@/lib/site-settings-shared";
 import {
   BUSINESS_LOCATION,
   SUPPORT_PHONE,
   haversineKm,
   radiusForService,
 } from "@/lib/serviceability";
+import CustomFields from "./CustomFields";
 
 // Detect the user's platform so the recovery instructions match the menus
 // Short, plain instruction. We can't open OS settings from the web, so just
@@ -36,6 +39,11 @@ type CheckState =
   | { status: "done"; distanceKm: number };
 
 export default function StepVehicle({ data, update, onNext, onBack }: Props) {
+  const booking = useSiteSettings().booking;
+  const copy = stepCopy(booking, "location");
+  const locCfg = builtinCfg(booking, "location", "locationCheck");
+  const pinCfg = builtinCfg(booking, "location", "pincode");
+  const addrCfg = builtinCfg(booking, "location", "address");
   const pin = data.pincode.trim();
   const pinLooksComplete = /^\d{6}$/.test(pin);
   const radiusKm = radiusForService(data.service);
@@ -110,11 +118,16 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
   // not let the user continue without it.
   const locationChecked = check.status === "done";
   const addressValid = data.address.trim().length >= 8;
-  const valid = locationChecked && pinLooksComplete && addressValid;
 
-  const errLocation = attempted && !locationChecked;
-  const errPin      = attempted && !pinLooksComplete;
-  const errAddress  = attempted && !addressValid;
+  // A built-in field only blocks progress when it's both enabled and required.
+  const locOk  = !locCfg.enabled  || !locCfg.required  || locationChecked;
+  const pinOk  = !pinCfg.enabled  || !pinCfg.required  || pinLooksComplete;
+  const addrOk = !addrCfg.enabled || !addrCfg.required || addressValid;
+  const valid = locOk && pinOk && addrOk;
+
+  const errLocation = attempted && locCfg.enabled  && locCfg.required  && !locationChecked;
+  const errPin      = attempted && pinCfg.enabled  && pinCfg.required  && !pinLooksComplete;
+  const errAddress  = attempted && addrCfg.enabled && addrCfg.required && !addressValid;
 
   function handleContinue() {
     if (valid) {
@@ -128,13 +141,15 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
   return (
     <div>
       <h2 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
-        Your Location
+        {copy.title}
       </h2>
-      <p className="text-white/45 text-sm mb-4">Our team will come to you — where should we head?</p>
+      <p className="text-white/45 text-sm mb-4">{copy.subtitle}</p>
 
-      {/* Serviceability check — required to proceed */}
+      {/* Serviceability check */}
+      {locCfg.enabled && (
+      <>
       <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-        Availability Check *
+        {msg(booking, "location", "avail_label")}{locCfg.required && " *"}
       </p>
       <button
         type="button"
@@ -155,19 +170,19 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
         {geoLoading
           ? "Locating…"
           : check.status === "idle" && !geoError
-          ? "Check availability with my location"
+          ? msg(booking, "location", "locate_btn")
           : "Re-check using my location"}
       </button>
       {!locationChecked && !geoLoading && !geoError && (
         <p className={`text-[11px] mt-2 ${errLocation ? "text-red-300" : "text-white/40"}`}>
-          Required — we use your location only to confirm we serve your area. Tap above to allow.
+          {msg(booking, "location", "avail_hint")}
         </p>
       )}
 
       {check.status === "done" && check.distanceKm <= radiusKm && (
         <p className="flex items-center gap-1.5 text-[11px] mt-2" style={{ color: accent }}>
           <CheckCircle size={12} className="flex-shrink-0" />
-          Great news — service is available in your area.
+          {msg(booking, "location", "avail_ok")}
         </p>
       )}
       {check.status === "done" && check.distanceKm > radiusKm && (
@@ -177,7 +192,7 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
         >
           <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
           <span>
-            Your location looks outside our current service area for this service.
+            {msg(booking, "location", "avail_out")}{" "}
             Please call us at{" "}
             <a href={`tel:${SUPPORT_PHONE.replace(/\s|\(|\)|-/g, "")}`} className="underline font-semibold">
               {SUPPORT_PHONE}
@@ -205,11 +220,14 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
       )}
 
       <div className="h-px bg-white/5 my-5" />
+      </>
+      )}
 
       {/* Pincode — collected, not used for the check */}
+      {pinCfg.enabled && (
       <div className="mb-4">
         <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-          <Hash size={10} className="inline mr-1" /> Pincode / Postcode *
+          <Hash size={10} className="inline mr-1" /> {msg(booking, "location", "pincode_label")}{pinCfg.required && " *"}
         </label>
         <input
           type="text"
@@ -234,11 +252,13 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
         />
         {errPin && <p className="text-[11px] text-red-300 mt-1">Enter a 6-digit pincode.</p>}
       </div>
+      )}
 
       {/* Address */}
+      {addrCfg.enabled && (
       <div className="mb-6">
         <label className="block text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-2">
-          <MapPin size={10} className="inline mr-1" /> Full Address *
+          <MapPin size={10} className="inline mr-1" /> {msg(booking, "location", "address_label")}{addrCfg.required && " *"}
         </label>
         <textarea
           rows={3}
@@ -261,12 +281,15 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
         />
         {errAddress && <p className="text-[11px] text-red-300 mt-1">Please enter your full address (at least 8 characters).</p>}
       </div>
+      )}
 
       {attempted && !valid && (
         <p className="text-[12px] text-red-300 text-center mb-3">
           Please complete the highlighted fields above.
         </p>
       )}
+
+      <CustomFields stepKey="location" data={data} update={update} />
 
       <div className="flex gap-3">
         <button
@@ -280,7 +303,7 @@ export default function StepVehicle({ data, update, onNext, onBack }: Props) {
           className="flex-[2] py-4 rounded-xl font-bold text-sm text-[#050E21] transition-all duration-300 active:scale-[0.98]"
           style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
         >
-          Continue →
+          {msg(booking, "location", "continue")}
         </button>
       </div>
     </div>

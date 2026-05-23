@@ -1,13 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { ChevronDown, Star, Shield, Clock, Flame } from "lucide-react";
+import { ChevronDown, Star, Shield, Clock } from "lucide-react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import BubbleParticles from "./BubbleParticles";
 import Magnetic from "./Magnetic";
 import AnimatedHeading from "./AnimatedHeading";
 import { useSiteSettings } from "./SiteSettingsContext";
+import { resolveMedia } from "@/lib/site-settings-shared";
 
 const stats = [
   { value: "2,500+", label: "Cars Washed" },
@@ -17,23 +18,17 @@ const stats = [
 
 // Hero background plays these in sequence, looping back to the first when the
 // last finishes. Files live in /public.
-const HERO_VIDEOS = ["/car-detail-1.mp4", "/car-detail-2.mp4"];
-
 export default function Hero() {
-  const { startPrice } = useSiteSettings();
-  // Both clips are mounted permanently; we just swap which one is active.
-  // The inactive video stays paused at frame 0 with the file already cached,
-  // so play() returns within a frame or two — seamless handoff, no black gap
-  // and no remount cost.
-  const videoRefs = useRef<Array<HTMLVideoElement | null>>([null, null]);
-  const [activeIdx, setActiveIdx] = useState(0);
+  const { startPrice, media } = useSiteSettings();
+  const hero = resolveMedia(media, "heroVideo");
+  const heroSrc = hero.url;
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Kick off the first clip. Other browser autoplay rules require muted +
-  // playsInline (set on the elements below). On iOS Safari the autoPlay
-  // attribute usually does it, but if not we retry on the very first user
-  // interaction so the dirt→clean reveal still plays for mobile visitors.
+  // Kick off autoplay. Browser autoplay rules require muted + playsInline (set
+  // on the element below). On iOS Safari, if autoPlay doesn't fire we retry on
+  // the first user interaction so the dirt→clean reveal still plays on mobile.
   useEffect(() => {
-    const v = videoRefs.current[0];
+    const v = videoRef.current;
     if (!v) return;
     const tryPlay = () => v.play().catch(() => {});
     tryPlay();
@@ -44,19 +39,7 @@ export default function Hero() {
       window.removeEventListener("touchstart", onInteract);
       window.removeEventListener("scroll", onInteract);
     };
-  }, []);
-
-  const handleEnded = (justEndedIdx: number) => {
-    const nextIdx = (justEndedIdx + 1) % HERO_VIDEOS.length;
-    const ended = videoRefs.current[justEndedIdx];
-    const next = videoRefs.current[nextIdx];
-    if (ended) ended.currentTime = 0; // rewind so it's ready when its turn returns
-    if (next) {
-      next.currentTime = 0;
-      next.play().catch(() => {});
-    }
-    setActiveIdx(nextIdx);
-  };
+  }, [heroSrc]);
 
   // Mouse parallax — drives logo & orbs with subtle depth
   const mx = useMotionValue(0);
@@ -90,39 +73,39 @@ export default function Hero() {
       {/* Backgrounds */}
       <div className="absolute inset-0 bg-[#050E21]" />
 
-      {/* Cinematic detailing video — both clips stay mounted, only one plays
-          and is visible at a time. Swap is a 600ms crossfade rather than a
-          hard cut, so the handoff feels continuous instead of edited. */}
+      {/* Cinematic detailing video — a single looping clip (managed in admin). */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 1.4, ease: "easeOut" }}
         className="absolute inset-0 pointer-events-none"
       >
-        {HERO_VIDEOS.map((src, i) => (
+        {hero.type === "image" ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={heroSrc} src={heroSrc} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
           <video
-            key={src}
+            key={heroSrc}
             ref={(el) => {
-              videoRefs.current[i] = el;
-              // iOS Safari only honours autoplay if `muted` is the DOM
-              // *property* (not just the attribute React sets via JSX).
+              videoRef.current = el;
+              // iOS Safari only honours autoplay if `muted` is the DOM *property*
+              // (not just the attribute React sets via JSX).
               if (el) {
                 el.muted = true;
                 el.defaultMuted = true;
               }
             }}
-            src={src}
+            src={heroSrc}
             muted
-            autoPlay={i === 0}
+            loop
+            autoPlay
             playsInline
             webkit-playsinline="true"
             preload="auto"
-            onEnded={() => handleEnded(i)}
             aria-hidden
-            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out"
-            style={{ opacity: i === activeIdx ? 1 : 0 }}
+            className="absolute inset-0 w-full h-full object-cover"
           />
-        ))}
+        )}
       </motion.div>
 
       {/* Top + bottom vignette: a moody dark band at the very top and bottom
