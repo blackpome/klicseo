@@ -1,16 +1,28 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import FlagToggle from "./FlagToggle";
 import { Check, AlertCircle } from "lucide-react";
 import { saveBookingAction } from "./actions";
-import { BOOKING_STEP_DEFS, MESSAGE_DEFS, type BookingConfig } from "@/lib/site-settings-shared";
+import { BOOKING_STEP_DEFS, MESSAGE_DEFS, STEP_FLAG_DEFS, flag, type BookingConfig, type ServiceRadius } from "@/lib/site-settings-shared";
+import type { ServiceCatalog } from "@/lib/serviceCatalog-shared";
 import FieldBuilder from "./FieldBuilder";
 import BuiltinToggles from "./BuiltinToggles";
 import ResetStepButton from "./ResetStepButton";
+import RadiusControls from "./RadiusControls";
+import ServicesEditor from "./ServicesEditor";
 
 const input = "w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C]";
 
-export default function BookingForm({ current }: { current: BookingConfig }) {
+export default function BookingForm({
+  current,
+  serviceRadius,
+  catalog,
+}: {
+  current: BookingConfig;
+  serviceRadius: ServiceRadius;
+  catalog: ServiceCatalog;
+}) {
   const [state, action, pending] = useActionState(saveBookingAction, {} as { error?: string; ok?: string });
   const [active, setActive] = useState(BOOKING_STEP_DEFS[0].key);
 
@@ -87,6 +99,31 @@ export default function BookingForm({ current }: { current: BookingConfig }) {
             )}
 
             <BuiltinToggles stepKey={s.key} booking={current} />
+
+            {(STEP_FLAG_DEFS[s.key] ?? []).length > 0 && (
+              <div className="border-t border-white/5 pt-3 space-y-2">
+                <span className="text-[11px] uppercase tracking-wider text-white/45">Display options</span>
+                {(STEP_FLAG_DEFS[s.key] ?? []).map((f) => (
+                  <FlagToggle
+                    key={f.key}
+                    name={`step_${s.key}_flag_${f.key}`}
+                    label={f.label}
+                    help={f.help}
+                    defaultOn={flag(current, s.key, f.key)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Step-1 only: edit service categories + sub-categories. */}
+            {s.key === "contact" && <ServicesEditor catalog={catalog} />}
+
+            {/* Step-3 only: service-area radius is part of the location step. */}
+            {s.key === "location" && (
+              <div className="border-t border-white/5 pt-3">
+                <RadiusControls initial={serviceRadius} />
+              </div>
+            )}
 
             <div className="border-t border-white/5 pt-3">
               <FieldBuilder stepKey={s.key} initial={cur?.fields ?? []} />

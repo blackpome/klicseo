@@ -12,12 +12,11 @@ import {
 import type { BookingData } from "./BookingWizard";
 import { CATEGORY_COLORS } from "@/lib/pricing";
 import { useSiteSettings } from "@/components/SiteSettingsContext";
-import { stepCopy, builtinCfg, msg } from "@/lib/site-settings-shared";
+import { stepCopy, builtinCfg, msg, radiusFor } from "@/lib/site-settings-shared";
 import {
   BUSINESS_LOCATION,
   SUPPORT_PHONE,
   haversineKm,
-  radiusForService,
 } from "@/lib/serviceability";
 import CustomFields from "./CustomFields";
 
@@ -39,14 +38,15 @@ type CheckState =
   | { status: "done"; distanceKm: number };
 
 export default function StepVehicle({ data, update, onNext, onBack }: Props) {
-  const booking = useSiteSettings().booking;
+  const settings = useSiteSettings();
+  const booking = settings.booking;
   const copy = stepCopy(booking, "location");
   const locCfg = builtinCfg(booking, "location", "locationCheck");
   const pinCfg = builtinCfg(booking, "location", "pincode");
   const addrCfg = builtinCfg(booking, "location", "address");
   const pin = data.pincode.trim();
   const pinLooksComplete = /^\d{6}$/.test(pin);
-  const radiusKm = radiusForService(data.service);
+  const radiusKm = radiusFor(settings.serviceRadius, data.service);
 
   // Borders / selected-state tints follow the category color picked in Step 1
   // (blue for CarWash, green for CarDetailing, pink for OneTimeCarWash).

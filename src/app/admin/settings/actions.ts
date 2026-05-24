@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { currentAdmin } from "@/lib/admin-auth";
-import { setSiteSettings, uploadSiteMedia, resetSiteMedia, isMediaKey } from "@/lib/site-settings";
+import { setSiteSettings, uploadSiteMedia, resetSiteMedia, isMediaKey, getSiteSettings } from "@/lib/site-settings";
 import { CARD_DEFS, type CardPrices } from "@/lib/card-prices-shared";
 import { SOCIAL_PLATFORMS, type SocialLinks } from "@/lib/site-settings-shared";
 import { logAudit } from "@/lib/audit";
@@ -45,8 +45,21 @@ export async function saveSiteSettingsAction(
       };
     }
 
+    const beforeSettings = await getSiteSettings();
+    const before = {
+      startPrice: beforeSettings.startPrice,
+      phone: beforeSettings.phone,
+      whatsapp: beforeSettings.whatsapp,
+      cardPrices: beforeSettings.cardPrices,
+      social: beforeSettings.social,
+    };
     await setSiteSettings({ startPrice, phone, whatsapp, cardPrices, social });
-    await logAudit("settings.save", { entity: "settings", summary: "Updated site settings" });
+    await logAudit("settings.save", {
+      entity: "settings",
+      summary: "Updated site settings",
+      before: before as unknown as Record<string, unknown>,
+      after: { startPrice, phone, whatsapp, cardPrices, social } as unknown as Record<string, unknown>,
+    });
     revalidatePath("/", "layout");
     revalidatePath("/admin/settings");
     return { ok: "Saved." };

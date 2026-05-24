@@ -3,8 +3,10 @@
 import { useActionState, useState } from "react";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, Check, AlertCircle, Users, X } from "lucide-react";
-import { ALL_PRICE_LINES, PRICE_LINE_GROUPS, PRICE_LINE_LABEL, inr, type PriceLine } from "@/lib/pricing";
-import type { PriceTier } from "@/lib/priceTiers-shared";
+import { inr, type PriceLine } from "@/lib/pricing";
+import { PRICE_LINE_LABEL } from "@/lib/pricing";
+import type { LineAmounts, PriceTier } from "@/lib/priceTiers-shared";
+import type { ServiceCatalog } from "@/lib/serviceCatalog-shared";
 import { createTierAction, updateTierAction, deleteTierAction } from "./actions";
 
 // Compact preview shown when a tier row is collapsed.
@@ -14,7 +16,17 @@ function priceVal(v: number | null) {
   return v == null ? "" : String(v);
 }
 
-export default function TiersBoard({ tiers, unassignedCount }: { tiers: PriceTier[]; unassignedCount: number }) {
+export default function TiersBoard({
+  tiers,
+  unassignedCount,
+  catalog,
+  amountsByTier,
+}: {
+  tiers: PriceTier[];
+  unassignedCount: number;
+  catalog: ServiceCatalog;
+  amountsByTier: Record<string, LineAmounts>;
+}) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -44,7 +56,7 @@ export default function TiersBoard({ tiers, unassignedCount }: { tiers: PriceTie
         )}
       </div>
 
-      {adding && <NewTierForm onClose={() => setAdding(false)} />}
+      {adding && <NewTierForm catalog={catalog} onClose={() => setAdding(false)} />}
 
       {tiers.length === 0 && !adding ? (
         <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-white/40">
@@ -56,6 +68,8 @@ export default function TiersBoard({ tiers, unassignedCount }: { tiers: PriceTie
             <TierRow
               key={t.id}
               tier={t}
+              catalog={catalog}
+              amounts={amountsByTier[t.id] ?? {}}
               editing={editingId === t.id}
               onEdit={() => setEditingId(t.id)}
               onClose={() => setEditingId(null)}
@@ -69,8 +83,8 @@ export default function TiersBoard({ tiers, unassignedCount }: { tiers: PriceTie
 
 // ----- Row ----------------------------------------------------------------
 
-function TierRow({ tier, editing, onEdit, onClose }: { tier: PriceTier; editing: boolean; onEdit: () => void; onClose: () => void }) {
-  if (editing) return <TierEditor tier={tier} onClose={onClose} />;
+function TierRow({ tier, catalog, amounts, editing, onEdit, onClose }: { tier: PriceTier; catalog: ServiceCatalog; amounts: LineAmounts; editing: boolean; onEdit: () => void; onClose: () => void }) {
+  if (editing) return <TierEditor tier={tier} catalog={catalog} amounts={amounts} onClose={onClose} />;
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
@@ -116,7 +130,7 @@ function TierRow({ tier, editing, onEdit, onClose }: { tier: PriceTier; editing:
 
 // ----- Editor (existing tier) --------------------------------------------
 
-function TierEditor({ tier, onClose }: { tier: PriceTier; onClose: () => void }) {
+function TierEditor({ tier, catalog, amounts, onClose }: { tier: PriceTier; catalog: ServiceCatalog; amounts: LineAmounts; onClose: () => void }) {
   const [state, action, pending] = useActionState(updateTierAction, {} as { error?: string; ok?: string });
 
   return (
@@ -138,7 +152,7 @@ function TierEditor({ tier, onClose }: { tier: PriceTier; onClose: () => void })
         </div>
       </div>
 
-      <PriceGrid defaults={tier} />
+      <PriceGrid catalog={catalog} amounts={amounts} />
 
       <div className="flex items-center gap-3 text-[12px]">
         {state.ok && <span className="inline-flex items-center gap-1 text-emerald-300"><Check size={13} /> {state.ok}</span>}
@@ -151,7 +165,7 @@ function TierEditor({ tier, onClose }: { tier: PriceTier; onClose: () => void })
 
 // ----- New tier form ------------------------------------------------------
 
-function NewTierForm({ onClose }: { onClose: () => void }) {
+function NewTierForm({ catalog, onClose }: { catalog: ServiceCatalog; onClose: () => void }) {
   const [state, action, pending] = useActionState(createTierAction, {} as { error?: string });
   return (
     <form action={action} className="rounded-2xl border border-[#C9A84C]/30 bg-[#C9A84C]/[0.06] p-4 space-y-3">
@@ -169,7 +183,7 @@ function NewTierForm({ onClose }: { onClose: () => void }) {
           <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-white/50 hover:bg-white/10"><X size={14} /></button>
         </div>
       </div>
-      <PriceGrid />
+      <PriceGrid catalog={catalog} amounts={{}} />
       {state.error && <p className="text-[12px] text-red-300 inline-flex items-center gap-1"><AlertCircle size={13} /> {state.error}</p>}
     </form>
   );
@@ -177,34 +191,55 @@ function NewTierForm({ onClose }: { onClose: () => void }) {
 
 // ----- Shared 9-price grid ------------------------------------------------
 
-function PriceGrid({ defaults }: { defaults?: Partial<Record<PriceLine, number | null>> }) {
+/**
+ * Catalog-driven price grid. Renders one input per price line in the catalog,
+ * grouped by category. Inputs are keyed `line_<line_id>` — the same key the
+ * server action uses to upsert into price_tier_amounts — so brand-new lines
+ * created via the Services editor become priceable here automatically.
+ */
+function PriceGrid({
+  catalog,
+  amounts,
+}: {
+  catalog: ServiceCatalog;
+  amounts: LineAmounts;
+}) {
   return (
     <div className="space-y-2">
-      {PRICE_LINE_GROUPS.map((group) => (
-        <div key={group.category}>
-          <p className="text-[10px] uppercase tracking-wider text-white/35 mb-1">{group.title}</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {group.lines.map((line) => (
-              <label key={line} className="block">
-                <span className="text-[10px] text-white/45 block truncate">{PRICE_LINE_LABEL[line]}</span>
-                <div className="mt-0.5 flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-[#C9A84C] overflow-hidden">
-                  <span className="pl-2 text-xs text-white/40">₹</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    name={line}
-                    defaultValue={priceVal(defaults?.[line] ?? null)}
-                    placeholder="—"
-                    className="w-full bg-transparent px-1.5 py-1.5 text-sm focus:outline-none"
-                  />
-                </div>
-              </label>
-            ))}
+      {catalog.categories.map((cat) => {
+        const lines = catalog.priceLines
+          .filter((l) => l.category_id === cat.id)
+          .sort((a, b) => a.sort_order - b.sort_order);
+        if (lines.length === 0) return null;
+        return (
+          <div key={cat.id}>
+            <p className="text-[10px] uppercase tracking-wider text-white/35 mb-1">{cat.label}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {lines.map((l) => {
+                // Prefer the catalog label; if a legacy line was renamed-away, fall back to its constant.
+                const legacy = l.legacy_line as PriceLine | undefined;
+                const label = l.label || (legacy ? PRICE_LINE_LABEL[legacy] : "—");
+                return (
+                  <label key={l.id} className="block">
+                    <span className="text-[10px] text-white/45 block truncate">{label}</span>
+                    <div className="mt-0.5 flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-[#C9A84C] overflow-hidden">
+                      <span className="pl-2 text-xs text-white/40">₹</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        name={`line_${l.id}`}
+                        defaultValue={priceVal(amounts[l.id] ?? null)}
+                        placeholder="—"
+                        className="w-full bg-transparent px-1.5 py-1.5 text-sm focus:outline-none"
+                      />
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
-      {/* Sanity: ensure every PriceLine has an input so updateTier patch is complete. */}
-      {ALL_PRICE_LINES.every((l) => PRICE_LINE_GROUPS.some((g) => g.lines.includes(l))) ? null : null}
+        );
+      })}
     </div>
   );
 }

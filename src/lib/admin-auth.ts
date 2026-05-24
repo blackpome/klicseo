@@ -132,12 +132,29 @@ export async function destroyAdminSession(): Promise<void> {
 }
 
 // Resolve the current admin from the session cookie. Re-checks the allowlist on
-// every call (deduped per-request via React cache) so revoked users are kicked
-// out on their next request rather than waiting for the cookie to expire.
+// every call (deduped per-request via React cache) so revoked / force-logged-
+// out users are kicked out on their next request rather than waiting for the
+// cookie to expire.
 export const currentAdmin = cache(async (): Promise<AdminPrincipal | null> => {
   const jar = await cookies();
   const parsed = parseToken(jar.get(COOKIE_NAME)?.value);
   if (!parsed?.valid || !parsed.email) return null;
+
+  // Reject the session if a force-logout was issued after this cookie was
+  // minted. Cookie's "issued at" = expiry - SESSION_TTL_MS.
+  try {
+    const { getAdminUser } = await import("./admin-users");
+    const row = await getAdminUser(parsed.email);
+    const cutoff = row?.signed_out_after ? Date.parse(row.signed_out_after) : 0;
+    if (cutoff > 0) {
+      const issuedAt = parsed.expiry - SESSION_TTL_MS;
+      if (issuedAt < cutoff) return null;
+    }
+  } catch {
+    // If the lookup fails we fall through to the standard allowlist check
+    // rather than locking everyone out.
+  }
+
   return resolvePrincipal(parsed.email);
 });
 

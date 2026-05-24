@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AdminShell from "./AdminShell";
 import AdminError from "./AdminError";
 import { listLeads } from "@/lib/leads";
+import { listAreasWithCounts } from "@/lib/area";
 import { LEAD_STATUSES, LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type LeadStatus } from "@/lib/leads-shared";
 import { currentAdmin } from "@/lib/admin-auth";
 import LeadStatusControl from "./LeadStatusControl";
@@ -14,10 +15,19 @@ const STATUS_TABS: { id: LeadStatus | "all"; label: string }[] = [
 
 const STATUS_COLOR = LEAD_STATUS_COLOR;
 
+function buildLeadsHref(args: { status: LeadStatus | "all"; q?: string; area?: string }): string {
+  const params = new URLSearchParams();
+  if (args.status !== "all") params.set("status", args.status);
+  if (args.q) params.set("q", args.q);
+  if (args.area) params.set("area", args.area);
+  const s = params.toString();
+  return `/admin${s ? `?${s}` : ""}`;
+}
+
 export default async function AdminLeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; area?: string }>;
 }) {
   // Leads is the default landing page. Route users who can't see leads to a
   // section they can, so they don't hit a dead "no access" screen on sign-in.
@@ -27,12 +37,17 @@ export default async function AdminLeadsPage({
     if (me.role === "super_admin" || me.role === "admin") redirect("/admin/access");
   }
 
-  const { status, q } = await searchParams;
+  const { status, q, area } = await searchParams;
   const filter = (STATUS_TABS.find((t) => t.id === status)?.id ?? "all") as LeadStatus | "all";
+  const areaFilter = area && area !== "all" ? area : undefined;
 
   let leads;
+  let areaCounts: { area: string; count: number }[] = [];
   try {
-    leads = await listLeads({ status: filter, search: q });
+    [leads, areaCounts] = await Promise.all([
+      listLeads({ status: filter, search: q, area: areaFilter }),
+      listAreasWithCounts(),
+    ]);
   } catch (err) {
     return (
       <AdminShell require="leads.view">
@@ -57,21 +72,24 @@ export default async function AdminLeadsPage({
         </div>
         <form className="flex gap-2 items-center">
           {filter !== "all" && <input type="hidden" name="status" value={filter} />}
+          {areaFilter && <input type="hidden" name="area" value={areaFilter} />}
           <input
             type="search"
             name="q"
             defaultValue={q ?? ""}
-            placeholder="Search name, phone, car #, model, address, service…"
+            placeholder="Search name, area, phone, car #, model…"
             className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C]"
           />
           <button className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15">Search</button>
         </form>
       </div>
 
-      <div className="flex gap-2 mb-4 flex-wrap">
+      {/* Build a URL preserving the current status/search/area params, with
+          one of them overridden. Centralised so the pill bars don't drift. */}
+      <div className="flex gap-2 mb-3 flex-wrap">
         {STATUS_TABS.map((t) => {
           const active = filter === t.id;
-          const href = `/admin${t.id === "all" ? "" : `?status=${t.id}`}${q ? `${t.id === "all" ? "?" : "&"}q=${encodeURIComponent(q)}` : ""}`;
+          const href = buildLeadsHref({ status: t.id, q, area: areaFilter });
           return (
             <Link
               key={t.id}
@@ -85,6 +103,34 @@ export default async function AdminLeadsPage({
           );
         })}
       </div>
+
+      {areaCounts.length > 0 && (
+        <div className="flex gap-2 mb-4 flex-wrap items-center">
+          <span className="text-[10px] uppercase tracking-wider text-white/35 mr-1">Area</span>
+          <Link
+            href={buildLeadsHref({ status: filter, q, area: undefined })}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+              !areaFilter ? "bg-white/15 text-white" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+            }`}
+          >
+            All <span className="text-white/35">·</span> {areaCounts.reduce((n, a) => n + a.count, 0)}
+          </Link>
+          {areaCounts.slice(0, 20).map((a) => {
+            const active = areaFilter === a.area;
+            return (
+              <Link
+                key={a.area}
+                href={buildLeadsHref({ status: filter, q, area: a.area })}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                  active ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+                }`}
+              >
+                {a.area} <span className={active ? "text-[#050E21]/60" : "text-white/35"}>{a.count}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       {leads.length === 0 ? (
         <div className="text-center py-16 text-white/40 text-sm">No leads match this filter yet.</div>

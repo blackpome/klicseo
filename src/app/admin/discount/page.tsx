@@ -1,10 +1,26 @@
 import { redirect } from "next/navigation";
-import { Tag } from "lucide-react";
+import { Tag, Info } from "lucide-react";
 import AdminShell from "../AdminShell";
 import { currentAdmin } from "@/lib/admin-auth";
 import { getDiscountConfig } from "@/lib/discounts";
-import { PRICE_LINE_GROUPS } from "@/lib/pricing";
+import { getServiceCatalog } from "@/lib/serviceCatalog";
+import { type PriceLine } from "@/lib/pricing";
+import type { CatalogCategory, CatalogPriceLine } from "@/lib/serviceCatalog-shared";
 import DiscountRow from "./DiscountRow";
+
+// Hatchback-tier sample prices used in the preview pill. Keyed by legacy_line
+// so renames in the Services editor don't change the preview numbers.
+const SAMPLE_BASE: Record<PriceLine, number> = {
+  monthly: 999,
+  weekly_thrice: 649,
+  outside_monthly: 1199,
+  outside_weekly_thrice: 749,
+  one_time_manual: 249,
+  one_time_machine: 399,
+  interior: 149,
+  car_detailing: 4999,
+  interior_detailing: 1999,
+};
 
 export default async function DiscountPage() {
   const me = await currentAdmin();
@@ -20,7 +36,19 @@ export default async function DiscountPage() {
     );
   }
 
-  const { percents, badges } = await getDiscountConfig();
+  const [{ percentsByLineId, badgesByLineId }, catalog] = await Promise.all([
+    getDiscountConfig(),
+    getServiceCatalog(),
+  ]);
+
+  // Every catalog line is shown — legacy or admin-created. Migration 0022
+  // ensures a service_discounts row exists for every line via trigger.
+  const groups = catalog.categories.map((cat: CatalogCategory) => {
+    const lines = catalog.priceLines
+      .filter((l) => l.category_id === cat.id)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    return { cat, lines };
+  });
 
   return (
     <AdminShell>
@@ -40,21 +68,47 @@ export default async function DiscountPage() {
           </div>
         </div>
 
-        {PRICE_LINE_GROUPS.map((group) => (
-          <div key={group.category} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-white/50 mb-1">{group.title}</h2>
-            <div>
-              {group.lines.map((line) => (
-                <DiscountRow key={line} line={line} current={percents[line] ?? 0} badge={badges[line] ?? true} />
-              ))}
+        {groups.map(({ cat, lines }: { cat: CatalogCategory; lines: CatalogPriceLine[] }) => {
+          if (lines.length === 0) return null;
+          return (
+            <div key={cat.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-white/50">{cat.label}</h2>
+                {!cat.enabled && (
+                  <span className="text-[10px] text-white/35 px-1.5 py-0.5 rounded bg-white/5 ring-1 ring-white/10">hidden</span>
+                )}
+              </div>
+              <div>
+                {lines.map((l) => {
+                  // Use the legacy sample price when this line has one; new
+                  // admin-created lines fall back to a flat ₹999 sample for
+                  // the percentage preview.
+                  const legacy = l.legacy_line as PriceLine | null;
+                  const sample = legacy && SAMPLE_BASE[legacy] != null ? SAMPLE_BASE[legacy] : 999;
+                  return (
+                    <DiscountRow
+                      key={l.id}
+                      lineId={l.id}
+                      label={l.label}
+                      sample={sample}
+                      current={percentsByLineId[l.id] ?? 0}
+                      badge={badgesByLineId[l.id] ?? true}
+                    />
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
-        <p className="text-[11px] text-white/30">
-          The toggle shows/hides that line’s “% OFF” badge on the site (the discount still applies to the price).
-          Sample prices are Hatchback-tier, only to preview the percentage.
-        </p>
+        <div className="flex items-start gap-2 rounded-lg border border-[#C9A84C]/20 bg-[#C9A84C]/[0.05] p-2.5 text-[11px] text-white/60 max-w-2xl">
+          <Info size={12} className="text-[#C9A84C] shrink-0 mt-0.5" />
+          <p>
+            Line names come from the Services editor (Booking → Step 1). Rename a sub-category there and it&apos;ll
+            appear here. The toggle shows/hides that line&apos;s &ldquo;% OFF&rdquo; badge on the site — the discount still
+            applies to the price even when the badge is off.
+          </p>
+        </div>
       </div>
     </AdminShell>
   );

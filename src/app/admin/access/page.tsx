@@ -6,6 +6,10 @@ import UserTable from "./UserTable";
 import { currentAdmin } from "@/lib/admin-auth";
 import { listAdminUsers, type AdminUserRow } from "@/lib/admin-users";
 
+// Always render fresh — admin actions on this page (invite/revoke/force-logout)
+// mutate the allowlist and the UI needs to reflect the new state instantly.
+export const dynamic = "force-dynamic";
+
 export default async function AccessPage() {
   const me = await currentAdmin();
   if (!me) redirect("/admin/login");

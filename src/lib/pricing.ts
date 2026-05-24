@@ -38,6 +38,22 @@ export const ZERO_DISCOUNTS: ServiceDiscounts = {
   car_detailing: 0, interior_detailing: 0,
 };
 
+/**
+ * The badge toggle is the master switch for a line's discount: when it's off,
+ * the line's discount is treated as 0 across both display and charged price.
+ * Use this anywhere you read discounts for actual pricing.
+ */
+export function effectiveDiscounts(
+  percents: ServiceDiscounts,
+  badges: Partial<Record<PriceLine, boolean>>,
+): ServiceDiscounts {
+  const out = { ...ZERO_DISCOUNTS };
+  for (const line of ALL_PRICE_LINES) {
+    out[line] = badges[line] === false ? 0 : percents[line] ?? 0;
+  }
+  return out;
+}
+
 export const PRICE_LINE_LABEL: Record<PriceLine, string> = {
   monthly: "Monthly Car Wash",
   weekly_thrice: "Weekly Thrice",

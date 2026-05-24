@@ -8,7 +8,9 @@ export type Permission =
   | "leads.view"
   | "leads.manage"
   | "employees.view"
-  | "employees.manage";
+  | "employees.manage"
+  | "payments.view"
+  | "payments.manage";
 
 export interface PermissionDef {
   id: Permission;
@@ -24,6 +26,8 @@ export const ALL_PERMISSIONS: PermissionDef[] = [
   { id: "leads.manage", label: "Manage leads", blurb: "Create, edit, and delete leads.", implies: "leads.view" },
   { id: "employees.view", label: "View employees", blurb: "See the employees section." },
   { id: "employees.manage", label: "Manage employees", blurb: "Create, edit, and delete employees.", implies: "employees.view" },
+  { id: "payments.view", label: "View payments", blurb: "See the payments grid and per-customer history." },
+  { id: "payments.manage", label: "Manage payments", blurb: "Mark paid/pending, edit amounts, send WhatsApp messages.", implies: "payments.view" },
 ];
 
 const PERMISSION_IDS = new Set<string>(ALL_PERMISSIONS.map((p) => p.id));
@@ -55,6 +59,9 @@ export interface AdminUserRow {
   status: "active" | "revoked";
   permissions: Permission[];
   invited_by: string | null;
+  /** When set, any session cookie issued before this moment is treated as
+   *  expired — forcing the user to log in again on their next request. */
+  signed_out_after: string | null;
 }
 
 // The authenticated principal resolved per request (see currentAdmin()).

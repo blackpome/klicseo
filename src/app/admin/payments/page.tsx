@@ -1,12 +1,19 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Wallet, ChevronLeft, ChevronRight } from "lucide-react";
+import { Wallet, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
 import { currentAdmin } from "@/lib/admin-auth";
 import { listLeads } from "@/lib/leads";
-import { listPeriodPayments, currentPeriod, isValidPeriod } from "@/lib/payments";
+import { listPeriodPayments, listPaymentsForLeads, currentPeriod, isValidPeriod, periodFromIso, periodsBetween } from "@/lib/payments";
+import { isServiceOptionId, SERVICE_OPTIONS } from "@/lib/pricing";
+import { getSiteSettings } from "@/lib/site-settings";
 import PaymentsTable, { type PaymentItem } from "./PaymentsTable";
+import MessageTemplatesEditor from "./MessageTemplatesEditor";
+
+// The payments grid mutates frequently; always render fresh so a save is
+// reflected on the next refresh without any caching window.
+export const dynamic = "force-dynamic";
 
 function monthLabel(period: string): string {
   const [y, m] = period.split("-").map(Number);
@@ -26,7 +33,7 @@ export default async function PaymentsPage({
 }) {
   const me = await currentAdmin();
   if (!me) redirect("/admin/login");
-  if (!me.permissions.includes("leads.view")) {
+  if (!me.permissions.includes("payments.view") && !me.permissions.includes("leads.view")) {
     return (
       <AdminShell>
         <div className="mx-auto max-w-md text-center py-24">
@@ -40,11 +47,12 @@ export default async function PaymentsPage({
   const { month } = await searchParams;
   const period = month && isValidPeriod(month) ? month : currentPeriod();
 
-  let customers, payments;
+  let customers, payments, settings;
   try {
-    [customers, payments] = await Promise.all([
+    [customers, payments, settings] = await Promise.all([
       listLeads({ status: "booked", limit: 500 }),
       listPeriodPayments(period),
+      getSiteSettings(),
     ]);
   } catch (err) {
     return (
@@ -52,11 +60,45 @@ export default async function PaymentsPage({
     );
   }
 
+  // Pull every payment for the booked customers so we can compute, per row,
+  // how many months they haven't paid for (booking month → currently-viewed
+  // period inclusive, minus paid months).
+  const historyByLead = new Map<string, Set<string>>();
+  try {
+    const history = await listPaymentsForLeads(customers.map((c) => c.id));
+    for (const p of history) {
+      if (p.status !== "paid") continue;
+      const set = historyByLead.get(p.lead_id) ?? new Set<string>();
+      set.add(p.period);
+      historyByLead.set(p.lead_id, set);
+    }
+  } catch {
+    // Non-fatal: if the history fetch fails we just don't show the due chip.
+  }
+
+  // Only count due months for monthly-recurring services — one-time services
+  // (Ceramic, OneTime washes) shouldn't show a "N months unpaid" chip.
+  const isMonthlySubscription = (svc: string | null | undefined): boolean => {
+    if (!svc) return false;
+    if (isServiceOptionId(svc)) return SERVICE_OPTIONS[svc].recurring === "monthly";
+    return false; // Admin-created non-legacy options: defer until catalog flag is plumbed in.
+  };
+
   const payByLead = new Map(payments.map((p) => [p.lead_id, p]));
-  const items: PaymentItem[] = customers.map((c) => ({
-    customer: { id: c.id, name: c.name, phone: c.phone, service_option: c.service_option, price_total: c.price_total },
-    payment: payByLead.get(c.id) ?? null,
-  }));
+  const items: PaymentItem[] = customers.map((c) => {
+    const startPeriod = periodFromIso(c.created_at) ?? period;
+    const allPeriods = periodsBetween(startPeriod, period);
+    const paidSet = historyByLead.get(c.id) ?? new Set<string>();
+    const dueCount = isMonthlySubscription(c.service_option)
+      ? allPeriods.filter((m) => !paidSet.has(m)).length
+      : 0;
+    return {
+      customer: { id: c.id, name: c.name, phone: c.phone, service_option: c.service_option, price_total: c.price_total },
+      payment: payByLead.get(c.id) ?? null,
+      dueCount,
+      dueUnit: c.price_total ?? 0,
+    };
+  });
 
   const navBtn = "grid h-9 w-9 place-items-center rounded-lg bg-white/5 text-white/60 hover:bg-white/10";
 
@@ -85,9 +127,21 @@ export default async function PaymentsPage({
             <input type="month" name="month" defaultValue={period} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C]" />
             <button className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15">Go</button>
           </form>
+          <a
+            href={`/api/admin/payments-export?month=${period}`}
+            title={`Download ${monthLabel(period)} payments as CSV`}
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-[#C9A84C]/15 text-[#E8CC7A] ring-1 ring-[#C9A84C]/25 hover:bg-[#C9A84C]/25"
+          >
+            <Download size={13} /> Download
+          </a>
         </div>
 
-        <PaymentsTable period={period} items={items} />
+        {/* Admins can rephrase the WhatsApp messages sent from each row. */}
+        {(me.role === "super_admin" || me.role === "admin") && (
+          <MessageTemplatesEditor initial={settings.messageTemplates} />
+        )}
+
+        <PaymentsTable period={period} periodLabel={monthLabel(period)} items={items} />
       </div>
     </AdminShell>
   );

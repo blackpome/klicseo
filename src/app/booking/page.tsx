@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BookingWizard from "@/components/booking/BookingWizard";
-import OfferBadge from "@/components/OfferBadge";
 import { bookingDescription, siteUrl } from "@/lib/seo";
 
 export const metadata = {
@@ -40,7 +39,6 @@ export default function BookingPage() {
             >
               Book Your Service
             </h1>
-            <OfferBadge className="mt-3" note="Discount already applied to the prices below" />
           </div>
 
           <Suspense fallback={null}>

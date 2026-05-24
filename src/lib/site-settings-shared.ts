@@ -64,6 +64,88 @@ export function hasCustomMedia(media: Media | undefined | null, key: MediaKey): 
   return !!media?.[key]?.url;
 }
 
+// --- Message templates (WhatsApp messages from the Payments admin) -----
+// Placeholders: {name}, {service}, {amount}, {month}. Unknown placeholders
+// are left as-is so admins notice the typo.
+
+export interface MessageTemplates {
+  /** Automated reminder for pending payments. */
+  paymentReminder: string;
+  /** Automated thank-you for paid payments. */
+  paymentThanks: string;
+}
+
+export const MESSAGE_TEMPLATE_DEFAULTS: MessageTemplates = {
+  paymentReminder:
+    "Hi {name}, friendly reminder — your {service} payment of ₹{amount} for {month} is due. Please pay at your convenience. Thanks!",
+  paymentThanks:
+    "Hi {name}, thank you for your {service} payment of ₹{amount} for {month}. We appreciate your business!",
+};
+
+export const MESSAGE_TEMPLATE_DEFS: { key: keyof MessageTemplates; label: string; help: string }[] = [
+  { key: "paymentReminder", label: "Payment reminder (automated)", help: "Sent when you click the bell icon next to a pending row." },
+  { key: "paymentThanks",   label: "Payment thanks (automated)",    help: "Sent when you click the thumbs-up next to a paid row." },
+];
+
+export function isMessageTemplateKey(v: unknown): v is keyof MessageTemplates {
+  return typeof v === "string" && MESSAGE_TEMPLATE_DEFS.some((d) => d.key === v);
+}
+
+/** Replace `{name}` / `{service}` / `{amount}` / `{month}` placeholders. */
+export function fillTemplate(
+  template: string,
+  vars: { name?: string | null; service?: string | null; amount?: number | null; month?: string | null },
+): string {
+  return template.replace(/\{(name|service|amount|month)\}/g, (_, key: string) => {
+    if (key === "name") return (vars.name ?? "there").trim() || "there";
+    if (key === "service") return (vars.service ?? "service").trim() || "service";
+    if (key === "amount") return vars.amount != null ? vars.amount.toLocaleString("en-IN") : "—";
+    if (key === "month") return (vars.month ?? "").trim();
+    return "";
+  });
+}
+
+// --- Service area radius (per service category, in km) ----------------
+// Admin-controllable. Car-wash flows historically stayed close in (low ticket,
+// high frequency); detailing trips can travel further.
+export const SERVICE_RADIUS_KEYS = ["CarWash", "OneTimeCarWash", "CarDetailing"] as const;
+export type ServiceRadiusKey = (typeof SERVICE_RADIUS_KEYS)[number];
+
+export const SERVICE_RADIUS_LABEL: Record<ServiceRadiusKey, string> = {
+  CarWash: "Subscription Car Wash",
+  OneTimeCarWash: "One-Time Car Wash",
+  CarDetailing: "Car Detailing",
+};
+
+export type ServiceRadius = Record<ServiceRadiusKey, number>;
+
+export const SERVICE_RADIUS_DEFAULTS: ServiceRadius = {
+  CarWash: 2.5,
+  OneTimeCarWash: 2.5,
+  CarDetailing: 10,
+};
+
+/** Fallback when no service has been picked yet — generous so we don't
+ *  out-of-area users prematurely. */
+export const DEFAULT_SERVICE_RADIUS_KM = 10;
+
+/** Step size for the +/− admin controls (km). */
+export const RADIUS_STEP_KM = 0.5;
+export const RADIUS_MIN_KM = 0.5;
+export const RADIUS_MAX_KM = 50;
+
+export function isServiceRadiusKey(v: unknown): v is ServiceRadiusKey {
+  return typeof v === "string" && (SERVICE_RADIUS_KEYS as readonly string[]).includes(v);
+}
+
+/** Effective radius for a service, using saved settings or the default. */
+export function radiusFor(cfg: ServiceRadius | null | undefined, service: string | null | undefined): number {
+  if (!service) return DEFAULT_SERVICE_RADIUS_KM;
+  if (!isServiceRadiusKey(service)) return DEFAULT_SERVICE_RADIUS_KM;
+  const v = cfg?.[service];
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : SERVICE_RADIUS_DEFAULTS[service];
+}
+
 // --- Booking wizard steps (per-step copy) ------------------------------
 export type BookingStepKey = "contact" | "schedule" | "location" | "package" | "confirm";
 
@@ -185,12 +267,38 @@ export interface BookingStepCopy {
   fields: CustomField[];
   builtins: Record<string, BuiltinFieldCfg>;
   messages: Record<string, string>;
+  flags?: Record<string, boolean>;
 }
 export type BookingConfig = Record<BookingStepKey, BookingStepCopy>;
 
 export const BOOKING_DEFAULTS: BookingConfig = Object.fromEntries(
-  BOOKING_STEP_DEFS.map((s) => [s.key, { title: "", subtitle: "", fields: [] as CustomField[], builtins: {}, messages: {} }]),
+  BOOKING_STEP_DEFS.map((s) => [s.key, { title: "", subtitle: "", fields: [] as CustomField[], builtins: {}, messages: {}, flags: {} }]),
 ) as unknown as BookingConfig;
+
+// Boolean per-step flags. Each has a default; admins flip them in the booking
+// form. Use `flag(booking, step, key)` to read the effective value.
+export const STEP_FLAG_DEFS: Record<BookingStepKey, { key: string; label: string; help?: string; default: boolean }[]> = {
+  contact: [],
+  schedule: [],
+  location: [],
+  package: [
+    { key: "showDiscount", label: "Show strike + % OFF in package picker", help: "Hide if you want a clean price list with no promo highlight.", default: true },
+  ],
+  confirm: [
+    { key: "showDiscount", label: "Show strike on final total", help: "Hide to show only the charged price on the confirmation screen.", default: true },
+  ],
+};
+
+/** Effective value for a step flag — admin override, else the registered default. */
+export function flag(
+  booking: BookingConfig | undefined | null,
+  stepKey: BookingStepKey,
+  key: string,
+): boolean {
+  const def = STEP_FLAG_DEFS[stepKey]?.find((f) => f.key === key);
+  const v = booking?.[stepKey]?.flags?.[key];
+  return typeof v === "boolean" ? v : (def?.default ?? true);
+}
 
 /** Resolved enabled/required for a built-in field — admin override or default (on + required). */
 export function builtinCfg(
@@ -243,6 +351,10 @@ export function normalizeField(raw: unknown): CustomField | null {
 }
 
 // --- Full settings shape -----------------------------------------------
+// Note: ServiceCatalog is imported lazily by SiteSettings only as a typed shape
+// to keep this module client-safe. The actual queries live in serviceCatalog.ts.
+import type { ServiceCatalog } from "./serviceCatalog-shared";
+
 export interface SiteSettings {
   startPrice: number;
   phone: string;
@@ -251,6 +363,11 @@ export interface SiteSettings {
   social: SocialLinks;
   media: Media;
   booking: BookingConfig;
+  serviceRadius: ServiceRadius;
+  messageTemplates: MessageTemplates;
+  /** Dynamic service catalog (categories + options + price lines). Null until
+   *  loaded — consumers must fall back to legacy hardcoded data. */
+  catalog: ServiceCatalog | null;
 }
 
 // Defaults used by the client context before the server value arrives.
@@ -262,6 +379,9 @@ export const SITE_SETTINGS_FALLBACK: SiteSettings = {
   social: SOCIAL_DEFAULTS,
   media: MEDIA_DEFAULTS,
   booking: BOOKING_DEFAULTS,
+  serviceRadius: SERVICE_RADIUS_DEFAULTS,
+  messageTemplates: MESSAGE_TEMPLATE_DEFAULTS,
+  catalog: null,
 };
 
 export function isSocialKey(v: unknown): v is SocialKey {

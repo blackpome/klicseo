@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Minus, Search, Check, ArrowRightLeft } from "lucide-react";
+import Link from "next/link";
+import { Plus, Minus, Search, Check, ArrowRightLeft, Sheet as SheetIcon } from "lucide-react";
 import type { CarRecord } from "@/lib/carPricing";
 import type { PriceTier } from "@/lib/priceTiers-shared";
 import { assignCarsAction, removeCarsFromTierAction } from "../../actions";
@@ -105,6 +106,19 @@ export default function TierCarsPanel({
     });
   };
 
+  const handleBulkRemove = () => {
+    if (selectedAssigned.size === 0) return;
+    if (!window.confirm(`Remove ${selectedAssigned.size} car${selectedAssigned.size === 1 ? "" : "s"} from this tier? They'll keep their previous prices but become unassigned.`)) return;
+    const fd = new FormData();
+    fd.set("tier_id", tierId);
+    for (const id of selectedAssigned) fd.append("car_ids", id);
+    startTransition(async () => {
+      await removeCarsFromTierAction(fd);
+      setSelectedAssigned(new Set());
+      router.refresh();
+    });
+  };
+
   return (
     <div className="space-y-4">
       {/* Assigned cars */}
@@ -123,17 +137,26 @@ export default function TierCarsPanel({
             Cars in this tier <span className="text-white/40 font-normal">({assigned.length})</span>
           </label>
           {!pickerOpen && (
-            <button
-              onClick={() => setPickerOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-[#050E21]"
-              style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
-            >
-              <Plus size={13} /> Add cars
-            </button>
+            <div className="flex items-center gap-1.5">
+              <Link
+                href={`/admin/cars/bulk?tier=${tierId}`}
+                title="Add multiple new cars at once (spreadsheet-style), pre-assigned to this tier"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 ring-1 ring-white/10 hover:bg-white/10"
+              >
+                <SheetIcon size={13} /> Bulk add
+              </Link>
+              <button
+                onClick={() => setPickerOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-[#050E21]"
+                style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
+              >
+                <Plus size={13} /> Add cars
+              </button>
+            </div>
           )}
         </div>
 
-        {/* Bulk-move bar — shows only when something is selected */}
+        {/* Bulk-action bar — shows only when something is selected */}
         {selectedAssigned.size > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-white/10 bg-[#C9A84C]/[0.06]">
             <span className="text-xs font-semibold">{selectedAssigned.size} selected</span>
@@ -159,10 +182,17 @@ export default function TierCarsPanel({
                 >
                   <Check size={12} /> Move
                 </button>
+                <span className="text-white/30">·</span>
               </>
-            ) : (
-              <span className="text-xs text-white/40">No other tiers to move to — create one first.</span>
-            )}
+            ) : null}
+            <button
+              onClick={handleBulkRemove}
+              disabled={pending}
+              title="Remove selected cars from this tier (they become unassigned)"
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold bg-red-500/15 text-red-300 ring-1 ring-red-500/25 hover:bg-red-500/25 disabled:opacity-50"
+            >
+              <Minus size={12} /> Remove from tier
+            </button>
             <button onClick={() => setSelectedAssigned(new Set())} className="ml-auto text-xs text-white/50 hover:text-white">Clear</button>
           </div>
         )}

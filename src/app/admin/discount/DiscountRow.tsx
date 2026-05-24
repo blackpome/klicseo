@@ -3,28 +3,21 @@
 import { useActionState, useState } from "react";
 import { Check, AlertCircle } from "lucide-react";
 import { saveDiscountAction } from "./actions";
-import { discountedPrice, inr, PRICE_LINE_LABEL, type PriceLine } from "@/lib/pricing";
-
-// Hatchback-tier sample prices, only to preview what a % does (real prices vary
-// by car/tier).
-const SAMPLE_BASE: Record<PriceLine, number> = {
-  monthly: 999,
-  weekly_thrice: 649,
-  outside_monthly: 1199,
-  outside_weekly_thrice: 749,
-  one_time_manual: 249,
-  one_time_machine: 399,
-  interior: 149,
-  car_detailing: 4999,
-  interior_detailing: 1999,
-};
+import { discountedPrice, inr } from "@/lib/pricing";
 
 export default function DiscountRow({
-  line,
+  lineId,
+  label,
+  sample,
   current,
   badge,
 }: {
-  line: PriceLine;
+  /** service_price_lines.id — universal key (works for legacy + new lines). */
+  lineId: string;
+  /** Display label (catalog-driven, so renames flow through). */
+  label: string;
+  /** Sample base price used for the discount preview. */
+  sample: number;
   current: number;
   badge: boolean;
 }) {
@@ -34,7 +27,6 @@ export default function DiscountRow({
 
   const num = val === "" ? 0 : Number(val);
   const dirty = num !== current || badgeOn !== badge;
-  const sample = SAMPLE_BASE[line];
 
   function onChange(raw: string) {
     const digits = raw.replace(/[^0-9]/g, "");
@@ -44,16 +36,17 @@ export default function DiscountRow({
 
   return (
     <form action={action} className="flex items-center gap-3 py-3 border-b border-white/5 last:border-0 flex-wrap">
-      <input type="hidden" name="line" value={line} />
+      <input type="hidden" name="line_id" value={lineId} />
+      <input type="hidden" name="label" value={label} />
       <input type="hidden" name="percent" value={val === "" ? "0" : val} />
       <input type="hidden" name="badge" value={badgeOn ? "on" : "off"} />
 
       <div className="flex-1 min-w-[150px]">
-        <div className="text-sm text-white/85">{PRICE_LINE_LABEL[line]}</div>
+        <div className="text-sm text-white/85">{label}</div>
         <div className="text-[11px] text-white/35 tabular-nums">
           {num > 0 ? (
             <>
-              <span className="line-through">{inr(sample)}</span>
+              <span className="text-[#F97316] font-semibold line-through decoration-[#F97316] decoration-2 bg-[#F97316]/15 px-1 py-0.5 rounded">{inr(sample)}</span>
               <span className="mx-1">→</span>
               <span className="text-emerald-300">{inr(discountedPrice(sample, num))}</span>
             </>
@@ -68,7 +61,7 @@ export default function DiscountRow({
         type="button"
         role="switch"
         aria-checked={badgeOn}
-        aria-label={`${PRICE_LINE_LABEL[line]} badge`}
+        aria-label={`${label} badge`}
         title={badgeOn ? "Badge shown" : "Badge hidden"}
         onClick={() => setBadgeOn((v) => !v)}
         className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${badgeOn ? "bg-[#10b981]" : "bg-white/15"}`}
@@ -81,7 +74,7 @@ export default function DiscountRow({
         <input
           type="text"
           inputMode="numeric"
-          aria-label={`${PRICE_LINE_LABEL[line]} discount percent`}
+          aria-label={`${label} discount percent`}
           value={val}
           placeholder="0"
           onChange={(e) => onChange(e.target.value)}

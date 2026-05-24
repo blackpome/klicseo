@@ -11,12 +11,23 @@ import {
   MEDIA_DEFAULTS,
   SOCIAL_DEFAULTS,
   SOCIAL_PLATFORMS,
+  SERVICE_RADIUS_DEFAULTS,
+  SERVICE_RADIUS_KEYS,
+  RADIUS_MIN_KM,
+  RADIUS_MAX_KM,
+  MESSAGE_TEMPLATE_DEFAULTS,
+  MESSAGE_TEMPLATE_DEFS,
+  isMessageTemplateKey,
   isMediaKey,
   isSocialKey,
+  isServiceRadiusKey,
   type BookingConfig,
   type CustomField,
   type Media,
   type MediaKey,
+  type ServiceRadius,
+  type ServiceRadiusKey,
+  type MessageTemplates,
   type SiteSettings,
   type SocialLinks,
 } from "./site-settings-shared";
@@ -34,6 +45,9 @@ export const SITE_DEFAULTS: SiteSettings = {
   social: SOCIAL_DEFAULTS,
   media: MEDIA_DEFAULTS,
   booking: BOOKING_DEFAULTS,
+  serviceRadius: SERVICE_RADIUS_DEFAULTS,
+  messageTemplates: MESSAGE_TEMPLATE_DEFAULTS,
+  catalog: null,
 };
 
 const KEYS = {
@@ -44,7 +58,43 @@ const KEYS = {
   social: "social",
   media: "media",
   booking: "booking",
+  serviceRadius: "service_radius",
+  messageTemplates: "message_templates",
 } as const;
+
+function parseMessageTemplates(raw: string): MessageTemplates {
+  const out: MessageTemplates = { ...MESSAGE_TEMPLATE_DEFAULTS };
+  try {
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    for (const def of MESSAGE_TEMPLATE_DEFS) {
+      const v = obj[def.key];
+      if (typeof v === "string" && v.trim()) out[def.key] = v;
+    }
+  } catch {
+    // keep defaults
+  }
+  return out;
+}
+
+function clampRadius(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(RADIUS_MIN_KM, Math.min(RADIUS_MAX_KM, Math.round(n * 2) / 2));
+}
+
+function parseServiceRadius(raw: string): ServiceRadius {
+  const out: ServiceRadius = { ...SERVICE_RADIUS_DEFAULTS };
+  try {
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(obj)) {
+      if (!isServiceRadiusKey(k)) continue;
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) out[k] = clampRadius(n);
+    }
+  } catch {
+    // keep defaults
+  }
+  return out;
+}
 
 const MEDIA_BUCKET = "site-media";
 
@@ -124,12 +174,20 @@ function parseBooking(raw: string): BookingConfig {
             if (typeof raw === "string") messages[k] = raw;
           }
         }
+        const flags: Record<string, boolean> = {};
+        const rawFlags = (v as { flags?: unknown }).flags;
+        if (rawFlags && typeof rawFlags === "object") {
+          for (const [k, raw] of Object.entries(rawFlags as Record<string, unknown>)) {
+            if (typeof raw === "boolean") flags[k] = raw;
+          }
+        }
         out[s.key] = {
           title: typeof v.title === "string" ? v.title : "",
           subtitle: typeof v.subtitle === "string" ? v.subtitle : "",
           fields,
           builtins,
           messages,
+          flags,
         };
       }
     }
@@ -141,6 +199,17 @@ function parseBooking(raw: string): BookingConfig {
 
 export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
   const out: SiteSettings = { ...SITE_DEFAULTS };
+  // Pull the dynamic catalog in parallel. A failure here shouldn't break
+  // the rest of site settings — leave catalog as null and consumers fall
+  // back to their hardcoded defaults.
+  const catalogPromise = (async () => {
+    try {
+      const { getServiceCatalog } = await import("./serviceCatalog");
+      return await getServiceCatalog();
+    } catch {
+      return null;
+    }
+  })();
   try {
     const { data, error } = await supabase()
       .from("app_settings")
@@ -163,11 +232,16 @@ export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
         out.media = parseMedia(row.value);
       } else if (row.key === KEYS.booking && row.value) {
         out.booking = parseBooking(row.value);
+      } else if (row.key === KEYS.serviceRadius && row.value) {
+        out.serviceRadius = parseServiceRadius(row.value);
+      } else if (row.key === KEYS.messageTemplates && row.value) {
+        out.messageTemplates = parseMessageTemplates(row.value);
       }
     }
   } catch {
     // keep defaults
   }
+  out.catalog = await catalogPromise;
   return out;
 });
 
@@ -183,6 +257,59 @@ export async function setSiteSettings(
     { key: KEYS.social, value: JSON.stringify(s.social) },
   ].map((r) => ({ ...r, updated_at: new Date().toISOString() }));
   const { error } = await supabase().from("app_settings").upsert(rows, { onConflict: "key" });
+  if (error) throw error;
+}
+
+// --- service radius -----------------------------------------------------
+
+async function getServiceRadius(): Promise<ServiceRadius> {
+  const { data } = await supabase().from("app_settings").select("value").eq("key", KEYS.serviceRadius).maybeSingle();
+  return data?.value ? parseServiceRadius(data.value) : { ...SERVICE_RADIUS_DEFAULTS };
+}
+
+async function saveServiceRadius(r: ServiceRadius): Promise<void> {
+  const { error } = await supabase()
+    .from("app_settings")
+    .upsert({ key: KEYS.serviceRadius, value: JSON.stringify(r), updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) throw error;
+}
+
+/** Set one service's radius (km), clamped to [RADIUS_MIN, RADIUS_MAX]. */
+export async function setServiceRadius(service: ServiceRadiusKey, km: number): Promise<number> {
+  const current = await getServiceRadius();
+  const next = clampRadius(km);
+  current[service] = next;
+  await saveServiceRadius(current);
+  return next;
+}
+
+/** Bump a service's radius by ±delta km (used by the admin +/− buttons). */
+export async function bumpServiceRadius(service: ServiceRadiusKey, deltaKm: number): Promise<number> {
+  const current = await getServiceRadius();
+  const next = clampRadius((current[service] ?? SERVICE_RADIUS_DEFAULTS[service]) + deltaKm);
+  current[service] = next;
+  await saveServiceRadius(current);
+  return next;
+}
+
+export { SERVICE_RADIUS_KEYS };
+
+// --- message templates --------------------------------------------------
+
+export async function setMessageTemplates(t: MessageTemplates): Promise<void> {
+  // Filter to known keys only; tolerate unknowns the admin might post.
+  const safe: Record<string, string> = {};
+  for (const def of MESSAGE_TEMPLATE_DEFS) {
+    const v = (t as unknown as Record<string, unknown>)[def.key];
+    if (typeof v === "string") safe[def.key] = v;
+  }
+  // Reject completely-unknown keys (defensive).
+  for (const k of Object.keys(safe)) {
+    if (!isMessageTemplateKey(k)) delete safe[k];
+  }
+  const { error } = await supabase()
+    .from("app_settings")
+    .upsert({ key: KEYS.messageTemplates, value: JSON.stringify(safe), updated_at: new Date().toISOString() }, { onConflict: "key" });
   if (error) throw error;
 }
 

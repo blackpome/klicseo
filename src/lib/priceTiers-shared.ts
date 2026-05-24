@@ -41,3 +41,25 @@ export function readTierPricesFromForm(fd: FormData): TierPrices {
   }
   return out;
 }
+
+/** Map of price_line.id → amount (the universal shape for tier prices,
+ *  works for legacy lines and brand-new ones alike). */
+export type LineAmounts = Record<string, number | null>;
+
+/**
+ * Read tier prices from a FormData keyed by `line_<line_id>` inputs. Any field
+ * whose name starts with `line_` is interpreted as a price; blank → null.
+ */
+export function readLineAmountsFromForm(fd: FormData): LineAmounts {
+  const out: LineAmounts = {};
+  for (const [key, value] of fd.entries()) {
+    if (!key.startsWith("line_")) continue;
+    const id = key.slice(5);
+    if (!id) continue;
+    const raw = String(value).trim();
+    if (raw === "") { out[id] = null; continue; }
+    const n = Number(raw);
+    out[id] = Number.isFinite(n) ? Math.round(n) : null;
+  }
+  return out;
+}

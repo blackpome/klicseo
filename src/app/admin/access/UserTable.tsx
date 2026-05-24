@@ -14,6 +14,10 @@ import GrantForm from "./GrantForm";
 import ResendButton from "./ResendButton";
 import RemoveButton from "./RemoveButton";
 import PermissionsEditor from "./PermissionsEditor";
+import ForceLogoutButton from "./ForceLogoutButton";
+import LogoutAllButton from "./LogoutAllButton";
+import BlockButton from "./BlockButton";
+import DemoteButton from "./DemoteButton";
 
 const ROLE_STYLE: Record<AdminRole, { color: string; Icon: typeof Crown }> = {
   super_admin: { color: "#C9A84C", Icon: Crown },
@@ -63,15 +67,18 @@ export default function UserTable({
   return (
     <div className="space-y-3">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <span className="text-xs text-white/40">{users.length} {users.length === 1 ? "user" : "users"}</span>
-        <button
-          onClick={() => setInviteOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-[#050E21]"
-          style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
-        >
-          <UserPlus size={16} /> Invite user
-        </button>
+        <div className="flex items-center gap-2">
+          {meRole === "super_admin" && <LogoutAllButton />}
+          <button
+            onClick={() => setInviteOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-[#050E21]"
+            style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
+          >
+            <UserPlus size={16} /> Invite user
+          </button>
+        </div>
       </div>
 
       {/* Sheet */}
@@ -113,12 +120,19 @@ export default function UserTable({
 
                     {/* Role */}
                     <td className="px-4 py-3">
-                      <span
-                        className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold"
-                        style={{ background: `${color}1f`, color }}
-                      >
-                        <Icon size={11} /> {ROLE_LABEL[u.role]}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold"
+                          style={{ background: `${color}1f`, color }}
+                        >
+                          <Icon size={11} /> {ROLE_LABEL[u.role]}
+                        </span>
+                        {u.status === "revoked" && (
+                          <span className="inline-flex items-center text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold bg-red-500/15 text-red-300">
+                            Blocked
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Access */}
@@ -141,6 +155,15 @@ export default function UserTable({
                               </button>
                             )}
                             <ResendButton email={u.email} />
+                            {u.role !== "super_admin" && <ForceLogoutButton email={u.email} />}
+                            {/* Super-admin only: demote admins to staff. */}
+                            {meRole === "super_admin" && u.role === "admin" && (
+                              <DemoteButton email={u.email} />
+                            )}
+                            {/* Super-admin only: suspend / restore. */}
+                            {meRole === "super_admin" && u.role !== "super_admin" && (
+                              <BlockButton email={u.email} currentStatus={u.status} />
+                            )}
                             <RemoveButton email={u.email} />
                           </>
                         ) : (

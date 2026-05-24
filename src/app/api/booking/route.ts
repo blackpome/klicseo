@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { insertLead } from "@/lib/leads";
 import { isServiceOptionId, type ServiceOptionId, type ParkingLocation } from "@/lib/pricing";
-import { carPriceFor, type CarPrices } from "@/lib/carPricing";
-import { getServiceDiscounts } from "@/lib/discounts";
+import { carPriceFor, carPriceForCatalog, type CarPrices } from "@/lib/carPricing";
+import { getServiceDiscounts, getDiscountConfig } from "@/lib/discounts";
 import { getSiteSettings } from "@/lib/site-settings";
+import { getServiceCatalog } from "@/lib/serviceCatalog";
+import { radiusFor } from "@/lib/site-settings-shared";
+import { BUSINESS_LOCATION, haversineKm } from "@/lib/serviceability";
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -25,19 +28,42 @@ export async function POST(req: NextRequest) {
   const serviceOption = String(body.serviceOption ?? "");
   const carPrices = (body.carPrices ?? null) as CarPrices | null;
   const discounts = await getServiceDiscounts();
-  const priced =
-    carPrices && isServiceOptionId(serviceOption)
-      ? carPriceFor(
-          carPrices,
-          serviceOption as ServiceOptionId,
-          ((body.parkingLocation as ParkingLocation) || "") as ParkingLocation,
-          Boolean(body.interiorAddOn),
-          discounts,
-        )
-      : null;
+  const parking = ((body.parkingLocation as ParkingLocation) || "") as ParkingLocation;
+  const interiorAddOn = Boolean(body.interiorAddOn);
+
+  // Legacy options use the keyed pricing path; admin-created options resolve
+  // via the catalog. Both code paths apply the badge-on/off discount gate.
+  let priced = null as ReturnType<typeof carPriceFor> | null;
+  if (carPrices) {
+    if (isServiceOptionId(serviceOption)) {
+      priced = carPriceFor(carPrices, serviceOption as ServiceOptionId, parking, interiorAddOn, discounts);
+    } else if (serviceOption) {
+      const [catalog, cfg] = await Promise.all([getServiceCatalog(), getDiscountConfig()]);
+      priced = carPriceForCatalog(carPrices, serviceOption, parking, interiorAddOn, catalog, cfg.percentsByLineId, cfg.badgesByLineId);
+    }
+  }
+
+  const settings = await getSiteSettings();
+
+  // Server-side serviceability gate: if GPS coords were captured at the location
+  // step, verify the customer is still within the admin-configured radius for
+  // their chosen service. Prevents a stale client (e.g. browser tab held open
+  // while the admin shrank the radius) from sneaking a booking through.
+  const lat = typeof body.latitude === "number" ? body.latitude : null;
+  const lng = typeof body.longitude === "number" ? body.longitude : null;
+  if (lat != null && lng != null) {
+    const distanceKm = haversineKm(BUSINESS_LOCATION, { lat, lng });
+    const allowedKm = radiusFor(settings.serviceRadius, (body.service as string | null) ?? null);
+    if (distanceKm > allowedKm) {
+      return NextResponse.json(
+        { success: false, error: `Your location (${distanceKm.toFixed(1)} km away) is outside our current service area (${allowedKm} km) for this service.` },
+        { status: 400 },
+      );
+    }
+  }
 
   // Custom fields (admin-defined per step). Validate required, store {label: value}.
-  const booking = (await getSiteSettings()).booking;
+  const booking = settings.booking;
   const customAnswers = (body.customFields ?? {}) as Record<string, unknown>;
   const custom_fields: Record<string, string> = {};
   for (const stepKey of Object.keys(booking)) {
@@ -72,6 +98,8 @@ export async function POST(req: NextRequest) {
       car_model: String(body.carModel ?? "") || null,
       car_number: String(body.carNumber ?? "") || null,
       pincode: String(body.pincode ?? "") || null,
+      // area is auto-derived from pincode by insertLead.
+      area: null,
       address: String(body.address ?? "") || null,
       map_link: null,
       parking_location: String(body.parkingLocation ?? "") || null,

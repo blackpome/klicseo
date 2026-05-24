@@ -1,8 +1,22 @@
 import "server-only";
 import { supabase } from "./supabase";
+import { sealFields, unsealFields, phoneHash, normalizePhone } from "./crypto";
+import { areaFromPincode } from "./area";
 import type { CallReminder, LeadStatus } from "./leads-shared";
 
 export * from "./leads-shared";
+
+/** Columns stored encrypted at rest. The lib seals on write, unseals on read,
+ *  so callers always see plaintext. Phone is encrypted AND kept exact-match
+ *  searchable via the sibling `phone_hash` column. */
+export const ENCRYPTED_LEAD_FIELDS = [
+  "phone",
+  "car_number",
+  "address",
+  "map_link",
+  "gate_access_notes",
+  "notes",
+] as const;
 
 export type LeadSource = "wizard" | "admin";
 
@@ -25,6 +39,9 @@ export interface LeadRow {
   car_number: string | null;
 
   pincode: string | null;
+  /** Locality name (e.g. "Anna Nagar"). Plaintext — drives the area filter
+   *  on /admin. Auto-derived from pincode at insert/update time if blank. */
+  area: string | null;
   address: string | null;
   map_link: string | null;
   parking_location: string | null;
@@ -50,23 +67,31 @@ export type NewLead = Omit<LeadRow, "id" | "created_at" | "status"> & {
 };
 
 export async function insertLead(lead: NewLead): Promise<LeadRow> {
+  const payload: Record<string, unknown> = { ...lead, status: lead.status ?? "new" };
+  // Compute the search hash BEFORE sealing the plaintext phone.
+  payload.phone_hash = phoneHash(lead.phone);
+  // Auto-derive locality from pincode when the caller didn't set area.
+  if (!(payload as { area?: string | null }).area) {
+    payload.area = await areaFromPincode((lead as { pincode?: string | null }).pincode);
+  }
+  const sealed = sealFields(payload, ENCRYPTED_LEAD_FIELDS);
   const { data, error } = await supabase()
     .from("leads")
-    .insert({ ...lead, status: lead.status ?? "new" })
+    .insert(sealed)
     .select()
     .single();
   if (error) throw error;
-  return data as LeadRow;
+  return unsealFields(data as LeadRow, ENCRYPTED_LEAD_FIELDS)!;
 }
 
-// Fields searched by the admin search box. Order is irrelevant — Postgres OR.
+// Fields searched by the admin search box. Encrypted columns are excluded —
+// phone is searched via the `phone_hash` exact-match path below. `area` is
+// plaintext-and-indexed so partial-name search ("Anna" → "Anna Nagar") works.
 const SEARCH_FIELDS = [
   "name",
-  "phone",
-  "car_number",
+  "area",
   "car_model",
   "vehicle_type",
-  "address",
   "pincode",
   "service",
   "service_option",
@@ -82,33 +107,50 @@ function sanitizeSearch(raw: string): string {
 export async function listLeads(opts: {
   status?: LeadStatus | "all";
   search?: string;
+  area?: string;
   limit?: number;
 } = {}): Promise<LeadRow[]> {
   let q = supabase().from("leads").select("*").order("created_at", { ascending: false });
   if (opts.status && opts.status !== "all") q = q.eq("status", opts.status);
+  if (opts.area && opts.area !== "all") q = q.eq("area", opts.area);
   if (opts.search) {
     const s = sanitizeSearch(opts.search);
     if (s) {
-      const orFilter = SEARCH_FIELDS.map((f) => `${f}.ilike.%${s}%`).join(",");
-      q = q.or(orFilter);
+      const orParts = SEARCH_FIELDS.map((f) => `${f}.ilike.%${s}%`);
+      // If the query looks like a phone number, add an exact-match on
+      // phone_hash so we can find leads despite the phone column being
+      // encrypted.
+      const ph = phoneHash(opts.search);
+      if (ph && normalizePhone(opts.search).length >= 7) {
+        orParts.push(`phone_hash.eq.${ph}`);
+      }
+      q = q.or(orParts.join(","));
     }
   }
   q = q.limit(opts.limit ?? 200);
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []) as LeadRow[];
+  return (data ?? []).map((r) => unsealFields(r as LeadRow, ENCRYPTED_LEAD_FIELDS)!) as LeadRow[];
 }
 
 export async function getLead(id: string): Promise<LeadRow | null> {
   const { data, error } = await supabase().from("leads").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
-  return (data ?? null) as LeadRow | null;
+  return unsealFields(data as LeadRow | null, ENCRYPTED_LEAD_FIELDS);
 }
 
 export type LeadUpdate = Partial<Omit<LeadRow, "id" | "created_at" | "source">>;
 
 export async function updateLead(id: string, patch: LeadUpdate): Promise<void> {
-  const { error } = await supabase().from("leads").update(patch).eq("id", id);
+  const payload: Record<string, unknown> = { ...patch };
+  // Keep phone_hash in lock-step with any phone update.
+  if ("phone" in payload) payload.phone_hash = phoneHash(payload.phone as string | null);
+  // Pincode changed but area not explicitly set → re-derive.
+  if ("pincode" in payload && !("area" in payload)) {
+    payload.area = await areaFromPincode(payload.pincode as string | null);
+  }
+  const sealed = sealFields(payload, ENCRYPTED_LEAD_FIELDS);
+  const { error } = await supabase().from("leads").update(sealed).eq("id", id);
   if (error) throw error;
 }
 

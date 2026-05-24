@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { currentAdmin } from "@/lib/admin-auth";
-import { isPriceLine, type PriceLine } from "@/lib/pricing";
-import { setServiceDiscount } from "@/lib/discounts";
+import { setServiceDiscount, getDiscountConfig } from "@/lib/discounts";
 import { logAudit } from "@/lib/audit";
 
 async function requireManager() {
@@ -12,15 +11,17 @@ async function requireManager() {
   if (me.role !== "super_admin" && me.role !== "admin") throw new Error("Forbidden");
 }
 
-// Save one price line's discount. Used per-row so each line has its own button.
+// Save one price line's discount. Addressed by service_price_lines.id so it
+// works for both legacy lines and admin-created ones.
 export async function saveDiscountAction(
   _prev: { error?: string; ok?: string },
   formData: FormData,
 ): Promise<{ error?: string; ok?: string }> {
   try {
     await requireManager();
-    const line = String(formData.get("line") ?? "");
-    if (!isPriceLine(line)) return { error: "Invalid line." };
+    const lineId = String(formData.get("line_id") ?? "");
+    const label = String(formData.get("label") ?? "this line");
+    if (!lineId) return { error: "Invalid line." };
 
     const raw = String(formData.get("percent") ?? "").trim();
     const pct = raw === "" ? 0 : Number(raw);
@@ -29,10 +30,21 @@ export async function saveDiscountAction(
     }
 
     const badgeEnabled = String(formData.get("badge") ?? "") === "on";
-    await setServiceDiscount(line as PriceLine, pct, badgeEnabled);
-    await logAudit("discount.save", { entity: "discount", entityId: line, summary: `${line} → ${pct}%${badgeEnabled ? "" : " (badge off)"}` });
+    // Snapshot before/after so the audit row carries the precise change.
+    const cfg = await getDiscountConfig();
+    const before = {
+      discount_percent: cfg.percentsByLineId[lineId] ?? 0,
+      badge_enabled: cfg.badgesByLineId[lineId] ?? true,
+    };
+    await setServiceDiscount(lineId, pct, badgeEnabled);
+    await logAudit("discount.save", {
+      entity: "discount",
+      entityId: lineId,
+      summary: `${label} → ${pct}%${badgeEnabled ? "" : " (badge off)"}`,
+      before,
+      after: { discount_percent: pct, badge_enabled: badgeEnabled },
+    });
 
-    // Refresh everything that reads discounts (layout-level provider + pages).
     revalidatePath("/", "layout");
     revalidatePath("/admin/discount");
     return {

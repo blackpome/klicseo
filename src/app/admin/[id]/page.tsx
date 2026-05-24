@@ -145,6 +145,7 @@ export default async function LeadDetailPage({
 
         <Section title="Location" icon={MapPin}>
           <Field label="Pincode" value={fmt(lead.pincode)} mono />
+          <Field label="Area" value={fmt(lead.area)} />
           <Field
             label="Address"
             value={lead.address ? <span className="whitespace-pre-line">{lead.address}</span> : "—"}

@@ -60,11 +60,14 @@ export default function LeadForm({
   initial,
   submitLabel,
   pendingLabel,
+  knownAreas,
 }: {
   action: LeadAction;
   initial?: Partial<LeadRow> | null;
   submitLabel: string;
   pendingLabel: string;
+  /** Locality suggestions for the Area datalist (seeded from pincode_areas). */
+  knownAreas?: string[];
 }) {
   const [state, formAction, pending] = useActionState<LeadFormState, FormData>(action, {});
   const initialService = (initial?.service as ServiceCategory | undefined) ?? "";
@@ -145,9 +148,23 @@ export default function LeadForm({
       </Section>
 
       <Section title="Location" icon={MapPin}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Field label="Pincode">
             <input name="pincode" inputMode="numeric" maxLength={6} defaultValue={v("pincode") as string} className={`${fieldCls} font-mono`} />
+          </Field>
+          <Field label="Area (auto-derives from pincode)">
+            <input
+              name="area"
+              defaultValue={v("area") as string}
+              placeholder="e.g. Anna Nagar"
+              list="lead-known-areas"
+              className={fieldCls}
+            />
+            {knownAreas && knownAreas.length > 0 && (
+              <datalist id="lead-known-areas">
+                {knownAreas.map((a) => <option key={a} value={a} />)}
+              </datalist>
+            )}
           </Field>
           <Field label="Parking">
             <select name="parking_location" className={fieldCls} defaultValue={(initial?.parking_location as string) ?? ""}>

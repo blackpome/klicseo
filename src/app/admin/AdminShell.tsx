@@ -3,6 +3,7 @@ import { currentAdmin } from "@/lib/admin-auth";
 import { type Permission } from "@/lib/admin-users-shared";
 import { listCallReminders, type CallReminder } from "@/lib/leads";
 import Sidebar, { type NavGroup } from "./Sidebar";
+import AuthSessionGuard from "./AuthSessionGuard";
 
 // Wraps authed admin pages with the sidebar + real HMAC signature check and the
 // live allowlist lookup. Login/forgot/reset pages deliberately render bare.
@@ -29,7 +30,7 @@ export default async function AdminShell({
   const leadsItems = [
     can("leads.view") && { href: "/admin", label: "All Leads", icon: "Inbox" as const, exact: true },
     can("leads.manage") && { href: "/admin/new", label: "Add Lead", icon: "PlusCircle" as const },
-    can("leads.view") && { href: "/admin/payments", label: "Payments", icon: "Wallet" as const },
+    (can("payments.view") || can("leads.view")) && { href: "/admin/payments", label: "Payments", icon: "Wallet" as const },
   ].filter(Boolean) as NavGroup["items"];
   if (leadsItems.length) groups.push({ title: "Leads", items: leadsItems });
 
@@ -70,6 +71,9 @@ export default async function AdminShell({
 
   return (
     <div className="min-h-screen md:pl-64">
+      {/* Probes the session every few seconds and bounces to /admin/login
+          immediately on a forced sign-out from another tab/device. */}
+      <AuthSessionGuard />
       <Sidebar
         groups={groups}
         email={me.email}

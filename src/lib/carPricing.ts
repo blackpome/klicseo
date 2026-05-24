@@ -14,6 +14,7 @@ import {
   type ParkingLocation,
   type ServiceDiscounts,
 } from "./pricing";
+import type { ServiceCatalog } from "./serviceCatalog-shared";
 
 // Mirrors the price columns on public.cars (see migration 0004). Null = the
 // sheet had no price for that service on this car.
@@ -27,6 +28,9 @@ export interface CarPrices {
   interior: number | null;
   car_detailing: number | null;
   interior_detailing: number | null;
+  /** Per-line-id amounts (covers admin-created lines too). Optional so older
+   *  serialized payloads stay valid; consumers should treat missing as {}. */
+  amounts?: Record<string, number | null>;
 }
 
 // The full car record returned by /api/cars/search.
@@ -37,6 +41,9 @@ export interface CarRecord extends CarPrices {
   body_type: string | null;
   segment_name: string | null;
   tier_id?: string | null;
+  /** Per-line-id price amounts (covers every line in the catalog including
+   *  admin-created ones). Always present, may be empty. */
+  amounts: Record<string, number | null>;
 }
 
 export interface CarPriceResult {
@@ -112,6 +119,65 @@ export function carPriceFor(
   const basePercent = discounts?.[baseLineFor(optionId, parking)] ?? 0;
   const addOnLine = addOnLineFor(optionId);
   const addOnPercent = withAddOn && addOnLine ? discounts?.[addOnLine] ?? 0 : 0;
+  const discountedBase = discountedPrice(base, basePercent);
+  const discountedAddOn = discountedPrice(addOn, addOnPercent);
+
+  return {
+    base,
+    addOn,
+    total: base + addOn,
+    basePercent,
+    addOnPercent,
+    discountedBase,
+    discountedAddOn,
+    discountedTotal: discountedBase + discountedAddOn,
+    hasDiscount: basePercent > 0 || addOnPercent > 0,
+  };
+}
+
+/**
+ * Catalog-aware price for a service option identified by its legacy_id or
+ * slug. Resolves the option's base / outside / addon price lines via the
+ * catalog and reads amounts from prices.amounts (the per-line-id map).
+ *
+ * Used for admin-created options (which have no entry in SERVICE_OPTIONS).
+ * For legacy options, prefer carPriceFor() — it's slightly cheaper.
+ */
+export function carPriceForCatalog(
+  prices: CarPrices,
+  optionId: string,
+  parking: ParkingLocation,
+  withAddOn: boolean,
+  catalog: ServiceCatalog,
+  percentsByLineId: Record<string, number>,
+  badgesByLineId: Record<string, boolean>,
+): CarPriceResult | null {
+  // Locate the option in the catalog by legacy_id first, then slug.
+  const option = catalog.options.find((o) => o.legacy_id === optionId)
+    ?? catalog.options.find((o) => o.slug === optionId);
+  if (!option) return null;
+
+  const baseLine = catalog.priceLines.find((l) => l.option_id === option.id && l.kind === "base");
+  if (!baseLine) return null;
+  const outsideLine = parking === "outside"
+    ? catalog.priceLines.find((l) => l.option_id === option.id && l.kind === "outside")
+    : null;
+  const addonLine = withAddOn && option.has_addon
+    ? catalog.priceLines.find((l) => l.category_id === option.category_id && l.kind === "addon")
+    : null;
+
+  const amounts = prices.amounts ?? {};
+  const baseLineForRead = outsideLine ?? baseLine;
+  const base = amounts[baseLineForRead.id] ?? null;
+  if (base == null) return null;
+  const addOn = addonLine ? (amounts[addonLine.id] ?? 0) : 0;
+
+  // Apply badge gate (badge=off → discount counts as 0).
+  const baseEnabled = badgesByLineId[baseLineForRead.id] !== false;
+  const basePercent = baseEnabled ? (percentsByLineId[baseLineForRead.id] ?? 0) : 0;
+  const addOnEnabled = addonLine ? badgesByLineId[addonLine.id] !== false : true;
+  const addOnPercent = addonLine && addOnEnabled ? (percentsByLineId[addonLine.id] ?? 0) : 0;
+
   const discountedBase = discountedPrice(base, basePercent);
   const discountedAddOn = discountedPrice(addOn, addOnPercent);
 

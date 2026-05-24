@@ -142,6 +142,58 @@ export async function deleteAccess(email: string): Promise<void> {
   }
 }
 
+/** Flip a user's status active ↔ revoked (block / unblock). When blocking we
+ *  also bump `signed_out_after` so the live session is killed immediately. */
+export async function setUserStatus(email: string, status: "active" | "revoked"): Promise<void> {
+  const e = normalizeEmail(email);
+  const patch: Record<string, unknown> = { status };
+  if (status === "revoked") patch.signed_out_after = new Date().toISOString();
+  const { error } = await supabase().from(TABLE).update(patch).eq("email", e);
+  if (error) throw error;
+}
+
+/** Change a user's role (staff ↔ admin only; super_admin is immutable). When
+ *  downgrading from admin to staff, permissions are cleared so the user
+ *  starts from zero and the super-admin can re-grant explicitly. */
+export async function changeUserRole(email: string, role: AdminRole): Promise<void> {
+  const e = normalizeEmail(email);
+  if (role === "super_admin") throw new Error("Cannot promote to super_admin via this action.");
+  const patch: Record<string, unknown> = {
+    role,
+    signed_out_after: new Date().toISOString(), // force re-login so the new role takes effect
+  };
+  if (role === "staff") patch.permissions = [];
+  const { error } = await supabase().from(TABLE).update(patch).eq("email", e);
+  if (error) throw error;
+}
+
+/**
+ * Force-logout one user. Sets `signed_out_after` to the current moment so
+ * any session cookie issued before now() is treated as expired by
+ * currentAdmin() on the user's next request. The user themselves can still
+ * log in again with their password — this only invalidates the live session.
+ */
+export async function forceSignOut(email: string): Promise<void> {
+  const { error } = await supabase()
+    .from(TABLE)
+    .update({ signed_out_after: new Date().toISOString() })
+    .eq("email", normalizeEmail(email));
+  if (error) throw error;
+}
+
+/**
+ * Force-logout every admin row whose email is NOT in `keepEmails` (typically
+ * the caller themselves). Returns the number of rows affected.
+ */
+export async function forceSignOutAll(keepEmails: string[]): Promise<number> {
+  const keep = keepEmails.map(normalizeEmail);
+  let q = supabase().from(TABLE).update({ signed_out_after: new Date().toISOString() }).select("email");
+  if (keep.length > 0) q = q.not("email", "in", `(${keep.map((e) => `"${e}"`).join(",")})`);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []).length;
+}
+
 // Re-send an access email. If the auth user hasn't been created yet (or never
 // accepted) a fresh invite goes out; if they already exist we fall back to a
 // password-reset email — both land on /admin/reset. Returns which was sent.

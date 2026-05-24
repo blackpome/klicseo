@@ -9,4 +9,6 @@ export const PERMISSION_ICON: Record<Permission, LucideIcon> = {
   "leads.manage": SquarePen,
   "employees.view": Eye,
   "employees.manage": SquarePen,
+  "payments.view": Eye,
+  "payments.manage": SquarePen,
 };

@@ -1,5 +1,6 @@
 import "server-only";
 import { supabase } from "./supabase";
+import { sealFields, unsealFields, phoneHash, normalizePhone } from "./crypto";
 import type {
   EmployeeRow,
   EmployeeStatus,
@@ -13,6 +14,10 @@ import type {
 export * from "./employees-shared";
 
 export const BUCKET = "employee-docs";
+
+/** Encrypted-at-rest fields. Phone is encrypted + kept exact-match
+ *  searchable via the sibling `phone_hash` column. */
+export const ENCRYPTED_EMPLOYEE_FIELDS = ["phone", "aadhaar_number", "notes"] as const;
 
 export async function uploadEmployeeFile(opts: {
   file: File;
@@ -49,16 +54,21 @@ export async function signedUrlFor(
 }
 
 export async function insertEmployee(emp: NewEmployee): Promise<EmployeeRow> {
+  const payload: Record<string, unknown> = { ...emp, status: emp.status ?? "applied" };
+  payload.phone_hash = phoneHash(emp.phone);
+  const sealed = sealFields(payload, ENCRYPTED_EMPLOYEE_FIELDS);
   const { data, error } = await supabase()
     .from("employees")
-    .insert({ ...emp, status: emp.status ?? "applied" })
+    .insert(sealed)
     .select()
     .single();
   if (error) throw error;
-  return data as EmployeeRow;
+  return unsealFields(data as EmployeeRow, ENCRYPTED_EMPLOYEE_FIELDS)!;
 }
 
-const SEARCH_FIELDS = ["name", "phone", "location", "aadhaar_number", "job_role"];
+// aadhaar_number + phone are encrypted at rest — phone is searched via
+// phone_hash below; aadhaar_number is no longer searchable by content.
+const SEARCH_FIELDS = ["name", "location", "job_role"];
 
 function sanitizeSearch(raw: string): string {
   return raw.replace(/[,()"'\\*]/g, " ").replace(/\s+/g, " ").trim();
@@ -71,22 +81,32 @@ export async function listEmployees(
   if (opts.status && opts.status !== "all") q = q.eq("status", opts.status);
   if (opts.search) {
     const s = sanitizeSearch(opts.search);
-    if (s) q = q.or(SEARCH_FIELDS.map((f) => `${f}.ilike.%${s}%`).join(","));
+    if (s) {
+      const orParts = SEARCH_FIELDS.map((f) => `${f}.ilike.%${s}%`);
+      const ph = phoneHash(opts.search);
+      if (ph && normalizePhone(opts.search).length >= 7) {
+        orParts.push(`phone_hash.eq.${ph}`);
+      }
+      q = q.or(orParts.join(","));
+    }
   }
   q = q.limit(opts.limit ?? 200);
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []) as EmployeeRow[];
+  return (data ?? []).map((r) => unsealFields(r as EmployeeRow, ENCRYPTED_EMPLOYEE_FIELDS)!) as EmployeeRow[];
 }
 
 export async function getEmployee(id: string): Promise<EmployeeRow | null> {
   const { data, error } = await supabase().from("employees").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
-  return (data ?? null) as EmployeeRow | null;
+  return unsealFields(data as EmployeeRow | null, ENCRYPTED_EMPLOYEE_FIELDS);
 }
 
 export async function updateEmployee(id: string, patch: EmployeeUpdate): Promise<void> {
-  const { error } = await supabase().from("employees").update(patch).eq("id", id);
+  const payload: Record<string, unknown> = { ...patch };
+  if ("phone" in payload) payload.phone_hash = phoneHash(payload.phone as string | null);
+  const sealed = sealFields(payload, ENCRYPTED_EMPLOYEE_FIELDS);
+  const { error } = await supabase().from("employees").update(sealed).eq("id", id);
   if (error) throw error;
 }
 

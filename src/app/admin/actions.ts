@@ -8,10 +8,10 @@ import {
   insertLead,
   updateLead,
   updateLeadStatus,
+  getLead,
   type LeadStatus,
   type LeadUpdate,
 } from "@/lib/leads";
-import { supabase } from "@/lib/supabase";
 import { priceFor, type ServiceDiscounts } from "@/lib/pricing";
 import { getServiceDiscounts } from "@/lib/discounts";
 import { logAudit } from "@/lib/audit";
@@ -41,8 +41,8 @@ export async function updateNotesAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const notes = String(formData.get("notes") ?? "");
   if (!id) return;
-  const { error } = await supabase().from("leads").update({ notes: notes || null }).eq("id", id);
-  if (error) throw error;
+  // Route through updateLead so the notes field is encrypted by the lib.
+  await updateLead(id, { notes: notes || null });
   await logAudit("lead.notes", { entity: "lead", entityId: id, summary: "Updated lead notes" });
   revalidatePath(`/admin/${id}`);
 }
@@ -76,6 +76,8 @@ function readLeadFromForm(formData: FormData, discounts: ServiceDiscounts) {
     car_model: String(formData.get("car_model") ?? "") || null,
     car_number: String(formData.get("car_number") ?? "") || null,
     pincode: String(formData.get("pincode") ?? "") || null,
+    // Empty string → null so insertLead/updateLead auto-derive from pincode.
+    area: String(formData.get("area") ?? "").trim() || null,
     address: String(formData.get("address") ?? "") || null,
     map_link: String(formData.get("map_link") ?? "").trim() || null,
     parking_location,
@@ -117,9 +119,18 @@ export async function updateLeadAction(_prev: { error?: string }, formData: Form
   if (!id) return { error: "Missing lead id." };
 
   const data = readLeadFromForm(formData, await getServiceDiscounts());
+  // Snapshot before/after so the audit log carries the field-level diff.
+  const before = await getLead(id);
   await updateLead(id, data as LeadUpdate);
+  const after = await getLead(id);
 
-  await logAudit("lead.update", { entity: "lead", entityId: id, summary: "Edited lead" });
+  await logAudit("lead.update", {
+    entity: "lead",
+    entityId: id,
+    summary: `Edited lead ${data.name ?? before?.name ?? ""}`.trim(),
+    before: before ? (before as unknown as Record<string, unknown>) : null,
+    after: after ? (after as unknown as Record<string, unknown>) : null,
+  });
   revalidatePath("/admin");
   revalidatePath(`/admin/${id}`);
   redirect(`/admin/${id}`);

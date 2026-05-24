@@ -1,40 +1,114 @@
 import "server-only";
 import { supabase } from "./supabase";
-import { ALL_PRICE_LINES } from "./pricing";
-import type { PriceTier, TierPrices } from "./priceTiers-shared";
+import { ALL_PRICE_LINES, type PriceLine } from "./pricing";
+import { EMPTY_TIER_PRICES, type LineAmounts, type PriceTier, type TierPrices } from "./priceTiers-shared";
 
-export type { PriceTier, TierPrices } from "./priceTiers-shared";
+export type { LineAmounts, PriceTier, TierPrices } from "./priceTiers-shared";
 
-const TIER_COLUMNS = `id,name,sort_order,${ALL_PRICE_LINES.join(",")}`;
+// price_tiers now only stores metadata (id, name, sort_order). Prices live in
+// price_tier_amounts as (tier_id, line_id, amount). We project them back into
+// the legacy-line-keyed shape PriceTier expects so admin UI / cars-lib code
+// keeps working without callsite changes.
+
+const TIER_META_COLUMNS = "id,name,sort_order";
+
+/** Bulk-load amounts for a set of tier ids, returning a map of legacy-line-keyed prices per tier. */
+async function loadAmountsFor(tierIds: string[]): Promise<Map<string, TierPrices>> {
+  const out = new Map<string, TierPrices>();
+  if (tierIds.length === 0) return out;
+  const { data, error } = await supabase()
+    .from("price_tier_amounts")
+    .select("tier_id, amount, service_price_lines!inner(legacy_line)")
+    .in("tier_id", tierIds);
+  if (error) throw error;
+  type Row = {
+    tier_id: string;
+    amount: number | null;
+    service_price_lines: { legacy_line: string | null } | Array<{ legacy_line: string | null }>;
+  };
+  for (const row of (data ?? []) as unknown as Row[]) {
+    const rel = row.service_price_lines;
+    const relRow = Array.isArray(rel) ? rel[0] : rel;
+    const key = relRow?.legacy_line;
+    if (!key || !isPriceLineKey(key)) continue;
+    let bucket = out.get(row.tier_id);
+    if (!bucket) { bucket = { ...EMPTY_TIER_PRICES }; out.set(row.tier_id, bucket); }
+    bucket[key] = row.amount;
+  }
+  return out;
+}
+
+function isPriceLineKey(v: string): v is PriceLine {
+  return (ALL_PRICE_LINES as string[]).includes(v);
+}
+
+/**
+ * Source-of-truth writer for tier prices, keyed by line_id (works for every
+ * line in the catalog — legacy or brand-new). Upserts one row per
+ * (tier_id, line_id) into price_tier_amounts.
+ */
+async function writeTierAmountsByLineId(tierId: string, amounts: LineAmounts): Promise<void> {
+  const entries = Object.entries(amounts);
+  if (entries.length === 0) return;
+  const rows = entries.map(([line_id, amount]) => ({ tier_id: tierId, line_id, amount }));
+  const { error } = await supabase()
+    .from("price_tier_amounts")
+    .upsert(rows, { onConflict: "tier_id,line_id" });
+  if (error) throw error;
+}
+
+/** Bulk-load every tier's amounts keyed by line_id (for the tier editor inputs). */
+export async function listLineAmountsByTier(tierIds: string[]): Promise<Record<string, LineAmounts>> {
+  const out: Record<string, LineAmounts> = {};
+  if (tierIds.length === 0) return out;
+  const { data, error } = await supabase()
+    .from("price_tier_amounts")
+    .select("tier_id, line_id, amount")
+    .in("tier_id", tierIds);
+  if (error) throw error;
+  for (const r of (data ?? []) as Array<{ tier_id: string; line_id: string; amount: number | null }>) {
+    (out[r.tier_id] ??= {})[r.line_id] = r.amount;
+  }
+  return out;
+}
 
 /** All tiers, plus the car count assigned to each. */
 export async function listTiersWithCounts(): Promise<PriceTier[]> {
   const sb = supabase();
   const [tiersRes, countsRes] = await Promise.all([
-    sb.from("price_tiers").select(TIER_COLUMNS).order("sort_order").order("name"),
+    sb.from("price_tiers").select(TIER_META_COLUMNS).order("sort_order").order("name"),
     sb.from("cars").select("tier_id"),
   ]);
   if (tiersRes.error) throw tiersRes.error;
   if (countsRes.error) throw countsRes.error;
 
+  const tiers = (tiersRes.data ?? []) as Array<{ id: string; name: string; sort_order: number }>;
+  const amountsByTier = await loadAmountsFor(tiers.map((t) => t.id));
+
   const counts = new Map<string, number>();
   for (const row of (countsRes.data ?? []) as { tier_id: string | null }[]) {
     if (row.tier_id) counts.set(row.tier_id, (counts.get(row.tier_id) ?? 0) + 1);
   }
-  return ((tiersRes.data ?? []) as unknown as PriceTier[]).map((t) => ({
+
+  return tiers.map((t) => ({
     ...t,
+    ...(amountsByTier.get(t.id) ?? EMPTY_TIER_PRICES),
     car_count: counts.get(t.id) ?? 0,
   }));
 }
 
 export async function getTier(id: string): Promise<PriceTier | null> {
-  const { data, error } = await supabase().from("price_tiers").select(TIER_COLUMNS).eq("id", id).maybeSingle();
+  const sb = supabase();
+  const { data, error } = await sb.from("price_tiers").select(TIER_META_COLUMNS).eq("id", id).maybeSingle();
   if (error) throw error;
-  return (data ?? null) as unknown as PriceTier | null;
+  if (!data) return null;
+  const tier = data as { id: string; name: string; sort_order: number };
+  const amounts = (await loadAmountsFor([tier.id])).get(tier.id) ?? EMPTY_TIER_PRICES;
+  return { ...tier, ...amounts };
 }
 
 /** Insert a new tier; sort_order defaults to (max + 1). */
-export async function createTier(name: string, prices: TierPrices): Promise<PriceTier> {
+export async function createTier(name: string, amounts: LineAmounts): Promise<{ id: string }> {
   const sb = supabase();
   const { data: maxRow } = await sb
     .from("price_tiers")
@@ -46,57 +120,56 @@ export async function createTier(name: string, prices: TierPrices): Promise<Pric
 
   const { data, error } = await sb
     .from("price_tiers")
-    .insert({ name, sort_order: next, ...prices })
-    .select(TIER_COLUMNS)
+    .insert({ name, sort_order: next })
+    .select("id")
     .single();
   if (error) throw error;
-  return data as unknown as PriceTier;
+  const meta = data as { id: string };
+  await writeTierAmountsByLineId(meta.id, amounts);
+  return { id: meta.id };
 }
 
 /**
- * Update a tier and propagate the new prices onto every car assigned to it,
- * so existing read paths (booking wizard, etc.) keep working unchanged.
+ * Update a tier's metadata and/or its prices. Prices go straight to
+ * price_tier_amounts (the source of truth); the price_tiers row only carries
+ * metadata now. Cars read prices via their tier on next request — no
+ * propagation needed.
  */
 export async function updateTier(
   id: string,
-  patch: { name?: string; sort_order?: number } & Partial<TierPrices>,
+  patch: { name?: string; sort_order?: number; amounts?: LineAmounts },
 ): Promise<void> {
   const sb = supabase();
-  const { error } = await sb.from("price_tiers").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
-  if (error) throw error;
 
-  // Mirror price columns onto member cars. We only mirror the keys actually
-  // in the patch — leaving `name`/`sort_order` out — so a rename doesn't
-  // touch car rows.
-  const priceMirror: Record<string, unknown> = {};
-  for (const line of ALL_PRICE_LINES) {
-    if (line in patch) priceMirror[line] = (patch as Record<string, unknown>)[line];
+  const metaPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if ("name" in patch) metaPatch.name = patch.name;
+  if ("sort_order" in patch) metaPatch.sort_order = patch.sort_order;
+
+  if (Object.keys(metaPatch).length > 1) {
+    const { error } = await sb.from("price_tiers").update(metaPatch).eq("id", id);
+    if (error) throw error;
   }
-  if (Object.keys(priceMirror).length > 0) {
-    const { error: e2 } = await sb.from("cars").update(priceMirror).eq("tier_id", id);
-    if (e2) throw e2;
+
+  if (patch.amounts && Object.keys(patch.amounts).length > 0) {
+    await writeTierAmountsByLineId(id, patch.amounts);
   }
 }
 
-/** Delete a tier; member cars are unassigned (FK is on delete set null) and keep their last prices. */
+/** Delete a tier; member cars are unassigned via FK ON DELETE SET NULL, and
+ *  price_tier_amounts rows cascade. */
 export async function deleteTier(id: string): Promise<void> {
   const { error } = await supabase().from("price_tiers").delete().eq("id", id);
   if (error) throw error;
 }
 
-/** Assign cars to a tier and copy the tier's prices onto each. */
+/** Assign cars to a tier. Prices are resolved through the tier on read. */
 export async function assignCarsToTier(carIds: string[], tierId: string): Promise<void> {
   if (carIds.length === 0) return;
-  const sb = supabase();
-  const tier = await getTier(tierId);
-  if (!tier) throw new Error("Tier not found");
-  const priceMirror: Record<string, unknown> = { tier_id: tierId };
-  for (const line of ALL_PRICE_LINES) priceMirror[line] = (tier as unknown as Record<string, unknown>)[line] ?? null;
-  const { error } = await sb.from("cars").update(priceMirror).in("id", carIds);
+  const { error } = await supabase().from("cars").update({ tier_id: tierId }).in("id", carIds);
   if (error) throw error;
 }
 
-/** Detach cars from any tier (their price columns are left as-is). */
+/** Detach cars from any tier — they'll show no prices in the wizard. */
 export async function unassignCars(carIds: string[]): Promise<void> {
   if (carIds.length === 0) return;
   const { error } = await supabase().from("cars").update({ tier_id: null }).in("id", carIds);

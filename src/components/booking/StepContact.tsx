@@ -1,13 +1,92 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Phone, User, Sparkles, Droplets, Wrench, Check } from "lucide-react";
 import type { BookingData, ServiceCategory } from "./BookingWizard";
-import { OPTIONS_BY_CATEGORY, SERVICE_OPTIONS, inr, isServiceOptionId, CATEGORY_COLORS } from "@/lib/pricing";
+import { OPTIONS_BY_CATEGORY, SERVICE_OPTIONS, isServiceOptionId, CATEGORY_COLORS } from "@/lib/pricing";
 import { useSiteSettings } from "@/components/SiteSettingsContext";
 import { stepCopy, msg } from "@/lib/site-settings-shared";
 import CustomFields from "./CustomFields";
+
+// Presentation lookup keyed by legacy_key. The catalog stores label/blurb/
+// order/enabled but not the visual icon, "default package" hint, or border
+// colour — those still live here. Once Phase 7 lets admins create new
+// categories, we'll add icon/color to the catalog itself.
+const CATEGORY_PRESENTATION: Record<string, {
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  defaultPkg: BookingData["pkg"];
+  borderColor: string;
+}> = {
+  CarDetailing:   { icon: Sparkles, defaultPkg: null,      borderColor: CATEGORY_COLORS.CarDetailing },
+  OneTimeCarWash: { icon: Wrench,   defaultPkg: "OneTime", borderColor: CATEGORY_COLORS.OneTimeCarWash },
+  CarWash:        { icon: Droplets, defaultPkg: "Daily",   borderColor: CATEGORY_COLORS.CarWash },
+};
+
+// Fallback when the catalog isn't loaded yet (initial render before the
+// server-rendered settings arrive, or if the catalog query fails).
+const LEGACY_CATEGORIES: Category[] = [
+  { id: "CarDetailing",   label: "Doorstep Car Detailing",                       blurb: "Premium paint & interior care", ...CATEGORY_PRESENTATION.CarDetailing },
+  { id: "OneTimeCarWash", label: "Doorstep One-Time Car Wash",                    blurb: "Single visit, no commitment",   ...CATEGORY_PRESENTATION.OneTimeCarWash },
+  { id: "CarWash",        label: "Doorstep Car Wash - Monthly Subscription",      blurb: "Subscription doorstep wash",     ...CATEGORY_PRESENTATION.CarWash },
+];
+
+interface Category {
+  id: ServiceCategory;
+  label: string;
+  blurb: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  defaultPkg: BookingData["pkg"];
+  borderColor: string;
+}
+
+/**
+ * Resolved sub-options for a category. `id` is the legacy ServiceOptionId
+ * when the catalog row has one, otherwise the catalog slug (admin-created
+ * options use their slug as the stable identifier).
+ */
+interface DisplayOption {
+  id: string;
+  label: string;
+  blurb: string;
+}
+
+function buildOptionsForCategory(
+  catalog: ReturnType<typeof useSiteSettings>["catalog"],
+  categoryId: ServiceCategory | null | undefined,
+): DisplayOption[] {
+  if (!categoryId) return [];
+  const allowedLegacy = new Set<string>(OPTIONS_BY_CATEGORY[categoryId] ?? []);
+
+  // Fallback: catalog not yet loaded — use legacy hardcoded set.
+  if (!catalog) {
+    return [...allowedLegacy].map((id) => ({
+      id,
+      label: SERVICE_OPTIONS[id as keyof typeof SERVICE_OPTIONS].label,
+      blurb: SERVICE_OPTIONS[id as keyof typeof SERVICE_OPTIONS].blurb,
+    }));
+  }
+
+  // Find the catalog category matching this category's legacy_key.
+  const catCat = catalog.categories.find((c) => c.legacy_key === categoryId);
+  if (!catCat) return [];
+
+  return catalog.options
+    .filter((o) => o.category_id === catCat.id && o.enabled)
+    // Legacy-backed options must be in the allow-list so backfill artifacts
+    // (e.g. InteriorDetailing-as-addon) don't surface as bookable. Admin-
+    // created options have no legacy_id and always pass through.
+    .filter((o) => (o.legacy_id ? allowedLegacy.has(o.legacy_id) : true))
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((o) => {
+      const legacy = o.legacy_id;
+      return {
+        id: legacy ?? o.slug,
+        label: o.label,
+        blurb: o.blurb ?? (legacy ? SERVICE_OPTIONS[legacy as keyof typeof SERVICE_OPTIONS]?.blurb ?? "" : ""),
+      };
+    });
+}
 
 interface Props {
   data: BookingData;
@@ -15,43 +94,27 @@ interface Props {
   onNext: () => void;
 }
 
-// Service categories shown as cards. Sub-options are pulled from OPTIONS_BY_CATEGORY
-// in src/lib/pricing.ts so labels and prices stay in sync everywhere.
-const categories: {
-  id: ServiceCategory;
-  label: string;
-  blurb: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  // Visual `pkg` used by CarShowcase when the category is chosen but no
-  // sub-option yet. Nullable for detailing.
-  defaultPkg: BookingData["pkg"];
-  borderColor: string;
-}[] = [
-    {
-      id: "CarDetailing",
-      label: "Doorstep Car Detailing",
-      blurb: "Premium paint & interior care",
-      icon: Sparkles,
-      defaultPkg: null,
-      borderColor: CATEGORY_COLORS.CarDetailing,
-    },
-    {
-      id: "OneTimeCarWash",
-      label: "Doorstep One-Time Car Wash",
-      blurb: "Single visit, no commitment",
-      icon: Wrench,
-      defaultPkg: "OneTime",
-      borderColor: CATEGORY_COLORS.OneTimeCarWash,
-    },
-    {
-      id: "CarWash",
-      label: "Doorstep Car Wash - Monthly Subscription",
-      blurb: "Subscription doorstep wash",
-      icon: Droplets,
-      defaultPkg: "Daily",
-      borderColor: CATEGORY_COLORS.CarWash,
-    },
-  ];
+// Builds the category cards from the dynamic catalog. Filters to enabled
+// categories, sorts by the catalog's sort_order, and uses legacy_key as the
+// stored id so leads/pricing remain stable across renames. Falls back to the
+// hardcoded list if the catalog hasn't loaded yet.
+function buildCategories(catalog: ReturnType<typeof useSiteSettings>["catalog"]): Category[] {
+  if (!catalog || catalog.categories.length === 0) return LEGACY_CATEGORIES;
+  return catalog.categories
+    .filter((c) => c.enabled)
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((c) => {
+      const presentation = c.legacy_key ? CATEGORY_PRESENTATION[c.legacy_key] : undefined;
+      return {
+        id: (c.legacy_key ?? c.slug) as ServiceCategory,
+        label: c.label,
+        blurb: c.blurb ?? "",
+        icon: presentation?.icon ?? Sparkles,
+        defaultPkg: presentation?.defaultPkg ?? null,
+        borderColor: presentation?.borderColor ?? CATEGORY_COLORS.CarDetailing,
+      };
+    });
+}
 
 // CarShowcase visual hint derived from the chosen sub-option.
 const optionToPkg: Record<string, BookingData["pkg"]> = {
@@ -69,7 +132,10 @@ const PREMIUM_GOLD_LIGHT = "#E8CC7A";
 const PREMIUM_GRADIENT = `linear-gradient(135deg, ${PREMIUM_GOLD_DARK}, ${PREMIUM_GOLD}, ${PREMIUM_GOLD_LIGHT})`;
 
 export default function StepContact({ data, update, onNext }: Props) {
-  const booking = useSiteSettings().booking;
+  const settings = useSiteSettings();
+  const booking = settings.booking;
+  // Memoised so re-renders don't rebuild the list unless the catalog actually changes.
+  const categories = useMemo(() => buildCategories(settings.catalog), [settings.catalog]);
   const copy = stepCopy(booking, "contact");
   const [attempted, setAttempted] = useState(false);
 
@@ -93,7 +159,10 @@ export default function StepContact({ data, update, onNext }: Props) {
   }
 
   const activeCategory = categories.find((c) => c.id === data.service);
-  const activeOptionIds = activeCategory ? OPTIONS_BY_CATEGORY[activeCategory.id] : [];
+  const activeOptions = useMemo(
+    () => buildOptionsForCategory(settings.catalog, activeCategory?.id),
+    [settings.catalog, activeCategory?.id],
+  );
   const selectedOptionDef = isServiceOptionId(data.serviceOption) ? SERVICE_OPTIONS[data.serviceOption] : null;
   const addOn = selectedOptionDef?.addOn;
 
@@ -110,7 +179,9 @@ export default function StepContact({ data, update, onNext }: Props) {
   function selectServiceOption(optionId: string) {
     update({
       serviceOption: optionId,
-      pkg: optionToPkg[optionId] ?? null,
+      // For admin-created options (no optionToPkg mapping) fall back to the
+      // category's default visual so CarShowcase still has a pkg hint.
+      pkg: optionToPkg[optionId] ?? activeCategory?.defaultPkg ?? null,
       interiorAddOn: false,
     });
   }
@@ -269,8 +340,8 @@ export default function StepContact({ data, update, onNext }: Props) {
                             <p className="text-[11px] text-red-300 mb-2">Please pick one option below.</p>
                           )}
                           <div className="flex flex-col gap-2">
-                            {activeOptionIds.map((id) => {
-                              const opt = SERVICE_OPTIONS[id];
+                            {activeOptions.map((opt) => {
+                              const id = opt.id;
                               const sel = data.serviceOption === id;
                               return (
                                 <button
@@ -354,12 +425,9 @@ export default function StepContact({ data, update, onNext }: Props) {
                                   </p>
                                 </div>
                               </div>
-                              <span
-                                className="text-xs font-semibold whitespace-nowrap"
-                                style={{ color: c.borderColor }}
-                              >
-                                +{inr(Math.min(...Object.values(addOn.price)))}
-                              </span>
+                              {/* Price intentionally hidden here; the actual
+                                  add-on price is confirmed on the Package
+                                  step alongside the vehicle's tier price. */}
                             </button>
                           )}
                         </div>

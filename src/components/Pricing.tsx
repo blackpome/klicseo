@@ -9,17 +9,28 @@ import { useSiteSettings } from "./SiteSettingsContext";
 import { discountedPrice, type PriceLine } from "@/lib/pricing";
 import { isCardId } from "@/lib/card-prices-shared";
 
-// "From" prices reflect the Hatchback tier; the booking flow charges the
-// vehicle-tier-specific price from the same source (src/lib/pricing.ts).
-const plans = [
-  {
-    id: "CarDetailing",
-    name: "Car Detailing",
-    line: "car_detailing" as PriceLine,
+interface Plan {
+  id: string;
+  name: string;
+  line: PriceLine;
+  fromPrice: number;
+  billing: string;
+  tagline: string;
+  features: string[];
+  highlight: boolean;
+  borderColor: string;
+  cta: string;
+  href: string;
+}
+
+// Things the catalog doesn't store yet (features, default fromPrice, colour,
+// CTA, billing unit, "Most Popular" flag). Keyed by legacy_key so when admin
+// renames a category the pricing card still finds its preset.
+const PLAN_PRESENTATION: Record<string, Omit<Plan, "id" | "name" | "tagline">> = {
+  CarDetailing: {
+    line: "car_detailing",
     fromPrice: 4999,
     billing: "package",
-    tagline: "Premium paint & interior care",
-    badge: null as string | null,
     features: [
       "Ceramic Sealant Coating",
       "Optional Interior Detailing add-on",
@@ -28,18 +39,14 @@ const plans = [
       "By appointment at your location",
     ],
     highlight: false,
-    borderColor: "#10b981", // Premium Green
+    borderColor: "#10b981",
     cta: "Book Detailing",
     href: "/booking?service=CarDetailing",
   },
-  {
-    id: "CarWash",
-    name: "Car Wash - Monthly Subscription",
-    line: "monthly" as PriceLine,
+  CarWash: {
+    line: "monthly",
     fromPrice: 19,
     billing: "day",
-    tagline: "Doorstep wash subscriptions",
-    badge: null as string | null,
     features: [
       "Daily Monthly Plan (Mon–Sat)",
       "Weekly Thrice Plan ",
@@ -49,17 +56,13 @@ const plans = [
       "Cancel anytime, no contract",
     ],
     highlight: true,
-    borderColor: "#3B82F6", // Premium Blue
+    borderColor: "#3B82F6",
     cta: "Book Car Wash",
     href: "/booking?service=CarWash",
   },
-  {
-    id: "OneTimeCarWash",
-    name: "One-Time Wash",
-    line: "one_time_manual" as PriceLine,
+  OneTimeCarWash: {
+    line: "one_time_manual",
     fromPrice: 249,
-    tagline: "Single visit, no commitment",
-    badge: null as string | null,
     billing: "wash",
     features: [
       "Manual hand wash",
@@ -70,11 +73,55 @@ const plans = [
       "Great if you want to try us first",
     ],
     highlight: false,
-    borderColor: "#EC4899", // Vivid Pink — matches OneTimeCarWash in booking
+    borderColor: "#EC4899",
     cta: "Book One-Time Wash",
     href: "/booking?service=OneTimeCarWash",
   },
-];
+};
+
+// Default labels/taglines for when the catalog hasn't loaded yet (initial
+// render before SiteSettings hydrate). Order matches the legacy hardcoded list.
+const LEGACY_PLAN_NAMES: Record<string, { name: string; tagline: string }> = {
+  CarDetailing:   { name: "Car Detailing",                  tagline: "Premium paint & interior care" },
+  CarWash:        { name: "Car Wash - Monthly Subscription", tagline: "Doorstep wash subscriptions" },
+  OneTimeCarWash: { name: "One-Time Wash",                   tagline: "Single visit, no commitment" },
+};
+
+const LEGACY_PLAN_ORDER: string[] = ["CarDetailing", "CarWash", "OneTimeCarWash"];
+
+function buildLegacyPlans(): Plan[] {
+  return LEGACY_PLAN_ORDER.flatMap((key) => {
+    const p = PLAN_PRESENTATION[key];
+    const n = LEGACY_PLAN_NAMES[key];
+    if (!p || !n) return [];
+    return [{ id: key, name: n.name, tagline: n.tagline, ...p }];
+  });
+}
+
+/**
+ * Build the live card list. Card ORDER is fixed (LEGACY_PLAN_ORDER) and is
+ * intentionally decoupled from the Services editor's sort_order — admins can
+ * reorder categories in the booking wizard without affecting the landing
+ * page's pricing-card layout. The catalog still drives label / tagline /
+ * enabled flag so renames and toggles flow through.
+ */
+function buildPlans(catalog: ReturnType<typeof useSiteSettings>["catalog"]): Plan[] {
+  if (!catalog || catalog.categories.length === 0) return buildLegacyPlans();
+  const byLegacy = new Map(catalog.categories.map((c) => [c.legacy_key, c] as const));
+  return LEGACY_PLAN_ORDER.flatMap((key) => {
+    const preset = PLAN_PRESENTATION[key];
+    if (!preset) return [];
+    const cat = byLegacy.get(key);
+    if (cat && !cat.enabled) return [];
+    const fallback = LEGACY_PLAN_NAMES[key];
+    return [{
+      id: key,
+      name: cat?.label || fallback?.name || key,
+      tagline: cat?.blurb || fallback?.tagline || "",
+      ...preset,
+    }];
+  });
+}
 
 /** 3D tilt + glare + rotating border animation */
 function TiltPlanCard({
@@ -191,8 +238,6 @@ function TiltPlanCard({
   );
 }
 
-type Plan = (typeof plans)[number];
-
 function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   const discounts = useServiceDiscounts();
   const { cardPrices } = useSiteSettings();
@@ -249,8 +294,11 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
         <div className="mb-6">
           <div className="flex items-baseline gap-1 flex-wrap">
             <span className="text-white/50 text-sm font-medium mr-1">Starts @</span>
-            {pct > 0 && (
-              <span className="text-white/40 text-lg font-medium line-through mr-1" style={{ fontFamily: "var(--font-playfair)" }}>
+            {showBadge && (
+              <span
+                className="text-lg font-semibold text-[#F97316] line-through decoration-[#F97316] decoration-2 bg-[#F97316]/15 px-1.5 py-0.5 rounded-md mr-1"
+                style={{ fontFamily: "var(--font-playfair)" }}
+              >
                 ₹{basePrice.toLocaleString("en-IN")}
               </span>
             )}
@@ -302,6 +350,8 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
 }
 
 export default function Pricing() {
+  const { catalog } = useSiteSettings();
+  const plans = buildPlans(catalog);
   return (
     <section id="pricing" className="relative py-20 sm:py-28 px-4">
       <div

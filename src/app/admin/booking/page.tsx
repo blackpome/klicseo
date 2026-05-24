@@ -3,6 +3,7 @@ import { ClipboardList } from "lucide-react";
 import AdminShell from "../AdminShell";
 import { currentAdmin } from "@/lib/admin-auth";
 import { getSiteSettings } from "@/lib/site-settings";
+import { getServiceCatalog } from "@/lib/serviceCatalog";
 import BookingForm from "./BookingForm";
 
 export default async function BookingAdminPage() {
@@ -19,7 +20,7 @@ export default async function BookingAdminPage() {
     );
   }
 
-  const settings = await getSiteSettings();
+  const [settings, catalog] = await Promise.all([getSiteSettings(), getServiceCatalog()]);
 
   return (
     <AdminShell>
@@ -36,7 +37,7 @@ export default async function BookingAdminPage() {
           </div>
         </div>
 
-        <BookingForm current={settings.booking} />
+        <BookingForm current={settings.booking} serviceRadius={settings.serviceRadius} catalog={catalog} />
       </div>
     </AdminShell>
   );

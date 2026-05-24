@@ -11,6 +11,7 @@ import {
   insertEmployee,
   updateEmployee,
   updateEmployeeStatus,
+  getEmployee,
   type EmployeeStatus,
   type EmployeeUpdate,
 } from "@/lib/employees";
@@ -137,9 +138,17 @@ export async function updateEmployeeAction(_prev: { error?: string }, formData: 
   if (aadhaar) patch.aadhaar_photo_path = aadhaar;
   if (profile) patch.profile_photo_path = profile;
 
+  const before = await getEmployee(id);
   await updateEmployee(id, patch);
+  const after = await getEmployee(id);
 
-  await logAudit("employee.update", { entity: "employee", entityId: id, summary: `Edited employee ${data.name}` });
+  await logAudit("employee.update", {
+    entity: "employee",
+    entityId: id,
+    summary: `Edited employee ${data.name}`,
+    before: before ? (before as unknown as Record<string, unknown>) : null,
+    after: after ? (after as unknown as Record<string, unknown>) : null,
+  });
   revalidatePath("/admin/employees");
   revalidatePath(`/admin/employees/${id}`);
   redirect(`/admin/employees/${id}`);

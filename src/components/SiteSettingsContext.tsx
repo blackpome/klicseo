@@ -1,14 +1,17 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { SITE_SETTINGS_FALLBACK, type SiteSettings } from "@/lib/site-settings-shared";
 
 export type { SiteSettings };
 
-// Editable site content (price, phone, WhatsApp, card prices, social, media),
-// fetched on the server (root layout) and shared with client components without
-// prop-drilling.
+// Editable site content (price, phone, WhatsApp, card prices, social, media,
+// serviceRadius, booking). Server-rendered initially via the root layout and
+// then refreshed periodically so admin changes (e.g. a radius bump) reach an
+// already-open client without a full page reload.
 const SiteSettingsContext = createContext<SiteSettings>(SITE_SETTINGS_FALLBACK);
+
+const POLL_INTERVAL_MS = 30_000;
 
 export function SiteSettingsProvider({
   value,
@@ -17,7 +20,33 @@ export function SiteSettingsProvider({
   value: SiteSettings;
   children: React.ReactNode;
 }) {
-  return <SiteSettingsContext.Provider value={value}>{children}</SiteSettingsContext.Provider>;
+  // Seed from the server-rendered value; subsequent updates flow through the
+  // polling effect below.
+  const [current, setCurrent] = useState<SiteSettings>(value);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const res = await fetch("/api/site-settings", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as SiteSettings;
+        if (!cancelled) setCurrent(data);
+      } catch {
+        // network blip — keep last good value
+      }
+    };
+    const id = setInterval(refresh, POLL_INTERVAL_MS);
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
+  return <SiteSettingsContext.Provider value={current}>{children}</SiteSettingsContext.Provider>;
 }
 
 export function useSiteSettings(): SiteSettings {

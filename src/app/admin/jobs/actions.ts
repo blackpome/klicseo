@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { currentAdmin } from "@/lib/admin-auth";
-import { insertJob, updateJob, deleteJob, APP_FIELD_DEFS, type ApplicationFields, type JobInput } from "@/lib/jobs";
+import { insertJob, updateJob, deleteJob, getJob, APP_FIELD_DEFS, type ApplicationFields, type JobInput } from "@/lib/jobs";
 import { logAudit } from "@/lib/audit";
 
 async function requireManager() {
@@ -76,8 +76,16 @@ export async function updateJobAction(_prev: { error?: string }, formData: FormD
   const job = readJob(formData);
   if (!job.title) return { error: "Title is required." };
   try {
+    const before = await getJob(id);
     await updateJob(id, job);
-    await logAudit("job.update", { entity: "job", entityId: id, summary: `Edited job "${job.title}"` });
+    const after = await getJob(id);
+    await logAudit("job.update", {
+      entity: "job",
+      entityId: id,
+      summary: `Edited job "${job.title}"`,
+      before: before ? (before as unknown as Record<string, unknown>) : null,
+      after: after ? (after as unknown as Record<string, unknown>) : null,
+    });
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not save job." };
   }

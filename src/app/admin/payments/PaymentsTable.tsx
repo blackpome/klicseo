@@ -8,11 +8,16 @@ import { inr } from "@/lib/pricing";
 export interface PaymentItem {
   customer: PaymentCustomer;
   payment: PaymentData | null;
+  /** Count of months between booking-month and the currently-viewed period
+   *  where the customer hasn't paid. Always 0 for non-monthly services. */
+  dueCount: number;
+  /** Per-month amount used for the "{x} × ₹{amount}" chip. */
+  dueUnit: number;
 }
 
 type Filter = "all" | "paid" | "pending";
 
-export default function PaymentsTable({ period, items }: { period: string; items: PaymentItem[] }) {
+export default function PaymentsTable({ period, periodLabel, items }: { period: string; periodLabel: string; items: PaymentItem[] }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
 
@@ -87,7 +92,15 @@ export default function PaymentsTable({ period, items }: { period: string; items
       ) : (
         <div className="space-y-2.5">
           {filtered.map((it) => (
-            <PaymentRow key={it.customer.id} period={period} customer={it.customer} payment={it.payment} />
+            <PaymentRow
+              key={it.customer.id}
+              period={period}
+              periodLabel={periodLabel}
+              customer={it.customer}
+              payment={it.payment}
+              dueCount={it.dueCount}
+              dueUnit={it.dueUnit}
+            />
           ))}
         </div>
       )}

@@ -6,6 +6,7 @@ import AdminError from "../../AdminError";
 import LeadForm from "../../LeadForm";
 import { updateLeadAction } from "../../actions";
 import { getLead } from "@/lib/leads";
+import { listKnownAreas } from "@/lib/area";
 
 export default async function EditLeadPage({
   params,
@@ -24,6 +25,7 @@ export default async function EditLeadPage({
     );
   }
   if (!lead) notFound();
+  const knownAreas = await listKnownAreas();
 
   // useActionState passes (prevState, formData) — bind the id so the action
   // knows which row to patch without needing a hidden input on the client.
@@ -43,7 +45,7 @@ export default async function EditLeadPage({
           Edit Lead
         </h1>
         <p className="text-white/45 text-sm mb-6">Update lead details. Status and internal notes are edited on the detail page.</p>
-        <LeadForm action={action} initial={lead} submitLabel="Save changes" pendingLabel="Saving…" />
+        <LeadForm action={action} initial={lead} submitLabel="Save changes" pendingLabel="Saving…" knownAreas={knownAreas} />
       </div>
     </AdminShell>
   );

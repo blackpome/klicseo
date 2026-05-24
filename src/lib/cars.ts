@@ -1,10 +1,69 @@
 import "server-only";
 import { supabase } from "./supabase";
-import type { CarRecord, CarPrices } from "./carPricing";
+import type { CarRecord } from "./carPricing";
 import { ALL_PRICE_LINES } from "./pricing";
 
-// Columns selected for admin list / edit (CarRecord shape + the price lines).
-const CAR_COLUMNS = `id,brand,model,body_type,segment_name,tier_id,${ALL_PRICE_LINES.join(",")}`;
+// Cars no longer carry prices — prices live on price_tiers, and a car points
+// to its tier via tier_id. The CarRecord shape still includes the 9 price
+// fields for backward compatibility with the booking wizard / pricing libs;
+// they're filled in here by joining the assigned tier at fetch time.
+
+const CAR_COLUMNS = "id,brand,model,body_type,segment_name,tier_id";
+
+type RawCar = {
+  id: string;
+  brand: string;
+  model: string;
+  body_type: string | null;
+  segment_name: string | null;
+  tier_id: string | null;
+};
+
+/**
+ * Bulk-resolve cars into full CarRecord by joining each tier's prices from
+ * price_tier_amounts in one extra query. Cars without a tier get null prices
+ * (same UX as before — the wizard shows "On call").
+ */
+async function withTierPrices(rows: RawCar[]): Promise<CarRecord[]> {
+  if (rows.length === 0) return [];
+  const tierIds = Array.from(new Set(rows.map((r) => r.tier_id).filter((x): x is string => !!x)));
+  // Two parallel maps from the SAME source data: legacy-keyed (for the 9-key
+  // CarPrices interface) and line-id-keyed (for catalog-driven pricing of
+  // admin-created options).
+  const legacyByTier = new Map<string, Record<string, number | null>>();
+  const amountsByTier = new Map<string, Record<string, number | null>>();
+  if (tierIds.length > 0) {
+    const { data, error } = await supabase()
+      .from("price_tier_amounts")
+      .select("tier_id, line_id, amount, service_price_lines!inner(legacy_line)")
+      .in("tier_id", tierIds);
+    if (error) throw error;
+    type Row = {
+      tier_id: string;
+      line_id: string;
+      amount: number | null;
+      service_price_lines: { legacy_line: string | null } | Array<{ legacy_line: string | null }>;
+    };
+    for (const row of (data ?? []) as unknown as Row[]) {
+      // line-id map: always populate
+      (amountsByTier.get(row.tier_id) ?? amountsByTier.set(row.tier_id, {}).get(row.tier_id)!)[row.line_id] = row.amount;
+      // legacy map: only if this line has a known legacy_line
+      const rel = row.service_price_lines;
+      const relRow = Array.isArray(rel) ? rel[0] : rel;
+      const key = relRow?.legacy_line;
+      if (key && (ALL_PRICE_LINES as string[]).includes(key)) {
+        (legacyByTier.get(row.tier_id) ?? legacyByTier.set(row.tier_id, {}).get(row.tier_id)!)[key] = row.amount;
+      }
+    }
+  }
+  return rows.map((c) => {
+    const tp = c.tier_id ? legacyByTier.get(c.tier_id) ?? {} : {};
+    const amounts = c.tier_id ? amountsByTier.get(c.tier_id) ?? {} : {};
+    const merged: Record<string, unknown> = { ...c, amounts };
+    for (const line of ALL_PRICE_LINES) merged[line] = tp[line] ?? null;
+    return merged as unknown as CarRecord;
+  });
+}
 
 /** Cars in a specific tier (no search; ordered by name). */
 export async function listCarsByTier(tierId: string): Promise<CarRecord[]> {
@@ -15,7 +74,7 @@ export async function listCarsByTier(tierId: string): Promise<CarRecord[]> {
     .order("brand")
     .order("model");
   if (error) throw error;
-  return (data ?? []) as unknown as CarRecord[];
+  return withTierPrices((data ?? []) as RawCar[]);
 }
 
 /** Cars not yet assigned to any tier (used by the "add cars" picker). */
@@ -25,7 +84,7 @@ export async function listUnassignedCars(search?: string, limit = 200): Promise<
   if (s) q = q.or(`brand.ilike.%${s}%,model.ilike.%${s}%`);
   const { data, error } = await q.order("brand").order("model").limit(limit);
   if (error) throw error;
-  return (data ?? []) as unknown as CarRecord[];
+  return withTierPrices((data ?? []) as RawCar[]);
 }
 
 export interface CarInput {
@@ -33,7 +92,6 @@ export interface CarInput {
   model: string;
   body_type: string | null;
   segment_name: string | null;
-  prices: Partial<CarPrices>;
 }
 
 /** Admin list: fuzzy search when `search` is set, else the first N by name. */
@@ -48,44 +106,43 @@ export async function listCars(opts: { search?: string; limit?: number } = {}): 
     .order("model", { ascending: true })
     .limit(limit);
   if (error) throw error;
-  return (data ?? []) as unknown as CarRecord[];
+  return withTierPrices((data ?? []) as RawCar[]);
 }
 
-/** All cars (capped), ordered by monthly price then name — for the grouped view. */
+/** All cars (capped), ordered by name. */
 export async function listAllCars(limit = 2000): Promise<CarRecord[]> {
   const { data, error } = await supabase()
     .from("cars")
     .select(CAR_COLUMNS)
-    .order("monthly", { ascending: true, nullsFirst: false })
     .order("brand", { ascending: true })
+    .order("model", { ascending: true })
     .limit(limit);
   if (error) throw error;
-  return (data ?? []) as unknown as CarRecord[];
+  return withTierPrices((data ?? []) as RawCar[]);
 }
 
 export async function getCar(id: string): Promise<CarRecord | null> {
   const { data, error } = await supabase().from("cars").select(CAR_COLUMNS).eq("id", id).maybeSingle();
   if (error) throw error;
-  return (data ?? null) as unknown as CarRecord | null;
+  if (!data) return null;
+  const [withPrices] = await withTierPrices([data as RawCar]);
+  return withPrices;
 }
 
-function rowFromInput(input: CarInput) {
-  const row: Record<string, unknown> = {
+function rowFromInput(input: CarInput): Record<string, unknown> {
+  return {
     brand: input.brand,
     model: input.model,
     body_type: input.body_type,
     segment_name: input.segment_name,
   };
-  for (const line of ALL_PRICE_LINES) {
-    if (line in input.prices) row[line] = input.prices[line] ?? null;
-  }
-  return row;
 }
 
 export async function insertCar(input: CarInput): Promise<CarRecord> {
   const { data, error } = await supabase().from("cars").insert(rowFromInput(input)).select(CAR_COLUMNS).single();
   if (error) throw error;
-  return data as unknown as CarRecord;
+  const [withPrices] = await withTierPrices([data as RawCar]);
+  return withPrices;
 }
 
 export async function updateCar(id: string, input: CarInput): Promise<void> {
@@ -98,29 +155,17 @@ export async function deleteCar(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Group price: set only the provided price lines across the selected cars. */
-export async function bulkSetCarPrices(ids: string[], prices: Partial<CarPrices>): Promise<void> {
-  if (ids.length === 0 || Object.keys(prices).length === 0) return;
-  const { error } = await supabase().from("cars").update(prices).in("id", ids);
-  if (error) throw error;
-}
-
 /**
  * Fuzzy type-ahead search over the car catalog (see migration 0005's
- * search_cars()). Tolerates typos and word order via pg_trgm similarity and
- * matches the combined "brand model" string, so "tata nexon" works. Results
- * are ranked by trigram similarity and capped for a snappy dropdown.
+ * search_cars()). The RPC returns rows from public.cars (which no longer has
+ * price columns); we join the tier prices in via withTierPrices().
  */
 export async function searchCars(query: string, limit = 8): Promise<CarRecord[]> {
   const q = query.trim();
   if (q.length < 1) return [];
-  const { data, error } = await supabase().rpc("search_cars", {
-    q,
-    max_results: limit,
-  });
+  const { data, error } = await supabase().rpc("search_cars", { q, max_results: limit });
   if (error) throw error;
-  // The RPC returns full car rows; the client reads only the CarRecord subset.
-  return (data ?? []) as CarRecord[];
+  return withTierPrices((data ?? []) as RawCar[]);
 }
 
 /** Distinct brand list for the brand picker. */

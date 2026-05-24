@@ -68,7 +68,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [{ percents, badges }, site] = await Promise.all([getDiscountConfig(), getSiteSettings()]);
+  const [{ percents, badges, percentsByLineId, badgesByLineId }, site] = await Promise.all([getDiscountConfig(), getSiteSettings()]);
   return (
     <html
       lang="en"
@@ -77,7 +77,12 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-[#050E21] text-white">
         <SiteSettingsProvider value={site}>
-          <DiscountProvider discounts={percents} badges={badges}>
+          <DiscountProvider
+            discounts={percents}
+            badges={badges}
+            percentsByLineId={percentsByLineId}
+            badgesByLineId={badgesByLineId}
+          >
             {children}
           </DiscountProvider>
         </SiteSettingsProvider>

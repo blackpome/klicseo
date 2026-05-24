@@ -13,7 +13,8 @@ interface Props {
   errModel: boolean;
 }
 
-// Pull just the 9 price columns off a search result.
+// Pull the 9 legacy price columns AND the line-id-keyed amounts map off a
+// search result, so admin-created sub-categories can be priced downstream.
 function pricesOf(c: CarRecord): CarPrices {
   return {
     monthly: c.monthly,
@@ -25,6 +26,7 @@ function pricesOf(c: CarRecord): CarPrices {
     interior: c.interior,
     car_detailing: c.car_detailing,
     interior_detailing: c.interior_detailing,
+    amounts: c.amounts ?? {},
   };
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Check, AlertCircle, PhoneCall } from "lucide-react";
 import TransformationLoop from "./TransformationLoop";
@@ -10,12 +10,11 @@ import {
   SERVICE_OPTIONS,
   isServiceOptionId,
   inr,
-  baseLineFor,
   CATEGORY_COLORS,
-  type ServiceOptionId,
 } from "@/lib/pricing";
-import { carPriceFor } from "@/lib/carPricing";
-import { useServiceDiscounts, useBadges } from "@/components/DiscountContext";
+import { carPriceFor, carPriceForCatalog } from "@/lib/carPricing";
+import { useServiceDiscounts, useDiscountsByLineId } from "@/components/DiscountContext";
+import { flag } from "@/lib/site-settings-shared";
 import { useSiteSettings } from "@/components/SiteSettingsContext";
 import { stepCopy, msg } from "@/lib/site-settings-shared";
 import CustomFields from "./CustomFields";
@@ -36,10 +35,62 @@ interface Props {
   onBack: () => void;
 }
 
+/** Booking option as rendered in the package step. `id` is the legacy
+ *  ServiceOptionId when available; for admin-created options it's the catalog
+ *  slug (a stable string saved on the lead). */
+interface OptionRow {
+  id: string;
+  label: string;
+  blurb: string;
+}
+
+/**
+ * Catalog-driven option list for a category. Legacy-backed options must be in
+ * OPTIONS_BY_CATEGORY (excludes backfill-only rows like InteriorDetailing-as-
+ * addon). Admin-created options (no legacy_id) always pass through.
+ */
+function buildOptionRows(
+  catalog: ReturnType<typeof useSiteSettings>["catalog"],
+  category: BookingData["service"],
+): OptionRow[] {
+  if (!category) return [];
+  const allowedLegacy = new Set<string>(OPTIONS_BY_CATEGORY[category] ?? []);
+
+  if (!catalog) {
+    return [...allowedLegacy].map((id) => ({
+      id,
+      label: SERVICE_OPTIONS[id as keyof typeof SERVICE_OPTIONS].label,
+      blurb: SERVICE_OPTIONS[id as keyof typeof SERVICE_OPTIONS].blurb,
+    }));
+  }
+
+  const catCat = catalog.categories.find((c) => c.legacy_key === category);
+  if (!catCat) return [];
+
+  return catalog.options
+    .filter((o) => o.category_id === catCat.id && o.enabled)
+    .filter((o) => (o.legacy_id ? allowedLegacy.has(o.legacy_id) : true))
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((o) => {
+      const legacy = o.legacy_id;
+      return {
+        id: legacy ?? o.slug,
+        label: o.label,
+        blurb: o.blurb ?? (legacy ? SERVICE_OPTIONS[legacy as keyof typeof SERVICE_OPTIONS]?.blurb ?? "" : ""),
+      };
+    });
+}
+
 export default function StepPackage({ data, update, onNext, onBack }: Props) {
   const [attempted, setAttempted] = useState(false);
   const category = data.service;
-  const optionIds = category ? OPTIONS_BY_CATEGORY[category] : [];
+  const settings = useSiteSettings();
+  // Catalog-driven option list — same shape and identity as the legacy IDs,
+  // but with renames + enabled flag + sort applied from the Services editor.
+  const optionRows = useMemo(
+    () => buildOptionRows(settings.catalog, category),
+    [settings.catalog, category],
+  );
   const selectedOption = data.serviceOption;
   const selectedDef = selectedOption ? SERVICE_OPTIONS[selectedOption as keyof typeof SERVICE_OPTIONS] : undefined;
   const errOption = attempted && !selectedDef;
@@ -48,13 +99,20 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
   // Per-car prices come from the catalog (set in the vehicle step). null when
   // the car was entered manually / not found — then we show the call-back note.
   const discounts = useServiceDiscounts();
-  const badges = useBadges();
-  const booking = useSiteSettings().booking;
+  const { percents: percentsByLineId, badges: badgesByLineId } = useDiscountsByLineId();
+  const booking = settings.booking;
+  const showDiscount = flag(booking, "package", "showDiscount");
   const packageTitle = stepCopy(booking, "package").title;
   const cp = data.carPrices;
   function optPrice(id: string, withAddOn = false) {
-    if (!cp || !isServiceOptionId(id)) return null;
-    return carPriceFor(cp, id as ServiceOptionId, data.parkingLocation, withAddOn, discounts);
+    if (!cp) return null;
+    // Legacy options use the fast direct-keyed path. Admin-created options
+    // resolve their lines through the catalog.
+    if (isServiceOptionId(id)) {
+      return carPriceFor(cp, id, data.parkingLocation, withAddOn, discounts);
+    }
+    if (!settings.catalog) return null;
+    return carPriceForCatalog(cp, id, data.parkingLocation, withAddOn, settings.catalog, percentsByLineId, badgesByLineId);
   }
 
   const carLabel = [data.carBrand, data.carModel].filter(Boolean).join(" ");
@@ -119,11 +177,21 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
 
       {/* Option cards for the chosen category */}
       <div className={`grid grid-cols-1 gap-3 mb-1 mt-2 ${errOption ? "rounded-xl ring-2 ring-red-400/60 p-1" : ""}`}>
-        {optionIds.map((id) => {
-          const opt = SERVICE_OPTIONS[id];
+        {optionRows.map((row) => {
+          const id = row.id;
+          // Static metadata (recurring, addOn) comes from SERVICE_OPTIONS for
+          // legacy ids; admin-created options have no entry there, so we
+          // synthesise a minimal shape from the catalog row (no addon).
+          const baseDef = isServiceOptionId(id) ? SERVICE_OPTIONS[id] : { recurring: "one-time" as const, addOn: undefined };
+          const opt = { ...baseDef, label: row.label, blurb: row.blurb };
           const selected = selectedOption === id;
           const p = optPrice(id, false);
           const pAdd = optPrice(id, true);
+          // p.basePercent already reflects the per-line badge toggle (zeroed
+          // when the badge is off, via effectiveDiscounts / carPriceForCatalog),
+          // so we don't re-check `badges[...]` here — that legacy-only lookup
+          // would miss admin-created options.
+          const offerOn = !!p && p.basePercent > 0 && showDiscount;
           return (
             <motion.button
               key={id}
@@ -144,6 +212,17 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
                   : {}
               }
             >
+              {/* Offer chip — sticks slightly above the card's top-right corner so
+                  it doesn't overlap the price column. */}
+              {offerOn && p && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute -top-2 right-3 z-10 inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider text-white shadow-[0_2px_8px_rgba(220,38,38,0.5)]"
+                  style={{ background: "linear-gradient(135deg,#DC2626 0%,#F97316 100%)" }}
+                >
+                  {p.basePercent}% OFF
+                </span>
+              )}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
@@ -171,22 +250,24 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
                   <div className="text-lg sm:text-xl font-bold leading-tight"
                        style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
                     {p ? (
-                      p.basePercent > 0 ? (
+                      offerOn ? (
                         <>
-                          <span className="text-white/40 text-xs line-through mr-1 font-medium">{inr(p.base)}</span>
+                          <span
+                            className="inline-block align-middle text-[13px] font-bold text-white line-through decoration-white/80 decoration-1 px-2 py-0.5 rounded shadow-[0_1px_4px_rgba(220,38,38,0.45)] mr-1"
+                            style={{ background: "linear-gradient(135deg,#DC2626 0%,#F97316 100%)" }}
+                          >
+                            {inr(p.base)}
+                          </span>
                           {inr(p.discountedBase)}
                         </>
                       ) : (
-                        inr(p.base)
+                        inr(p.discountedBase)
                       )
                     ) : (
                       "On call"
                     )}
                   </div>
                   <div className="text-white/35 text-[10px]">
-                    {p && p.basePercent > 0 && badges[baseLineFor(id, data.parkingLocation)] ? (
-                      <span className="text-[#F97316] font-bold">{p.basePercent}% OFF · </span>
-                    ) : null}
                     {p ? (opt.recurring === "monthly" ? "/mo" : "one time") : "price by team"}
                   </div>
                 </div>
@@ -257,8 +338,13 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
             </p>
           </div>
           <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: accent }}>
-            {selectedPriced.hasDiscount && (
-              <span className="text-white/40 text-base line-through mr-2 font-medium">{inr(selectedPriced.total)}</span>
+            {selectedPriced.hasDiscount && showDiscount && (
+              <span
+                className="inline-block align-middle text-sm font-bold text-white line-through decoration-white/80 decoration-1 px-2 py-0.5 rounded-md shadow-[0_2px_8px_rgba(220,38,38,0.4)] mr-2"
+                style={{ background: "linear-gradient(135deg,#DC2626 0%,#F97316 100%)" }}
+              >
+                {inr(selectedPriced.total)}
+              </span>
             )}
             {inr(selectedPriced.discountedTotal)}
           </span>
