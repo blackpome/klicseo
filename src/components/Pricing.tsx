@@ -296,14 +296,14 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
             <span className="text-white/50 text-sm font-medium mr-1">Starts @</span>
             {showBadge && (
               <span
-                className="text-lg font-semibold text-[#F97316] line-through decoration-[#F97316] decoration-2 bg-[#F97316]/15 px-1.5 py-0.5 rounded-md mr-1"
+                className="text-4xl font-bold text-[#DC2626] line-through decoration-[#DC2626] decoration-2 bg-[#DC2626]/15 px-2 py-0.5 rounded-md mr-1"
                 style={{ fontFamily: "var(--font-playfair)" }}
               >
                 ₹{basePrice.toLocaleString("en-IN")}
               </span>
             )}
             <span
-              className="text-4xl font-bold text-white"
+              className="text-3xl font-bold text-white"
               style={{ fontFamily: "var(--font-playfair)" }}
             >
               ₹{(pct > 0 ? discounted : basePrice).toLocaleString("en-IN")}
