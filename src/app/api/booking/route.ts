@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { insertLead } from "@/lib/leads";
+import { insertLead, promoteLeadDraft } from "@/lib/leads";
 import { isServiceOptionId, type ServiceOptionId, type ParkingLocation } from "@/lib/pricing";
 import { carPriceFor, carPriceForCatalog, type CarPrices } from "@/lib/carPricing";
 import { getServiceDiscounts, getDiscountConfig } from "@/lib/discounts";
@@ -85,37 +85,52 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Common payload shared by the insert-new and promote-draft paths.
+  const payload = {
+    source: "wizard" as const,
+    name: name || null,
+    phone,
+    service: (body.service as string | null) ?? null,
+    service_option: String(body.serviceOption ?? "") || null,
+    interior_add_on: Boolean(body.interiorAddOn),
+    vehicle_type: String(body.vehicleType ?? "") || null,
+    car_brand: String(body.carBrand ?? "") || null,
+    car_model: String(body.carModel ?? "") || null,
+    car_number: String(body.carNumber ?? "") || null,
+    pincode: String(body.pincode ?? "") || null,
+    // area is auto-derived from pincode by insertLead/updateLead.
+    area: null,
+    address: String(body.address ?? "") || null,
+    map_link: null,
+    parking_location: String(body.parkingLocation ?? "") || null,
+    car_cover_choice: String(body.carCoverChoice ?? "") || null,
+    gate_access_consent: Boolean(body.gateAccessConsent),
+    gate_access_notes: null,
+    shift: String(body.shift ?? "") || null,
+    callback_date: String(body.date ?? "") || null,
+    callback_time: String(body.time ?? "") || null,
+    latitude: typeof body.latitude === "number" ? body.latitude : null,
+    longitude: typeof body.longitude === "number" ? body.longitude : null,
+    price_total: priced?.discountedTotal ?? null,
+    discount_percent: priced?.basePercent ?? null,
+    custom_fields: Object.keys(custom_fields).length ? custom_fields : null,
+    notes: null,
+  };
+
+  // If the client carries a draftId from the wizard's partial-save flow,
+  // promote the existing draft row (status draft → new) rather than insert
+  // a fresh lead. Falls back to insert if the draft has been deleted or
+  // already promoted by another tab.
+  const draftId = typeof body.draftId === "string" && body.draftId ? body.draftId : null;
   try {
-    const lead = await insertLead({
-      source: "wizard",
-      name: name || null,
-      phone,
-      service: (body.service as string | null) ?? null,
-      service_option: String(body.serviceOption ?? "") || null,
-      interior_add_on: Boolean(body.interiorAddOn),
-      vehicle_type: String(body.vehicleType ?? "") || null,
-      car_brand: String(body.carBrand ?? "") || null,
-      car_model: String(body.carModel ?? "") || null,
-      car_number: String(body.carNumber ?? "") || null,
-      pincode: String(body.pincode ?? "") || null,
-      // area is auto-derived from pincode by insertLead.
-      area: null,
-      address: String(body.address ?? "") || null,
-      map_link: null,
-      parking_location: String(body.parkingLocation ?? "") || null,
-      car_cover_choice: String(body.carCoverChoice ?? "") || null,
-      gate_access_consent: Boolean(body.gateAccessConsent),
-      gate_access_notes: null,
-      shift: String(body.shift ?? "") || null,
-      callback_date: String(body.date ?? "") || null,
-      callback_time: String(body.time ?? "") || null,
-      latitude: typeof body.latitude === "number" ? body.latitude : null,
-      longitude: typeof body.longitude === "number" ? body.longitude : null,
-      price_total: priced?.discountedTotal ?? null,
-      discount_percent: priced?.basePercent ?? null,
-      custom_fields: Object.keys(custom_fields).length ? custom_fields : null,
-      notes: null,
-    });
+    if (draftId) {
+      const promoted = await promoteLeadDraft(draftId, payload);
+      if (promoted) {
+        return NextResponse.json({ success: true, id: promoted.id });
+      }
+      // draft is gone / already promoted — quietly insert a new lead.
+    }
+    const lead = await insertLead(payload);
     return NextResponse.json({ success: true, id: lead.id });
   } catch (err) {
     console.error("Booking insert failed:", err);

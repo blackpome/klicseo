@@ -2,6 +2,8 @@ import Link from "next/link";
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
 import EmployeeStatusControl from "./EmployeeStatusControl";
+import WhatsAppLink from "@/components/WhatsAppLink";
+import ExportToolbar from "@/components/ExportToolbar";
 import { listEmployees, type EmployeeStatus } from "@/lib/employees";
 import { jobTitleMap } from "@/lib/jobs";
 
@@ -92,6 +94,8 @@ export default async function AdminEmployeesPage({
         })}
       </div>
 
+      <ExportToolbar endpoint="/api/admin/employees-export" label="employees" />
+
       {employees.length === 0 ? (
         <div className="text-center py-16 text-white/40 text-sm">No employees match this filter yet.</div>
       ) : (
@@ -126,7 +130,10 @@ export default async function AdminEmployeesPage({
                     </Link>
                   </td>
                   <td className="px-3 py-2">
-                    <a href={`tel:${e.phone}`} className="text-[#C9A84C] hover:underline">{e.phone}</a>
+                    <span className="inline-flex items-center gap-1.5">
+                      <a href={`tel:${e.phone}`} className="text-[#C9A84C] hover:underline">{e.phone}</a>
+                      <WhatsAppLink phone={e.phone} label={`WhatsApp ${e.name ?? e.phone ?? ""}`.trim()} />
+                    </span>
                   </td>
                   <td className="px-3 py-2 text-xs">{roleLabel[e.job_role] ?? e.job_role}</td>
                   <td className="px-3 py-2 text-xs text-white/70">{e.location ?? "—"}</td>

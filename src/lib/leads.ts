@@ -109,10 +109,23 @@ export async function listLeads(opts: {
   search?: string;
   area?: string;
   limit?: number;
+  /** Inclusive lower bound on created_at, full ISO timestamp w/ TZ. */
+  fromIso?: string;
+  /** Inclusive upper bound on created_at, full ISO timestamp w/ TZ. */
+  toIso?: string;
+  /** Statuses to exclude (only honoured when `status` is "all" or unset).
+   *  Used by the admin list to hide drafts from the default view. */
+  excludeStatuses?: LeadStatus[];
 } = {}): Promise<LeadRow[]> {
   let q = supabase().from("leads").select("*").order("created_at", { ascending: false });
-  if (opts.status && opts.status !== "all") q = q.eq("status", opts.status);
+  if (opts.status && opts.status !== "all") {
+    q = q.eq("status", opts.status);
+  } else if (opts.excludeStatuses && opts.excludeStatuses.length) {
+    q = q.not("status", "in", `(${opts.excludeStatuses.join(",")})`);
+  }
   if (opts.area && opts.area !== "all") q = q.eq("area", opts.area);
+  if (opts.fromIso) q = q.gte("created_at", opts.fromIso);
+  if (opts.toIso) q = q.lte("created_at", opts.toIso);
   if (opts.search) {
     const s = sanitizeSearch(opts.search);
     if (s) {
@@ -162,6 +175,75 @@ export async function updateLeadStatus(id: string, status: LeadStatus): Promise<
 export async function deleteLead(id: string): Promise<void> {
   const { error } = await supabase().from("leads").delete().eq("id", id);
   if (error) throw error;
+}
+
+// --- Draft (wizard partial-save) lifecycle --------------------------------
+//
+// A "draft" lead is created mid-form, once the user enters a valid phone in
+// Step 1. Subsequent step changes update the same row. On final submit the
+// row is promoted to status "new" instead of inserting a fresh lead.
+//
+// Drafts default everything missing to null/false so the row inserts cleanly;
+// callers pass whatever subset the user has filled in so far.
+
+type DraftPayload = Partial<Omit<NewLead, "source" | "status">>;
+
+function fullFromPartial(p: DraftPayload): NewLead {
+  return {
+    name: p.name ?? null,
+    phone: p.phone ?? null,
+    service: p.service ?? null,
+    service_option: p.service_option ?? null,
+    interior_add_on: p.interior_add_on ?? false,
+    vehicle_type: p.vehicle_type ?? null,
+    car_brand: p.car_brand ?? null,
+    car_model: p.car_model ?? null,
+    car_number: p.car_number ?? null,
+    pincode: p.pincode ?? null,
+    area: p.area ?? null,
+    address: p.address ?? null,
+    map_link: p.map_link ?? null,
+    parking_location: p.parking_location ?? null,
+    car_cover_choice: p.car_cover_choice ?? null,
+    gate_access_consent: p.gate_access_consent ?? false,
+    gate_access_notes: p.gate_access_notes ?? null,
+    shift: p.shift ?? null,
+    callback_date: p.callback_date ?? null,
+    callback_time: p.callback_time ?? null,
+    latitude: p.latitude ?? null,
+    longitude: p.longitude ?? null,
+    price_total: p.price_total ?? null,
+    discount_percent: p.discount_percent ?? null,
+    custom_fields: p.custom_fields ?? null,
+    notes: p.notes ?? null,
+    source: "wizard",
+    status: "draft",
+  };
+}
+
+export async function insertLeadDraft(partial: DraftPayload): Promise<LeadRow> {
+  return insertLead(fullFromPartial(partial));
+}
+
+/** Update a draft row. No-op if the row is missing or no longer a draft —
+ *  guards against stale wizard tabs mutating finalised leads. */
+export async function updateLeadDraft(id: string, patch: LeadUpdate): Promise<boolean> {
+  const { data, error } = await supabase().from("leads").select("status").eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data || (data as { status: string }).status !== "draft") return false;
+  await updateLead(id, patch);
+  return true;
+}
+
+/** Promote a draft to a confirmed lead in one call (used by /api/booking
+ *  when the final submit includes a draftId). Returns the updated lead, or
+ *  null if the draft no longer exists / isn't a draft. */
+export async function promoteLeadDraft(id: string, patch: LeadUpdate): Promise<LeadRow | null> {
+  const { data, error } = await supabase().from("leads").select("status").eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data || (data as { status: string }).status !== "draft") return null;
+  await updateLead(id, { ...patch, status: "new" });
+  return await getLead(id);
 }
 
 // Chennai is IST (UTC+5:30). Callback date/time are entered for IST, so we

@@ -75,10 +75,20 @@ function sanitizeSearch(raw: string): string {
 }
 
 export async function listEmployees(
-  opts: { status?: EmployeeStatus | "all"; search?: string; limit?: number } = {},
+  opts: {
+    status?: EmployeeStatus | "all";
+    search?: string;
+    limit?: number;
+    /** Inclusive lower bound on created_at, full ISO timestamp w/ TZ. */
+    fromIso?: string;
+    /** Inclusive upper bound on created_at, full ISO timestamp w/ TZ. */
+    toIso?: string;
+  } = {},
 ): Promise<EmployeeRow[]> {
   let q = supabase().from("employees").select("*").order("created_at", { ascending: false });
   if (opts.status && opts.status !== "all") q = q.eq("status", opts.status);
+  if (opts.fromIso) q = q.gte("created_at", opts.fromIso);
+  if (opts.toIso) q = q.lte("created_at", opts.toIso);
   if (opts.search) {
     const s = sanitizeSearch(opts.search);
     if (s) {

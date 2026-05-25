@@ -5,6 +5,7 @@ import AdminError from "../AdminError";
 import LeadStatusControl from "../LeadStatusControl";
 import LeadNotesEditor from "./LeadNotesEditor";
 import DeleteLeadButton from "./DeleteLeadButton";
+import WhatsAppLink from "@/components/WhatsAppLink";
 import { getLead } from "@/lib/leads";
 import { LEAD_STATUS_COLOR } from "@/lib/leads-shared";
 import { getCustomerPayments } from "@/lib/payments";
@@ -95,9 +96,12 @@ export default async function LeadDetailPage({
         </h1>
         <p className="text-white/50 text-sm mt-1 flex items-center gap-3 flex-wrap">
           {lead.phone && (
-            <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline inline-flex items-center gap-1">
-              <Phone size={12} /> {lead.phone}
-            </a>
+            <span className="inline-flex items-center gap-2">
+              <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline inline-flex items-center gap-1">
+                <Phone size={12} /> {lead.phone}
+              </a>
+              <WhatsAppLink phone={lead.phone} label={`WhatsApp ${lead.name ?? lead.phone}`} />
+            </span>
           )}
           <span className="text-white/30">·</span>
           <span>
@@ -120,7 +124,10 @@ export default async function LeadDetailPage({
             label="Phone"
             value={
               lead.phone ? (
-                <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline">{lead.phone}</a>
+                <span className="inline-flex items-center gap-2">
+                  <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline">{lead.phone}</a>
+                  <WhatsAppLink phone={lead.phone} label={`WhatsApp ${lead.name ?? lead.phone}`} />
+                </span>
               ) : "—"
             }
           />

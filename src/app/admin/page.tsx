@@ -7,6 +7,8 @@ import { LEAD_STATUSES, LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type LeadStatus } 
 import { currentAdmin } from "@/lib/admin-auth";
 import LeadStatusControl from "./LeadStatusControl";
 import Link from "next/link";
+import WhatsAppLink from "@/components/WhatsAppLink";
+import ExportToolbar from "@/components/ExportToolbar";
 
 const STATUS_TABS: { id: LeadStatus | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -45,7 +47,14 @@ export default async function AdminLeadsPage({
   let areaCounts: { area: string; count: number }[] = [];
   try {
     [leads, areaCounts] = await Promise.all([
-      listLeads({ status: filter, search: q, area: areaFilter }),
+      // Drafts are wizard partial-saves; surface them only behind the Draft
+      // tab so they don't drown out actionable leads.
+      listLeads({
+        status: filter,
+        search: q,
+        area: areaFilter,
+        excludeStatuses: filter === "all" ? ["draft"] : undefined,
+      }),
       listAreasWithCounts(),
     ]);
   } catch (err) {
@@ -132,6 +141,8 @@ export default async function AdminLeadsPage({
         </div>
       )}
 
+      <ExportToolbar endpoint="/api/admin/leads-export" label="leads" />
+
       {leads.length === 0 ? (
         <div className="text-center py-16 text-white/40 text-sm">No leads match this filter yet.</div>
       ) : (
@@ -168,7 +179,10 @@ export default async function AdminLeadsPage({
                     </Link>
                   </td>
                   <td className="px-3 py-2">
-                    <a href={`tel:${l.phone}`} className="text-[#C9A84C] hover:underline">{l.phone}</a>
+                    <span className="inline-flex items-center gap-1.5">
+                      <a href={`tel:${l.phone}`} className="text-[#C9A84C] hover:underline">{l.phone}</a>
+                      <WhatsAppLink phone={l.phone} label={`WhatsApp ${l.name ?? l.phone ?? ""}`.trim()} />
+                    </span>
                   </td>
                   <td className="px-3 py-2">
                     <div>{l.service ?? "—"}</div>

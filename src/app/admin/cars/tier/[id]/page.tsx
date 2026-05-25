@@ -5,7 +5,7 @@ import AdminShell from "../../../AdminShell";
 import AdminError from "../../../AdminError";
 import { currentAdmin } from "@/lib/admin-auth";
 import { getTier, listTiersWithCounts, type PriceTier } from "@/lib/priceTiers";
-import { listCarsByTier, listUnassignedCars } from "@/lib/cars";
+import { listCarsByTier } from "@/lib/cars";
 import { inr } from "@/lib/pricing";
 import type { CarRecord } from "@/lib/carPricing";
 import TierCarsPanel from "./TierCarsPanel";
@@ -14,10 +14,8 @@ export const dynamic = "force-dynamic";
 
 export default async function TierManagePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ q?: string }>;
 }) {
   const me = await currentAdmin();
   if (!me) redirect("/admin/login");
@@ -32,18 +30,15 @@ export default async function TierManagePage({
   }
 
   const { id } = await params;
-  const { q } = await searchParams;
   const tier = await getTier(id);
   if (!tier) notFound();
 
   let assigned: CarRecord[] = [];
-  let unassigned: CarRecord[] = [];
   let allTiers: PriceTier[] = [];
   let error: unknown = null;
   try {
-    [assigned, unassigned, allTiers] = await Promise.all([
+    [assigned, allTiers] = await Promise.all([
       listCarsByTier(id),
-      listUnassignedCars(q),
       listTiersWithCounts(),
     ]);
   } catch (err) {
@@ -69,7 +64,7 @@ export default async function TierManagePage({
           </div>
         </div>
 
-        {error ? <AdminError err={error} /> : <TierCarsPanel tierId={tier.id} assigned={assigned} unassigned={unassigned} allTiers={allTiers} search={q ?? ""} />}
+        {error ? <AdminError err={error} /> : <TierCarsPanel tierId={tier.id} assigned={assigned} allTiers={allTiers} />}
       </div>
     </AdminShell>
   );

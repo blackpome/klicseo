@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Plus, Minus, Search, Check, ArrowRightLeft, Sheet as SheetIcon } from "lucide-react";
 import type { CarRecord } from "@/lib/carPricing";
@@ -11,25 +11,62 @@ import { assignCarsAction, removeCarsFromTierAction } from "../../actions";
 export default function TierCarsPanel({
   tierId,
   assigned,
-  unassigned,
   allTiers,
-  search,
 }: {
   tierId: string;
   assigned: CarRecord[];
-  unassigned: CarRecord[];
   allTiers: PriceTier[];
-  search: string;
 }) {
   const otherTiers = allTiers.filter((t) => t.id !== tierId);
+  // Tier name lookup for the picker's "currently in: <tier>" badge.
+  const tierNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of allTiers) m.set(t.id, t.name);
+    return m;
+  }, [allTiers]);
   const router = useRouter();
-  const sp = useSearchParams();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set()); // add-picker
   const [selectedAssigned, setSelectedAssigned] = useState<Set<string>>(new Set()); // bulk ops
   const [bulkTarget, setBulkTarget] = useState<string>("");
-  const [searchInput, setSearchInput] = useState(search);
+  const [searchInput, setSearchInput] = useState("");
+  const [pickerResults, setPickerResults] = useState<CarRecord[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  // Live debounced search for the picker. Empty query → all cars (capped 500),
+  // so admins can browse the full catalog and move cars from any tier; typed
+  // query → fuzzy search via the same backend the booking flow uses.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    let cancelled = false;
+    const q = searchInput.trim();
+    const url = q ? `/api/cars/search?q=${encodeURIComponent(q)}&limit=200` : `/api/cars/search?all=1`;
+    setPickerLoading(true);
+    const handle = setTimeout(async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const json = (await res.json()) as { cars?: CarRecord[] };
+        if (!cancelled) setPickerResults(json.cars ?? []);
+      } catch {
+        if (!cancelled) setPickerResults([]);
+      } finally {
+        if (!cancelled) setPickerLoading(false);
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [pickerOpen, searchInput]);
+
+  // Exclude cars already in this tier — they can't usefully be "added" again.
+  const assignedHere = useMemo(() => new Set(assigned.map((c) => c.id)), [assigned]);
+  const pickerVisible = useMemo(
+    () => pickerResults.filter((c) => !assignedHere.has(c.id)),
+    [pickerResults, assignedHere],
+  );
 
   const toggleAssigned = (id: string) =>
     setSelectedAssigned((p) => {
@@ -49,13 +86,6 @@ export default function TierCarsPanel({
       else n.add(id);
       return n;
     });
-
-  const submitSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const params = new URLSearchParams(sp?.toString() ?? "");
-    if (searchInput) params.set("q", searchInput); else params.delete("q");
-    router.replace(`?${params.toString()}`);
-  };
 
   const handleAdd = () => {
     if (picked.size === 0) return;
@@ -267,28 +297,45 @@ export default function TierCarsPanel({
             </div>
           </div>
 
-          <form onSubmit={submitSearch} className="flex gap-2">
-            <div className="flex-1 flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-[#C9A84C]">
-              <Search size={14} className="ml-2 text-white/40" />
-              <input
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search brand or model…"
-                className="w-full bg-transparent px-2 py-1.5 text-sm focus:outline-none"
-              />
-            </div>
-            <button className="text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15">Search</button>
-          </form>
+          <div className="flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-[#C9A84C]">
+            <Search size={14} className="ml-2 text-white/40" />
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search brand or model — type to filter live"
+              className="w-full bg-transparent px-2 py-1.5 text-sm focus:outline-none"
+              autoFocus
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput("")}
+                className="px-2 text-xs text-white/45 hover:text-white"
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
 
-          <p className="text-[11px] text-white/40">Showing cars not yet assigned to any tier.</p>
+          <p className="text-[11px] text-white/40">
+            Showing every car. Cars already in another tier are tagged — picking
+            them here moves them into this one.
+          </p>
 
           <div className="max-h-80 overflow-y-auto rounded-lg border border-white/10 bg-black/20">
-            {unassigned.length === 0 ? (
-              <p className="px-4 py-8 text-center text-xs text-white/40">No unassigned cars{search ? ` matching "${search}"` : ""}.</p>
+            {pickerLoading && pickerVisible.length === 0 ? (
+              <p className="px-4 py-8 text-center text-xs text-white/40">Loading…</p>
+            ) : pickerVisible.length === 0 ? (
+              <p className="px-4 py-8 text-center text-xs text-white/40">
+                No cars{searchInput ? ` matching “${searchInput}”` : ""}.
+              </p>
             ) : (
               <ul className="divide-y divide-white/5">
-                {unassigned.map((c) => {
+                {pickerVisible.map((c) => {
                   const on = picked.has(c.id);
+                  const currentTierName = c.tier_id ? tierNameById.get(c.tier_id) : null;
+                  const inOtherTier = !!currentTierName && c.tier_id !== tierId;
                   return (
                     <li key={c.id}>
                       <button
@@ -299,10 +346,21 @@ export default function TierCarsPanel({
                         <span className={`grid h-4 w-4 place-items-center rounded border ${on ? "bg-[#C9A84C] border-[#C9A84C]" : "border-white/25"}`}>
                           {on && <Check size={11} className="text-[#050E21]" />}
                         </span>
-                        <span className="flex-1 min-w-0">
-                          <span className="font-medium">{c.brand} {c.model}</span>
-                          {c.body_type && <span className="text-white/35 text-xs ml-2">{c.body_type}</span>}
+                        <span className="flex-1 min-w-0 flex items-center gap-2">
+                          <span className="font-medium truncate">{c.brand} {c.model}</span>
+                          {c.body_type && <span className="text-white/35 text-xs truncate">{c.body_type}</span>}
                         </span>
+                        {inOtherTier ? (
+                          <span
+                            className="ml-2 inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200 ring-1 ring-amber-400/20"
+                            title={`Currently in ${currentTierName}`}
+                          >
+                            <ArrowRightLeft size={10} />
+                            {currentTierName}
+                          </span>
+                        ) : c.tier_id == null ? (
+                          <span className="ml-2 text-[10px] text-white/35">unassigned</span>
+                        ) : null}
                       </button>
                     </li>
                   );

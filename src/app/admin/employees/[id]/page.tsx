@@ -16,6 +16,7 @@ import AdminShell from "../../AdminShell";
 import AdminError from "../../AdminError";
 import EmployeeStatusControl from "../EmployeeStatusControl";
 import DeleteEmployeeButton from "./DeleteEmployeeButton";
+import WhatsAppLink from "@/components/WhatsAppLink";
 import { getJobBySlug } from "@/lib/jobs";
 import {
   getEmployee,
@@ -129,9 +130,12 @@ export default async function EmployeeDetailPage({
             {emp.name}
           </h1>
           <p className="text-white/50 text-sm mt-1 flex items-center gap-3 flex-wrap">
-            <a href={`tel:${emp.phone}`} className="text-[#C9A84C] hover:underline inline-flex items-center gap-1">
-              <Phone size={12} /> {emp.phone}
-            </a>
+            <span className="inline-flex items-center gap-2">
+              <a href={`tel:${emp.phone}`} className="text-[#C9A84C] hover:underline inline-flex items-center gap-1">
+                <Phone size={12} /> {emp.phone}
+              </a>
+              <WhatsAppLink phone={emp.phone} label={`WhatsApp ${emp.name ?? emp.phone}`} />
+            </span>
             <span className="text-white/30">·</span>
             <span>{job?.title ?? emp.job_role}</span>
             <span className="text-white/30">·</span>
@@ -157,7 +161,10 @@ export default async function EmployeeDetailPage({
           <Field
             label="Phone"
             value={
-              <a href={`tel:${emp.phone}`} className="text-[#C9A84C] hover:underline">{emp.phone}</a>
+              <span className="inline-flex items-center gap-2">
+                <a href={`tel:${emp.phone}`} className="text-[#C9A84C] hover:underline">{emp.phone}</a>
+                <WhatsAppLink phone={emp.phone} label={`WhatsApp ${emp.name ?? emp.phone}`} />
+              </span>
             }
           />
         </Section>

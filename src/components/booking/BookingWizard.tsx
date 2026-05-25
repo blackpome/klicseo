@@ -48,6 +48,11 @@ export interface BookingData {
   longitude: number | null;
   // Answers to admin-defined custom fields, keyed by field id.
   customFields: Record<string, string | boolean>;
+  // Server-side id of the draft lead row this wizard session is mirroring.
+  // null until the user enters a valid phone in Step 1, at which point we
+  // POST /api/booking/draft and store the returned lead id here. Subsequent
+  // changes PUT against this id; final submit promotes the row.
+  draftId: string | null;
 }
 
 const TOTAL_STEPS = 5;
@@ -78,6 +83,50 @@ function writeDraft(data: BookingData) {
 export function clearBookingDraft() {
   if (typeof window === "undefined") return;
   try { localStorage.removeItem(DRAFT_KEY); } catch {}
+}
+
+// True when the user has entered anything worth saving — skips the initial
+// empty-form state so we don't insert blank drafts the moment the wizard
+// mounts. Once any field has a value, the partial-save effect kicks in.
+function hasAnyData(d: BookingData): boolean {
+  const strings: Array<string | null | undefined> = [
+    d.name, d.phone, d.service, d.serviceOption, d.vehicleType,
+    d.carBrand, d.carModel, d.carNumber, d.pincode, d.address,
+    d.parkingLocation, d.carCoverChoice, d.shift, d.date,
+  ];
+  if (strings.some((s) => s && String(s).trim().length > 0)) return true;
+  if (d.interiorAddOn || d.gateAccessConsent) return true;
+  if (d.latitude != null || d.longitude != null) return true;
+  if (d.customFields && Object.keys(d.customFields).length > 0) return true;
+  return false;
+}
+
+// Subset of BookingData the /api/booking/draft endpoint expects. Excludes
+// server-derived bits (carPrices, vehicleType-from-search) and the draftId
+// itself, which is carried separately on PUTs.
+function wizardToDraftPayload(d: BookingData) {
+  return {
+    name: d.name,
+    phone: d.phone,
+    service: d.service,
+    serviceOption: d.serviceOption,
+    interiorAddOn: d.interiorAddOn,
+    vehicleType: d.vehicleType,
+    carBrand: d.carBrand,
+    carModel: d.carModel,
+    carNumber: d.carNumber,
+    pincode: d.pincode,
+    address: d.address,
+    parkingLocation: d.parkingLocation,
+    carCoverChoice: d.carCoverChoice,
+    gateAccessConsent: d.gateAccessConsent,
+    shift: d.shift,
+    date: d.date,
+    time: d.time,
+    latitude: d.latitude,
+    longitude: d.longitude,
+    customFields: d.customFields,
+  };
 }
 
 const variants = {
@@ -115,6 +164,7 @@ export default function BookingWizard() {
     latitude: null,
     longitude: null,
     customFields: {},
+    draftId: null,
   });
 
   // Hydrate from localStorage draft once on mount. Deep-link query params
@@ -158,6 +208,59 @@ export default function BookingWizard() {
   // Persist on every change. Cheap; the form is small.
   useEffect(() => {
     writeDraft(data);
+  }, [data]);
+
+  // Server-side partial save. Mirrors the wizard into a `leads` row with
+  // status="draft" as soon as *any* user-entered field has a value, then
+  // debounces PUT updates as they keep typing. This is what lets admins see
+  // incomplete attempts on /admin instead of losing them when a user bounces.
+  //
+  // `postingRef` gates the first POST so quick typing during the debounce
+  // window can't race two inserts before the first returns its draftId.
+  const postingRef = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!hasAnyData(data)) return;
+
+    const payload = wizardToDraftPayload(data);
+    const controller = new AbortController();
+    const handle = setTimeout(async () => {
+      try {
+        if (!data.draftId) {
+          if (postingRef.current) return; // an earlier debounce is mid-flight
+          postingRef.current = true;
+          const res = await fetch("/api/booking/draft", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          });
+          if (!res.ok) {
+            postingRef.current = false; // allow a retry on next change
+            return;
+          }
+          const json = (await res.json()) as { id?: string };
+          if (json.id) setData((d) => ({ ...d, draftId: json.id! }));
+        } else {
+          // Subsequent edits — update by id. Server returns ok:false silently
+          // if the row was already promoted by an earlier submit; we ignore.
+          await fetch("/api/booking/draft", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: data.draftId, ...payload }),
+            signal: controller.signal,
+          });
+        }
+      } catch {
+        // Network errors are non-fatal: the localStorage draft still holds
+        // everything; the next change re-tries.
+      }
+    }, 800); // debounce so rapid typing doesn't fire dozens of requests
+
+    return () => {
+      clearTimeout(handle);
+      controller.abort();
+    };
   }, [data]);
 
   useEffect(() => {

@@ -2,9 +2,14 @@
 // (status dropdown, notification bell) can import the labels/colors. DB access
 // lives in lib/leads.ts (server-only), which re-exports everything here.
 
-export type LeadStatus = "new" | "contacted" | "call_not_responded" | "booked" | "cancelled";
+// "draft" is for in-progress booking-wizard captures — partial data saved
+// before the user reached the final submit. Everything else is a completed
+// lead. Drafts are excluded from the default admin tabs and only show on
+// their own tab so they don't drown out actionable leads.
+export type LeadStatus = "draft" | "new" | "contacted" | "call_not_responded" | "booked" | "cancelled";
 
 export const LEAD_STATUSES: LeadStatus[] = [
+  "draft",
   "new",
   "contacted",
   "call_not_responded",
@@ -13,6 +18,7 @@ export const LEAD_STATUSES: LeadStatus[] = [
 ];
 
 export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
+  draft: "Draft",
   new: "New",
   contacted: "Contacted",
   call_not_responded: "Call not responded",
@@ -21,6 +27,7 @@ export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
 };
 
 export const LEAD_STATUS_COLOR: Record<LeadStatus, string> = {
+  draft: "#8B5CF6", // violet — partial / unconfirmed
   new: "#3B82F6", // blue
   contacted: "#C9A84C", // gold
   call_not_responded: "#F97316", // orange — needs a retry
