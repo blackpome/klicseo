@@ -4,23 +4,8 @@ import AdminShell from "../AdminShell";
 import { currentAdmin } from "@/lib/admin-auth";
 import { getDiscountConfig } from "@/lib/discounts";
 import { getServiceCatalog } from "@/lib/serviceCatalog";
-import { type PriceLine } from "@/lib/pricing";
 import type { CatalogCategory, CatalogPriceLine } from "@/lib/serviceCatalog-shared";
 import DiscountRow from "./DiscountRow";
-
-// Hatchback-tier sample prices used in the preview pill. Keyed by legacy_line
-// so renames in the Services editor don't change the preview numbers.
-const SAMPLE_BASE: Record<PriceLine, number> = {
-  monthly: 999,
-  weekly_thrice: 649,
-  outside_monthly: 1199,
-  outside_weekly_thrice: 749,
-  one_time_manual: 249,
-  one_time_machine: 399,
-  interior: 149,
-  car_detailing: 4999,
-  interior_detailing: 1999,
-};
 
 export default async function DiscountPage() {
   const me = await currentAdmin();
@@ -79,23 +64,15 @@ export default async function DiscountPage() {
                 )}
               </div>
               <div>
-                {lines.map((l) => {
-                  // Use the legacy sample price when this line has one; new
-                  // admin-created lines fall back to a flat ₹999 sample for
-                  // the percentage preview.
-                  const legacy = l.legacy_line as PriceLine | null;
-                  const sample = legacy && SAMPLE_BASE[legacy] != null ? SAMPLE_BASE[legacy] : 999;
-                  return (
-                    <DiscountRow
-                      key={l.id}
-                      lineId={l.id}
-                      label={l.label}
-                      sample={sample}
-                      current={percentsByLineId[l.id] ?? 0}
-                      badge={badgesByLineId[l.id] ?? true}
-                    />
-                  );
-                })}
+                {lines.map((l) => (
+                  <DiscountRow
+                    key={l.id}
+                    lineId={l.id}
+                    label={l.label}
+                    current={percentsByLineId[l.id] ?? 0}
+                    badge={badgesByLineId[l.id] ?? true}
+                  />
+                ))}
               </div>
             </div>
           );

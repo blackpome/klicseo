@@ -3,8 +3,8 @@ import { Tag } from "lucide-react";
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
 import { currentAdmin } from "@/lib/admin-auth";
-import { listTiersWithCounts, listLineAmountsByTier, type PriceTier } from "@/lib/priceTiers";
-import type { LineAmounts } from "@/lib/priceTiers-shared";
+import { listTiersWithCounts, listLineAmountsByTier, listLineMrpAmountsByTier, type PriceTier } from "@/lib/priceTiers";
+import type { LineAmounts, LineMrpAmounts } from "@/lib/priceTiers-shared";
 import { listUnassignedCars } from "@/lib/cars";
 import { getServiceCatalog } from "@/lib/serviceCatalog";
 import type { ServiceCatalog } from "@/lib/serviceCatalog-shared";
@@ -31,6 +31,7 @@ export default async function CarsPage() {
   let unassigned: CarRecord[] = [];
   let catalog: ServiceCatalog | null = null;
   let amountsByTier: Record<string, LineAmounts> = {};
+  let mrpAmountsByTier: Record<string, LineMrpAmounts> = {};
   let error: unknown = null;
   try {
     [tiers, unassigned, catalog] = await Promise.all([
@@ -38,7 +39,11 @@ export default async function CarsPage() {
       listUnassignedCars(),
       getServiceCatalog(),
     ]);
-    amountsByTier = await listLineAmountsByTier(tiers.map((t) => t.id));
+    const tierIds = tiers.map((t) => t.id);
+    [amountsByTier, mrpAmountsByTier] = await Promise.all([
+      listLineAmountsByTier(tierIds),
+      listLineMrpAmountsByTier(tierIds),
+    ]);
   } catch (err) {
     error = err;
   }
@@ -57,7 +62,7 @@ export default async function CarsPage() {
         </div>
 
         {error || !catalog ? <AdminError err={error ?? new Error("Catalog missing")} /> : (
-          <TiersBoard tiers={tiers} unassignedCount={unassigned.length} catalog={catalog} amountsByTier={amountsByTier} />
+          <TiersBoard tiers={tiers} unassignedCount={unassigned.length} catalog={catalog} amountsByTier={amountsByTier} mrpAmountsByTier={mrpAmountsByTier} />
         )}
       </div>
     </AdminShell>

@@ -6,7 +6,7 @@ import { motion, useSpring, useMotionValue, useMotionTemplate } from "framer-mot
 import AnimatedHeading from "./AnimatedHeading";
 import { useServiceDiscounts, useLineBadge } from "./DiscountContext";
 import { useSiteSettings } from "./SiteSettingsContext";
-import { discountedPrice, type PriceLine } from "@/lib/pricing";
+import { type PriceLine } from "@/lib/pricing";
 import { isCardId } from "@/lib/card-prices-shared";
 
 interface Plan {
@@ -245,11 +245,22 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   const pct = discounts[plan.line] ?? 0;
   // Use the admin's custom card price when its toggle is on; else the default.
   const cp = isCardId(plan.id) ? cardPrices[plan.id] : undefined;
+  // `basePrice` is the *net* price — what the customer pays. The strike-through
+  // MRP is whatever admin typed in /admin/settings (cardPrices[id].mrp). When
+  // it's blank or not greater than basePrice we don't render a strike at all.
+  //
+  // The "Use custom" toggle only controls whether the *net* uses admin's value
+  // or the hard-coded default — the MRP is honoured independently, so admins
+  // can leave the default net price and still configure a strike-through.
   const basePrice = cp?.enabled ? cp.price : plan.fromPrice;
-  const discounted = discountedPrice(basePrice, pct);
+  const mrpOverride = cp?.mrp ?? null;
+  const hasMrp = mrpOverride != null && mrpOverride > basePrice;
+  const strikePrice = hasMrp ? (mrpOverride as number) : basePrice;
 
   // Diagonal corner ribbon — clips itself to the card's top-right corner.
-  const ribbon = showBadge ? (
+  // Only show it when there's an MRP to back the % up; otherwise the "X% OFF"
+  // would hang in space with no struck-through reference price.
+  const ribbon = showBadge && hasMrp && pct > 0 ? (
     <div aria-hidden className="pointer-events-none absolute top-0 right-0 z-20 h-[92px] w-[92px] overflow-hidden rounded-tr-[15px]">
       <div
         className="absolute top-[18px] right-[-38px] w-[150px] rotate-45 py-1 text-center text-[10px] font-extrabold uppercase tracking-wider text-white shadow-[0_2px_10px_rgba(0,0,0,0.45)]"
@@ -294,19 +305,19 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
         <div className="mb-6">
           <div className="flex items-baseline gap-1 flex-wrap">
             <span className="text-white/50 text-sm font-medium mr-1">Starts @</span>
-            {showBadge && (
+            {showBadge && hasMrp && (
               <span
                 className="text-4xl font-bold text-[#DC2626] line-through decoration-[#DC2626] decoration-2 bg-[#DC2626]/15 px-2 py-0.5 rounded-md mr-1"
                 style={{ fontFamily: "var(--font-playfair)" }}
               >
-                ₹{basePrice.toLocaleString("en-IN")}
+                ₹{strikePrice.toLocaleString("en-IN")}
               </span>
             )}
             <span
               className="text-3xl font-bold text-white"
               style={{ fontFamily: "var(--font-playfair)" }}
             >
-              ₹{(pct > 0 ? discounted : basePrice).toLocaleString("en-IN")}
+              ₹{basePrice.toLocaleString("en-IN")}
             </span>
             <span className="text-white/50 text-sm">/ {plan.billing}</span>
           </div>

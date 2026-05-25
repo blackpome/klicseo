@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { currentAdmin } from "@/lib/admin-auth";
 import { insertCar, updateCar, deleteCar, getCar, listBrands, type CarInput } from "@/lib/cars";
 import { createTier, updateTier, deleteTier, getTier, assignCarsToTier, unassignCars } from "@/lib/priceTiers";
-import { readLineAmountsFromForm } from "@/lib/priceTiers-shared";
+import { readLineAmountsFromForm, readLineMrpAmountsFromForm } from "@/lib/priceTiers-shared";
 import { logAudit } from "@/lib/audit";
 
 async function requireManager() {
@@ -97,7 +97,11 @@ export async function createTierAction(
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Tier name is required." };
   try {
-    const t = await createTier(name, readLineAmountsFromForm(formData));
+    const t = await createTier(
+      name,
+      readLineAmountsFromForm(formData),
+      readLineMrpAmountsFromForm(formData),
+    );
     await logAudit("tier.create", { entity: "car", entityId: t.id, summary: `Created tier "${name}"` });
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not create tier." };
@@ -117,7 +121,11 @@ export async function updateTierAction(
   if (!name) return { error: "Tier name is required." };
   try {
     const before = await getTier(id);
-    await updateTier(id, { name, amounts: readLineAmountsFromForm(formData) });
+    await updateTier(id, {
+      name,
+      amounts: readLineAmountsFromForm(formData),
+      mrpAmounts: readLineMrpAmountsFromForm(formData),
+    });
     const after = await getTier(id);
     await logAudit("tier.update", {
       entity: "car",

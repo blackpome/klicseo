@@ -9,7 +9,7 @@
 import {
   addOnLineFor,
   baseLineFor,
-  discountedPrice,
+  resolveStrikePrice,
   type ServiceOptionId,
   type ParkingLocation,
   type ServiceDiscounts,
@@ -31,6 +31,21 @@ export interface CarPrices {
   /** Per-line-id amounts (covers admin-created lines too). Optional so older
    *  serialized payloads stay valid; consumers should treat missing as {}. */
   amounts?: Record<string, number | null>;
+  /** Optional MRP overrides keyed by legacy line. Null/missing → strike price
+   *  is auto-computed by gross-up from the net amount + discount %. */
+  mrp?: {
+    monthly: number | null;
+    weekly_thrice: number | null;
+    outside_monthly: number | null;
+    outside_weekly_thrice: number | null;
+    one_time_manual: number | null;
+    one_time_machine: number | null;
+    interior: number | null;
+    car_detailing: number | null;
+    interior_detailing: number | null;
+  };
+  /** Per-line-id MRP overrides (catalog-aware sibling of `amounts`). */
+  mrpAmounts?: Record<string, number | null>;
 }
 
 // The full car record returned by /api/cars/search.
@@ -44,6 +59,8 @@ export interface CarRecord extends CarPrices {
   /** Per-line-id price amounts (covers every line in the catalog including
    *  admin-created ones). Always present, may be empty. */
   amounts: Record<string, number | null>;
+  /** Per-line-id MRP overrides; always present, may be empty. */
+  mrpAmounts: Record<string, number | null>;
 }
 
 export interface CarPriceResult {
@@ -86,6 +103,26 @@ function basePriceColumn(
   }
 }
 
+// Same mapping as basePriceColumn, but reads the optional MRP override sibling.
+function baseMrpColumn(
+  prices: CarPrices,
+  optionId: ServiceOptionId,
+  parking: ParkingLocation,
+): number | null {
+  const mrp = prices.mrp;
+  if (!mrp) return null;
+  const outside = parking === "outside";
+  switch (optionId) {
+    case "Monthly":           return outside ? mrp.outside_monthly : mrp.monthly;
+    case "WeeklyThrice":      return outside ? mrp.outside_weekly_thrice : mrp.weekly_thrice;
+    case "OneTimeManual":     return mrp.one_time_manual;
+    case "OneTimeMachine":    return mrp.one_time_machine;
+    case "CeramicSealant":    return mrp.car_detailing;
+    case "InteriorDetailing": return mrp.interior_detailing;
+    default:                  return null;
+  }
+}
+
 // The add-on column for an option (interior cleaning on one-time washes;
 // interior detailing paired with ceramic sealant).
 function addOnColumn(prices: CarPrices, optionId: ServiceOptionId): number | null {
@@ -97,6 +134,17 @@ function addOnColumn(prices: CarPrices, optionId: ServiceOptionId): number | nul
       return prices.interior_detailing;
     default:
       return null;
+  }
+}
+
+function addOnMrpColumn(prices: CarPrices, optionId: ServiceOptionId): number | null {
+  const mrp = prices.mrp;
+  if (!mrp) return null;
+  switch (optionId) {
+    case "OneTimeManual":
+    case "OneTimeMachine":  return mrp.interior;
+    case "CeramicSealant":  return mrp.interior_detailing;
+    default:                return null;
   }
 }
 
@@ -112,26 +160,36 @@ export function carPriceFor(
   withAddOn: boolean,
   discounts?: ServiceDiscounts,
 ): CarPriceResult | null {
-  const base = basePriceColumn(prices, optionId, parking);
-  if (base == null) return null;
-  const addOn = withAddOn ? addOnColumn(prices, optionId) ?? 0 : 0;
+  // Stored `amount` is now the *net* price — what the customer pays. The
+  // `base`/`addOn` in the returned result are the displayed strike-through
+  // values: an explicit MRP override if present, otherwise the auto-computed
+  // gross-up from the net + discount %.
+  const netBase = basePriceColumn(prices, optionId, parking);
+  if (netBase == null) return null;
+  const netAddOn = withAddOn ? addOnColumn(prices, optionId) ?? 0 : 0;
 
   const basePercent = discounts?.[baseLineFor(optionId, parking)] ?? 0;
   const addOnLine = addOnLineFor(optionId);
   const addOnPercent = withAddOn && addOnLine ? discounts?.[addOnLine] ?? 0 : 0;
-  const discountedBase = discountedPrice(base, basePercent);
-  const discountedAddOn = discountedPrice(addOn, addOnPercent);
+
+  const baseMrpOverride = baseMrpColumn(prices, optionId, parking);
+  const addOnMrpOverride = withAddOn ? addOnMrpColumn(prices, optionId) : null;
+  const strikeBase = resolveStrikePrice(netBase, basePercent, baseMrpOverride) ?? netBase;
+  const strikeAddOn = resolveStrikePrice(netAddOn, addOnPercent, addOnMrpOverride) ?? netAddOn;
+
+  const hasDiscount =
+    strikeBase > netBase || strikeAddOn > netAddOn;
 
   return {
-    base,
-    addOn,
-    total: base + addOn,
+    base: strikeBase,
+    addOn: strikeAddOn,
+    total: strikeBase + strikeAddOn,
     basePercent,
     addOnPercent,
-    discountedBase,
-    discountedAddOn,
-    discountedTotal: discountedBase + discountedAddOn,
-    hasDiscount: basePercent > 0 || addOnPercent > 0,
+    discountedBase: netBase,
+    discountedAddOn: netAddOn,
+    discountedTotal: netBase + netAddOn,
+    hasDiscount,
   };
 }
 
@@ -167,10 +225,11 @@ export function carPriceForCatalog(
     : null;
 
   const amounts = prices.amounts ?? {};
+  const mrpAmounts = prices.mrpAmounts ?? {};
   const baseLineForRead = outsideLine ?? baseLine;
-  const base = amounts[baseLineForRead.id] ?? null;
-  if (base == null) return null;
-  const addOn = addonLine ? (amounts[addonLine.id] ?? 0) : 0;
+  const netBase = amounts[baseLineForRead.id] ?? null;
+  if (netBase == null) return null;
+  const netAddOn = addonLine ? (amounts[addonLine.id] ?? 0) : 0;
 
   // Apply badge gate (badge=off → discount counts as 0).
   const baseEnabled = badgesByLineId[baseLineForRead.id] !== false;
@@ -178,18 +237,23 @@ export function carPriceForCatalog(
   const addOnEnabled = addonLine ? badgesByLineId[addonLine.id] !== false : true;
   const addOnPercent = addonLine && addOnEnabled ? (percentsByLineId[addonLine.id] ?? 0) : 0;
 
-  const discountedBase = discountedPrice(base, basePercent);
-  const discountedAddOn = discountedPrice(addOn, addOnPercent);
+  // Strike price: explicit MRP override wins; otherwise auto-compute from %.
+  const baseMrpOverride = mrpAmounts[baseLineForRead.id] ?? null;
+  const addOnMrpOverride = addonLine ? mrpAmounts[addonLine.id] ?? null : null;
+  const strikeBase = resolveStrikePrice(netBase, basePercent, baseMrpOverride) ?? netBase;
+  const strikeAddOn = resolveStrikePrice(netAddOn, addOnPercent, addOnMrpOverride) ?? netAddOn;
+
+  const hasDiscount = strikeBase > netBase || strikeAddOn > netAddOn;
 
   return {
-    base,
-    addOn,
-    total: base + addOn,
+    base: strikeBase,
+    addOn: strikeAddOn,
+    total: strikeBase + strikeAddOn,
     basePercent,
     addOnPercent,
-    discountedBase,
-    discountedAddOn,
-    discountedTotal: discountedBase + discountedAddOn,
-    hasDiscount: basePercent > 0 || addOnPercent > 0,
+    discountedBase: netBase,
+    discountedAddOn: netAddOn,
+    discountedTotal: netBase + netAddOn,
+    hasDiscount,
   };
 }

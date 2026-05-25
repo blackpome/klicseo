@@ -1,9 +1,9 @@
 import "server-only";
 import { supabase } from "./supabase";
 import { ALL_PRICE_LINES, type PriceLine } from "./pricing";
-import { EMPTY_TIER_PRICES, type LineAmounts, type PriceTier, type TierPrices } from "./priceTiers-shared";
+import { EMPTY_TIER_PRICES, type LineAmounts, type LineMrpAmounts, type PriceTier, type TierPrices } from "./priceTiers-shared";
 
-export type { LineAmounts, PriceTier, TierPrices } from "./priceTiers-shared";
+export type { LineAmounts, LineMrpAmounts, PriceTier, TierPrices } from "./priceTiers-shared";
 
 // price_tiers now only stores metadata (id, name, sort_order). Prices live in
 // price_tier_amounts as (tier_id, line_id, amount). We project them back into
@@ -46,11 +46,23 @@ function isPriceLineKey(v: string): v is PriceLine {
  * Source-of-truth writer for tier prices, keyed by line_id (works for every
  * line in the catalog — legacy or brand-new). Upserts one row per
  * (tier_id, line_id) into price_tier_amounts.
+ *
+ * `mrpAmounts` (optional) is the per-line MRP override; passing the same
+ * line_id in both maps writes both columns of the same row in one upsert.
  */
-async function writeTierAmountsByLineId(tierId: string, amounts: LineAmounts): Promise<void> {
-  const entries = Object.entries(amounts);
-  if (entries.length === 0) return;
-  const rows = entries.map(([line_id, amount]) => ({ tier_id: tierId, line_id, amount }));
+async function writeTierAmountsByLineId(
+  tierId: string,
+  amounts: LineAmounts,
+  mrpAmounts?: LineMrpAmounts,
+): Promise<void> {
+  const lineIds = new Set([...Object.keys(amounts), ...Object.keys(mrpAmounts ?? {})]);
+  if (lineIds.size === 0) return;
+  const rows = Array.from(lineIds).map((line_id) => {
+    const row: Record<string, unknown> = { tier_id: tierId, line_id };
+    if (line_id in amounts) row.amount = amounts[line_id];
+    if (mrpAmounts && line_id in mrpAmounts) row.mrp_amount = mrpAmounts[line_id];
+    return row;
+  });
   const { error } = await supabase()
     .from("price_tier_amounts")
     .upsert(rows, { onConflict: "tier_id,line_id" });
@@ -68,6 +80,21 @@ export async function listLineAmountsByTier(tierIds: string[]): Promise<Record<s
   if (error) throw error;
   for (const r of (data ?? []) as Array<{ tier_id: string; line_id: string; amount: number | null }>) {
     (out[r.tier_id] ??= {})[r.line_id] = r.amount;
+  }
+  return out;
+}
+
+/** Bulk-load every tier's MRP overrides keyed by line_id. Mirror of listLineAmountsByTier. */
+export async function listLineMrpAmountsByTier(tierIds: string[]): Promise<Record<string, LineMrpAmounts>> {
+  const out: Record<string, LineMrpAmounts> = {};
+  if (tierIds.length === 0) return out;
+  const { data, error } = await supabase()
+    .from("price_tier_amounts")
+    .select("tier_id, line_id, mrp_amount")
+    .in("tier_id", tierIds);
+  if (error) throw error;
+  for (const r of (data ?? []) as Array<{ tier_id: string; line_id: string; mrp_amount: number | null }>) {
+    (out[r.tier_id] ??= {})[r.line_id] = r.mrp_amount;
   }
   return out;
 }
@@ -108,7 +135,11 @@ export async function getTier(id: string): Promise<PriceTier | null> {
 }
 
 /** Insert a new tier; sort_order defaults to (max + 1). */
-export async function createTier(name: string, amounts: LineAmounts): Promise<{ id: string }> {
+export async function createTier(
+  name: string,
+  amounts: LineAmounts,
+  mrpAmounts?: LineMrpAmounts,
+): Promise<{ id: string }> {
   const sb = supabase();
   const { data: maxRow } = await sb
     .from("price_tiers")
@@ -125,7 +156,7 @@ export async function createTier(name: string, amounts: LineAmounts): Promise<{ 
     .single();
   if (error) throw error;
   const meta = data as { id: string };
-  await writeTierAmountsByLineId(meta.id, amounts);
+  await writeTierAmountsByLineId(meta.id, amounts, mrpAmounts);
   return { id: meta.id };
 }
 
@@ -137,7 +168,7 @@ export async function createTier(name: string, amounts: LineAmounts): Promise<{ 
  */
 export async function updateTier(
   id: string,
-  patch: { name?: string; sort_order?: number; amounts?: LineAmounts },
+  patch: { name?: string; sort_order?: number; amounts?: LineAmounts; mrpAmounts?: LineMrpAmounts },
 ): Promise<void> {
   const sb = supabase();
 
@@ -150,8 +181,10 @@ export async function updateTier(
     if (error) throw error;
   }
 
-  if (patch.amounts && Object.keys(patch.amounts).length > 0) {
-    await writeTierAmountsByLineId(id, patch.amounts);
+  const hasAmounts = patch.amounts && Object.keys(patch.amounts).length > 0;
+  const hasMrp = patch.mrpAmounts && Object.keys(patch.mrpAmounts).length > 0;
+  if (hasAmounts || hasMrp) {
+    await writeTierAmountsByLineId(id, patch.amounts ?? {}, patch.mrpAmounts);
   }
 }
 

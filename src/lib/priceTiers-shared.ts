@@ -47,14 +47,38 @@ export function readTierPricesFromForm(fd: FormData): TierPrices {
 export type LineAmounts = Record<string, number | null>;
 
 /**
+ * Optional displayed MRP override per line_id (mirrors LineAmounts shape).
+ * Null/missing means "compute the strike price from amount + discount %".
+ */
+export type LineMrpAmounts = Record<string, number | null>;
+
+/**
  * Read tier prices from a FormData keyed by `line_<line_id>` inputs. Any field
  * whose name starts with `line_` is interpreted as a price; blank → null.
  */
 export function readLineAmountsFromForm(fd: FormData): LineAmounts {
   const out: LineAmounts = {};
   for (const [key, value] of fd.entries()) {
-    if (!key.startsWith("line_")) continue;
+    if (!key.startsWith("line_") || key.startsWith("line_mrp_")) continue;
     const id = key.slice(5);
+    if (!id) continue;
+    const raw = String(value).trim();
+    if (raw === "") { out[id] = null; continue; }
+    const n = Number(raw);
+    out[id] = Number.isFinite(n) ? Math.round(n) : null;
+  }
+  return out;
+}
+
+/**
+ * Read optional MRP overrides from a FormData keyed by `line_mrp_<line_id>`.
+ * Blank → null (means "auto-compute"). Companion to readLineAmountsFromForm.
+ */
+export function readLineMrpAmountsFromForm(fd: FormData): LineMrpAmounts {
+  const out: LineMrpAmounts = {};
+  for (const [key, value] of fd.entries()) {
+    if (!key.startsWith("line_mrp_")) continue;
+    const id = key.slice(9);
     if (!id) continue;
     const raw = String(value).trim();
     if (raw === "") { out[id] = null; continue; }

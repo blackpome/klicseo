@@ -187,11 +187,11 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
           const selected = selectedOption === id;
           const p = optPrice(id, false);
           const pAdd = optPrice(id, true);
-          // p.basePercent already reflects the per-line badge toggle (zeroed
-          // when the badge is off, via effectiveDiscounts / carPriceForCatalog),
-          // so we don't re-check `badges[...]` here — that legacy-only lookup
-          // would miss admin-created options.
-          const offerOn = !!p && p.basePercent > 0 && showDiscount;
+          // Show the strike + offer chip only when an admin-entered MRP exists
+          // (p.hasDiscount = strike > net). The `% OFF` text inside the chip
+          // still comes from the discount tab; admin manages the two
+          // independently, so an MRP without a % shows a strike with no chip.
+          const offerOn = !!p && p.hasDiscount && showDiscount;
           return (
             <motion.button
               key={id}
@@ -213,8 +213,10 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
               }
             >
               {/* Offer chip — sticks slightly above the card's top-right corner so
-                  it doesn't overlap the price column. */}
-              {offerOn && p && (
+                  it doesn't overlap the price column. The % itself is the
+                  admin-typed value from the Discounts tab; hide the chip when
+                  it would say "0% OFF". */}
+              {offerOn && p && p.basePercent > 0 && (
                 <span
                   aria-hidden
                   className="pointer-events-none absolute -top-2 right-3 z-10 inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider text-white shadow-[0_2px_8px_rgba(220,38,38,0.5)]"

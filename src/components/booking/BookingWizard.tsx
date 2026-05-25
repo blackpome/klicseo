@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import StepPackage from "./StepPackage";
+import { pricesOf } from "./CarPicker";
+import type { CarRecord } from "@/lib/carPricing";
 import StepVehicle from "./StepVehicle";
 import StepContact from "./StepContact";
 import StepLocation from "./StepLocation";
@@ -118,9 +120,39 @@ export default function BookingWizard() {
   // Hydrate from localStorage draft once on mount. Deep-link query params
   // below still override draft fields, so a fresh "Book Detailing" CTA always
   // lands on the right service even if the user had a half-filled draft.
+  //
+  // If the draft carries a `carId`, immediately refresh that car's prices from
+  // the server. The cached snapshot is from whenever the user last picked the
+  // car — admin price / MRP edits since then would otherwise stay invisible
+  // to a returning user who never re-picks the car.
   useEffect(() => {
     const draft = readDraft();
-    if (draft) setData((d) => ({ ...d, ...draft }));
+    if (!draft) return;
+    setData((d) => ({ ...d, ...draft }));
+    const cachedCarId = draft.carId;
+    if (!cachedCarId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/cars/search?id=${encodeURIComponent(cachedCarId)}`);
+        if (!res.ok) return;
+        const json = (await res.json()) as { cars?: CarRecord[] };
+        const car = json.cars?.[0];
+        if (cancelled) return;
+        // Car deleted from catalog → clear the stale prices, force re-pick.
+        if (!car) {
+          setData((d) => (d.carId === cachedCarId ? { ...d, carPrices: null } : d));
+          return;
+        }
+        setData((d) => (d.carId === cachedCarId ? { ...d, carPrices: pricesOf(car) } : d));
+      } catch {
+        // Network/transient error: leave the cached prices as-is rather than
+        // wiping a user mid-flow.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Persist on every change. Cheap; the form is small.

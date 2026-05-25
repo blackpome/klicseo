@@ -103,6 +103,25 @@ export default function SiteSettingsForm({ current }: { current: SiteSettings })
                 />
                 <span className="pr-3 text-xs text-white/35">{d.suffix}</span>
               </div>
+
+              {/* MRP override — independent of the "Use custom" toggle. Blank
+                  means no strike on the homepage card. The % ribbon from the
+                  Discounts tab only renders when an MRP is set so it has a
+                  reference price to strike. */}
+              <div
+                className="flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-[#C9A84C] overflow-hidden"
+                title="Optional struck-through MRP. Leave blank to hide the strike."
+              >
+                <span className="pl-3 text-[11px] uppercase tracking-wider text-white/35">MRP ₹</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  name={`card_${d.id}_mrp`}
+                  defaultValue={cur.mrp ?? ""}
+                  placeholder="—"
+                  className="w-20 bg-transparent px-2 py-2 text-sm focus:outline-none"
+                />
+              </div>
               <span className="text-[11px] text-white/25 w-24">default ₹{d.default.toLocaleString("en-IN")}</span>
             </div>
           );

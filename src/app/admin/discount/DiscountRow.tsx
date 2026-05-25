@@ -3,12 +3,10 @@
 import { useActionState, useState } from "react";
 import { Check, AlertCircle } from "lucide-react";
 import { saveDiscountAction } from "./actions";
-import { discountedPrice, inr } from "@/lib/pricing";
 
 export default function DiscountRow({
   lineId,
   label,
-  sample,
   current,
   badge,
 }: {
@@ -16,8 +14,6 @@ export default function DiscountRow({
   lineId: string;
   /** Display label (catalog-driven, so renames flow through). */
   label: string;
-  /** Sample base price used for the discount preview. */
-  sample: number;
   current: number;
   badge: boolean;
 }) {
@@ -45,11 +41,11 @@ export default function DiscountRow({
         <div className="text-sm text-white/85">{label}</div>
         <div className="text-[11px] text-white/35 tabular-nums">
           {num > 0 ? (
-            <>
-              <span className="text-[#F97316] font-semibold line-through decoration-[#F97316] decoration-2 bg-[#F97316]/15 px-1 py-0.5 rounded">{inr(sample)}</span>
-              <span className="mx-1">→</span>
-              <span className="text-emerald-300">{inr(discountedPrice(sample, num))}</span>
-            </>
+            <span>
+              {num}% — strikes the MRP set per tier (
+              <span className="text-white/55">/admin/cars</span>
+              )
+            </span>
           ) : (
             <span>no discount</span>
           )}

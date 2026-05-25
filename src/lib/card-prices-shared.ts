@@ -5,8 +5,9 @@
 export type CardId = "CarWash" | "OneTimeCarWash" | "CarDetailing";
 
 export interface CardPrice {
-  price: number;
-  enabled: boolean; // use this custom price? (false = fall back to the default)
+  price: number;         // the net "Starts @" value — what the customer pays
+  mrp: number | null;    // optional strike-through MRP. Null = no strike.
+  enabled: boolean;      // use this custom price? (false = fall back to the default)
 }
 
 export type CardPrices = Record<CardId, CardPrice>;
@@ -18,7 +19,7 @@ export const CARD_DEFS: { id: CardId; label: string; suffix: string; default: nu
 ];
 
 export const CARD_DEFAULTS: CardPrices = Object.fromEntries(
-  CARD_DEFS.map((d) => [d.id, { price: d.default, enabled: false }]),
+  CARD_DEFS.map((d) => [d.id, { price: d.default, mrp: null, enabled: false }]),
 ) as CardPrices;
 
 export function isCardId(v: unknown): v is CardId {

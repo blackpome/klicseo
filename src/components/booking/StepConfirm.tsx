@@ -264,7 +264,7 @@ export default function StepConfirm({ data, onBack }: Props) {
             <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C" }}>
               {inr(total)}
             </span>
-            {priced?.hasDiscount && showOffLabel && (
+            {priced?.hasDiscount && showOffLabel && priced.basePercent > 0 && (
               <span className="block text-[10px] font-bold text-[#F97316]">{priced.basePercent}% OFF</span>
             )}
           </div>

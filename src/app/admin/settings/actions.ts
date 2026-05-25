@@ -31,8 +31,11 @@ export async function saveSiteSettingsAction(
     const cardPrices = {} as CardPrices;
     for (const d of CARD_DEFS) {
       const p = Number(String(formData.get(`card_${d.id}_price`) ?? "").trim());
+      const mrpRaw = String(formData.get(`card_${d.id}_mrp`) ?? "").trim();
+      const mrpNum = mrpRaw === "" ? null : Number(mrpRaw);
       cardPrices[d.id] = {
         price: Number.isFinite(p) && p >= 0 ? Math.round(p) : d.default,
+        mrp: mrpNum != null && Number.isFinite(mrpNum) && mrpNum > 0 ? Math.round(mrpNum) : null,
         enabled: formData.get(`card_${d.id}_on`) === "on",
       };
     }

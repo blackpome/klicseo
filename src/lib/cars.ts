@@ -27,40 +27,54 @@ type RawCar = {
 async function withTierPrices(rows: RawCar[]): Promise<CarRecord[]> {
   if (rows.length === 0) return [];
   const tierIds = Array.from(new Set(rows.map((r) => r.tier_id).filter((x): x is string => !!x)));
-  // Two parallel maps from the SAME source data: legacy-keyed (for the 9-key
-  // CarPrices interface) and line-id-keyed (for catalog-driven pricing of
-  // admin-created options).
+  // Parallel maps from the SAME source data:
+  //   legacyByTier   — legacy 9-key amount lookup (used by carPriceFor)
+  //   amountsByTier  — line_id-keyed amount lookup (used by carPriceForCatalog)
+  //   legacyMrpByTier / mrpAmountsByTier — same shapes but for the optional
+  //   MRP override (price_tier_amounts.mrp_amount). Null/missing means the
+  //   strike price will be computed via grossUp() at price-resolution time.
   const legacyByTier = new Map<string, Record<string, number | null>>();
   const amountsByTier = new Map<string, Record<string, number | null>>();
+  const legacyMrpByTier = new Map<string, Record<string, number | null>>();
+  const mrpAmountsByTier = new Map<string, Record<string, number | null>>();
   if (tierIds.length > 0) {
     const { data, error } = await supabase()
       .from("price_tier_amounts")
-      .select("tier_id, line_id, amount, service_price_lines!inner(legacy_line)")
+      .select("tier_id, line_id, amount, mrp_amount, service_price_lines!inner(legacy_line)")
       .in("tier_id", tierIds);
     if (error) throw error;
     type Row = {
       tier_id: string;
       line_id: string;
       amount: number | null;
+      mrp_amount: number | null;
       service_price_lines: { legacy_line: string | null } | Array<{ legacy_line: string | null }>;
     };
     for (const row of (data ?? []) as unknown as Row[]) {
-      // line-id map: always populate
+      // line-id maps: always populate
       (amountsByTier.get(row.tier_id) ?? amountsByTier.set(row.tier_id, {}).get(row.tier_id)!)[row.line_id] = row.amount;
-      // legacy map: only if this line has a known legacy_line
+      (mrpAmountsByTier.get(row.tier_id) ?? mrpAmountsByTier.set(row.tier_id, {}).get(row.tier_id)!)[row.line_id] = row.mrp_amount;
+      // legacy maps: only if this line has a known legacy_line
       const rel = row.service_price_lines;
       const relRow = Array.isArray(rel) ? rel[0] : rel;
       const key = relRow?.legacy_line;
       if (key && (ALL_PRICE_LINES as string[]).includes(key)) {
         (legacyByTier.get(row.tier_id) ?? legacyByTier.set(row.tier_id, {}).get(row.tier_id)!)[key] = row.amount;
+        (legacyMrpByTier.get(row.tier_id) ?? legacyMrpByTier.set(row.tier_id, {}).get(row.tier_id)!)[key] = row.mrp_amount;
       }
     }
   }
   return rows.map((c) => {
     const tp = c.tier_id ? legacyByTier.get(c.tier_id) ?? {} : {};
+    const tpMrp = c.tier_id ? legacyMrpByTier.get(c.tier_id) ?? {} : {};
     const amounts = c.tier_id ? amountsByTier.get(c.tier_id) ?? {} : {};
-    const merged: Record<string, unknown> = { ...c, amounts };
-    for (const line of ALL_PRICE_LINES) merged[line] = tp[line] ?? null;
+    const mrpAmounts = c.tier_id ? mrpAmountsByTier.get(c.tier_id) ?? {} : {};
+    const mrp: Record<string, number | null> = {};
+    const merged: Record<string, unknown> = { ...c, amounts, mrpAmounts, mrp };
+    for (const line of ALL_PRICE_LINES) {
+      merged[line] = tp[line] ?? null;
+      mrp[line] = tpMrp[line] ?? null;
+    }
     return merged as unknown as CarRecord;
   });
 }

@@ -15,7 +15,9 @@ interface Props {
 
 // Pull the 9 legacy price columns AND the line-id-keyed amounts map off a
 // search result, so admin-created sub-categories can be priced downstream.
-function pricesOf(c: CarRecord): CarPrices {
+// Also carry the optional MRP overrides (legacy 9-key + line-id-keyed) so the
+// booking steps can render the admin-typed strike-through price.
+export function pricesOf(c: CarRecord): CarPrices {
   return {
     monthly: c.monthly,
     weekly_thrice: c.weekly_thrice,
@@ -27,6 +29,8 @@ function pricesOf(c: CarRecord): CarPrices {
     car_detailing: c.car_detailing,
     interior_detailing: c.interior_detailing,
     amounts: c.amounts ?? {},
+    mrp: c.mrp,
+    mrpAmounts: c.mrpAmounts ?? {},
   };
 }
 

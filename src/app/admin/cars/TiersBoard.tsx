@@ -1,11 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, Check, AlertCircle, Users, X } from "lucide-react";
 import { inr, type PriceLine } from "@/lib/pricing";
 import { PRICE_LINE_LABEL } from "@/lib/pricing";
-import type { LineAmounts, PriceTier } from "@/lib/priceTiers-shared";
+import type { LineAmounts, LineMrpAmounts, PriceTier } from "@/lib/priceTiers-shared";
 import type { ServiceCatalog } from "@/lib/serviceCatalog-shared";
 import { createTierAction, updateTierAction, deleteTierAction } from "./actions";
 
@@ -21,11 +21,13 @@ export default function TiersBoard({
   unassignedCount,
   catalog,
   amountsByTier,
+  mrpAmountsByTier,
 }: {
   tiers: PriceTier[];
   unassignedCount: number;
   catalog: ServiceCatalog;
   amountsByTier: Record<string, LineAmounts>;
+  mrpAmountsByTier: Record<string, LineMrpAmounts>;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -70,6 +72,7 @@ export default function TiersBoard({
               tier={t}
               catalog={catalog}
               amounts={amountsByTier[t.id] ?? {}}
+              mrpAmounts={mrpAmountsByTier[t.id] ?? {}}
               editing={editingId === t.id}
               onEdit={() => setEditingId(t.id)}
               onClose={() => setEditingId(null)}
@@ -83,8 +86,8 @@ export default function TiersBoard({
 
 // ----- Row ----------------------------------------------------------------
 
-function TierRow({ tier, catalog, amounts, editing, onEdit, onClose }: { tier: PriceTier; catalog: ServiceCatalog; amounts: LineAmounts; editing: boolean; onEdit: () => void; onClose: () => void }) {
-  if (editing) return <TierEditor tier={tier} catalog={catalog} amounts={amounts} onClose={onClose} />;
+function TierRow({ tier, catalog, amounts, mrpAmounts, editing, onEdit, onClose }: { tier: PriceTier; catalog: ServiceCatalog; amounts: LineAmounts; mrpAmounts: LineMrpAmounts; editing: boolean; onEdit: () => void; onClose: () => void }) {
+  if (editing) return <TierEditor tier={tier} catalog={catalog} amounts={amounts} mrpAmounts={mrpAmounts} onClose={onClose} />;
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
@@ -130,7 +133,7 @@ function TierRow({ tier, catalog, amounts, editing, onEdit, onClose }: { tier: P
 
 // ----- Editor (existing tier) --------------------------------------------
 
-function TierEditor({ tier, catalog, amounts, onClose }: { tier: PriceTier; catalog: ServiceCatalog; amounts: LineAmounts; onClose: () => void }) {
+function TierEditor({ tier, catalog, amounts, mrpAmounts, onClose }: { tier: PriceTier; catalog: ServiceCatalog; amounts: LineAmounts; mrpAmounts: LineMrpAmounts; onClose: () => void }) {
   const [state, action, pending] = useActionState(updateTierAction, {} as { error?: string; ok?: string });
 
   return (
@@ -152,7 +155,7 @@ function TierEditor({ tier, catalog, amounts, onClose }: { tier: PriceTier; cata
         </div>
       </div>
 
-      <PriceGrid catalog={catalog} amounts={amounts} />
+      <PriceGrid catalog={catalog} amounts={amounts} mrpAmounts={mrpAmounts} />
 
       <div className="flex items-center gap-3 text-[12px]">
         {state.ok && <span className="inline-flex items-center gap-1 text-emerald-300"><Check size={13} /> {state.ok}</span>}
@@ -183,7 +186,7 @@ function NewTierForm({ catalog, onClose }: { catalog: ServiceCatalog; onClose: (
           <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-white/50 hover:bg-white/10"><X size={14} /></button>
         </div>
       </div>
-      <PriceGrid catalog={catalog} amounts={{}} />
+      <PriceGrid catalog={catalog} amounts={{}} mrpAmounts={{}} />
       {state.error && <p className="text-[12px] text-red-300 inline-flex items-center gap-1"><AlertCircle size={13} /> {state.error}</p>}
     </form>
   );
@@ -197,12 +200,90 @@ function NewTierForm({ catalog, onClose }: { catalog: ServiceCatalog; onClose: (
  * server action uses to upsert into price_tier_amounts — so brand-new lines
  * created via the Services editor become priceable here automatically.
  */
+/**
+ * One line's pair of inputs: net price (₹) and optional MRP (₹).
+ *
+ * Calculator UX: if admin types a value ending with `%` into the MRP field
+ * (e.g. "10%"), on blur we read the sibling net input and replace the MRP
+ * with `net * (1 + pct/100)` rounded to the nearest rupee. Plain numbers
+ * are accepted verbatim. The conversion is purely client-side; what hits the
+ * server action is always a plain integer (or blank).
+ */
+function LineInputs({
+  lineId,
+  label,
+  amount,
+  mrp,
+}: {
+  lineId: string;
+  label: string;
+  amount: number | null;
+  mrp: number | null;
+}) {
+  const netRef = useRef<HTMLInputElement>(null);
+  const mrpRef = useRef<HTMLInputElement>(null);
+
+  function expandMrpPercent() {
+    const el = mrpRef.current;
+    if (!el) return;
+    const raw = el.value.trim();
+    if (!raw.endsWith("%")) return;
+    const pct = Number(raw.slice(0, -1).trim());
+    if (!Number.isFinite(pct) || pct <= 0) return;
+    const netRaw = netRef.current?.value.trim() ?? "";
+    const net = Number(netRaw);
+    if (!Number.isFinite(net) || net <= 0) return;
+    el.value = String(Math.round(net * (1 + pct / 100)));
+  }
+
+  return (
+    <label className="block">
+      <span className="text-[10px] text-white/45 block truncate">{label}</span>
+      {/* Net price the customer pays. */}
+      <div className="mt-0.5 flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-[#C9A84C] overflow-hidden">
+        <span className="pl-2 text-xs text-white/40">₹</span>
+        <input
+          ref={netRef}
+          type="text"
+          inputMode="numeric"
+          name={`line_${lineId}`}
+          defaultValue={priceVal(amount)}
+          placeholder="—"
+          className="w-full bg-transparent px-1.5 py-1.5 text-sm focus:outline-none"
+        />
+      </div>
+      {/* Optional MRP override — drives the struck-through price. Blank = no
+          strike. Accepts a plain rupee value, or a percentage like "10%" that
+          expands on blur to net * (1 + pct/100). */}
+      <div
+        className="mt-1 flex items-center rounded-lg border border-white/5 bg-white/[0.03] focus-within:border-[#C9A84C]/60 overflow-hidden"
+        title='Optional MRP. Type a number, or e.g. "10%" to mark up the net by 10% on blur.'
+      >
+        <span className="pl-2 text-[10px] uppercase tracking-wider text-white/35">MRP ₹</span>
+        <input
+          ref={mrpRef}
+          type="text"
+          inputMode="text"
+          name={`line_mrp_${lineId}`}
+          defaultValue={priceVal(mrp)}
+          placeholder='— or "10%"'
+          onBlur={expandMrpPercent}
+          onKeyDown={(e) => { if (e.key === "Enter") expandMrpPercent(); }}
+          className="w-full bg-transparent px-1.5 py-1.5 text-xs text-white/80 focus:outline-none"
+        />
+      </div>
+    </label>
+  );
+}
+
 function PriceGrid({
   catalog,
   amounts,
+  mrpAmounts,
 }: {
   catalog: ServiceCatalog;
   amounts: LineAmounts;
+  mrpAmounts: LineMrpAmounts;
 }) {
   return (
     <div className="space-y-2">
@@ -220,20 +301,13 @@ function PriceGrid({
                 const legacy = l.legacy_line as PriceLine | undefined;
                 const label = l.label || (legacy ? PRICE_LINE_LABEL[legacy] : "—");
                 return (
-                  <label key={l.id} className="block">
-                    <span className="text-[10px] text-white/45 block truncate">{label}</span>
-                    <div className="mt-0.5 flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-[#C9A84C] overflow-hidden">
-                      <span className="pl-2 text-xs text-white/40">₹</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        name={`line_${l.id}`}
-                        defaultValue={priceVal(amounts[l.id] ?? null)}
-                        placeholder="—"
-                        className="w-full bg-transparent px-1.5 py-1.5 text-sm focus:outline-none"
-                      />
-                    </div>
-                  </label>
+                  <LineInputs
+                    key={l.id}
+                    lineId={l.id}
+                    label={label}
+                    amount={amounts[l.id] ?? null}
+                    mrp={mrpAmounts[l.id] ?? null}
+                  />
                 );
               })}
             </div>

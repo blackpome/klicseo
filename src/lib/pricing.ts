@@ -83,6 +83,37 @@ export function discountedPrice(amount: number, percent: number): number {
   return Math.round((amount * (100 - percent)) / 100);
 }
 
+/**
+ * Gross-up: invert a percent discount so that the *net* `amount` is what the
+ * customer pays, and the returned value is the inflated "original" price shown
+ * struck-through. Rounded to the nearest ₹10 so the displayed MRP looks like a
+ * normal sticker price (e.g. 1000 @ 10% → 1110, not 1111.11).
+ *
+ * For psychological prices (e.g. ₹1499), set `price_tier_amounts.mrp_amount`
+ * explicitly — that override wins over this computed value.
+ */
+export function grossUp(amount: number, percent: number): number {
+  if (!percent || percent <= 0 || percent >= 100) return amount;
+  const raw = amount / (1 - percent / 100);
+  return Math.round(raw / 10) * 10;
+}
+
+/**
+ * Resolve the strike-through price for a single line. Returns the admin's
+ * MRP override when it's strictly greater than the net amount; otherwise null
+ * (= no strike shown). No computed gross-up — the admin types the MRP they
+ * want struck through, full stop. The discount % from the discount tab drives
+ * the ribbon independently.
+ */
+export function resolveStrikePrice(
+  amount: number,
+  _percent: number,
+  mrpOverride: number | null | undefined,
+): number | null {
+  if (mrpOverride != null && mrpOverride > amount) return mrpOverride;
+  return null;
+}
+
 /** The base price line an option resolves to (honours outside parking). */
 export function baseLineFor(optionId: ServiceOptionId, parking: ParkingLocation): PriceLine {
   const outside = parking === "outside";
