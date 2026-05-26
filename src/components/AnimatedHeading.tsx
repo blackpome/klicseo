@@ -38,23 +38,25 @@ const container: Variants = {
   }),
 };
 
+// NOTE: previously animated `filter: blur(...)` per-letter. Blur is one of the
+// most expensive properties to animate (forces a fresh backing buffer + shader
+// every frame) and at 50+ chars per heading it was the single biggest cause of
+// landing-page jank. Opacity + translateY only — both composite-only.
 const letter: Variants = {
-  hidden: { opacity: 0, y: "0.45em", filter: "blur(8px)" },
+  hidden: { opacity: 0, y: "0.45em" },
   show: {
     opacity: 1,
     y: "0em",
-    filter: "blur(0px)",
     transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] },
   },
 };
 
 // Shimmer lines move as a single unit (preserves the cross-word gold sweep).
 const shimmerLine: Variants = {
-  hidden: { opacity: 0, y: "0.4em", filter: "blur(10px)" },
+  hidden: { opacity: 0, y: "0.4em" },
   show: {
     opacity: 1,
     y: "0em",
-    filter: "blur(0px)",
     transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] },
   },
 };

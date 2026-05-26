@@ -1,7 +1,7 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { useRef, MouseEvent } from "react";
+import { useRef, useMemo, MouseEvent } from "react";
 import { motion, useSpring, useMotionValue, useMotionTemplate } from "framer-motion";
 import AnimatedHeading from "./AnimatedHeading";
 import { useServiceDiscounts, useLineBadge } from "./DiscountContext";
@@ -144,23 +144,48 @@ function TiltPlanCard({
   const go = useSpring(0, { stiffness: 150, damping: 22 });
   const glareBg = useMotionTemplate`radial-gradient(circle at ${gx}% ${gy}%, rgba(255,255,255,${go}) 0%, transparent 60%)`;
 
+  // Touch / reduced-motion devices get a static card — no tilt, no glare.
+  // Cached once so we don't matchMedia every mouse move.
+  const isInteractive = useMemo(() => {
+    if (typeof window === "undefined") return true; // SSR: assume interactive
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+    if (window.matchMedia("(hover: none), (pointer: coarse)").matches) return false;
+    return true;
+  }, []);
+
+  const rafRef = useRef(0);
+  const pendingRef = useRef({ rx: 0, ry: 0, gx: 50, gy: 50, go: 0 });
+  function flush() {
+    rafRef.current = 0;
+    const p = pendingRef.current;
+    rx.set(p.rx);
+    ry.set(p.ry);
+    gx.set(p.gx);
+    gy.set(p.gy);
+    go.set(p.go);
+  }
+
   function onMove(e: MouseEvent<HTMLDivElement>) {
+    if (!isInteractive) return;
     const card = cardRef.current;
     if (!card) return;
     const { left, top, width, height } = card.getBoundingClientRect();
     const x = (e.clientX - left) / width;
     const y = (e.clientY - top) / height;
-    rx.set((0.5 - y) * 7);
-    ry.set((x - 0.5) * 7);
-    gx.set(x * 100);
-    gy.set(y * 100);
-    go.set(0.14);
+    pendingRef.current = {
+      rx: (0.5 - y) * 7,
+      ry: (x - 0.5) * 7,
+      gx: x * 100,
+      gy: y * 100,
+      go: 0.14,
+    };
+    if (!rafRef.current) rafRef.current = requestAnimationFrame(flush);
   }
 
   function onLeave() {
-    rx.set(0);
-    ry.set(0);
-    go.set(0);
+    if (!isInteractive) return;
+    pendingRef.current = { rx: 0, ry: 0, gx: 50, gy: 50, go: 0 };
+    if (!rafRef.current) rafRef.current = requestAnimationFrame(flush);
   }
 
   return (
@@ -181,30 +206,19 @@ function TiltPlanCard({
         className="relative rounded-2xl h-full overflow-hidden"
         style={{ padding: "3px" }}
       >
-        {/* The conic-gradient spinner — must be INSIDE overflow:hidden */}
-        <motion.div
-          className="absolute pointer-events-none"
+        {/* The conic-gradient spinner — CSS keyframes (compositor-owned) instead
+            of framer-motion, so it costs ~nothing on the main thread. */}
+        <div
+          aria-hidden
+          className="klicseo-spin absolute pointer-events-none"
           style={{
-            inset: 0,
-            width: "100%",
-            height: "100%",
+            top: "50%",
+            left: "50%",
+            width: "200%",
+            height: "200%",
+            background: `conic-gradient(from 0deg, transparent 0deg, ${borderColor} 60deg, transparent 120deg, transparent 180deg, ${borderColor} 240deg, transparent 300deg)`,
           }}
-          animate={{ rotate: [0, 360] }}
-          transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-        >
-          {/* Expand the spinner so it covers all corners */}
-          <div
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              width: "200%",
-              height: "200%",
-              transform: "translate(-50%, -50%)",
-              background: `conic-gradient(from 0deg, transparent 0deg, ${borderColor} 60deg, transparent 120deg, transparent 180deg, ${borderColor} 240deg, transparent 300deg)`,
-            }}
-          />
-        </motion.div>
+        />
 
         {/* ── Inner card (masks spinner to the border only) ── */}
         <div

@@ -16,6 +16,24 @@ const stats = [
   { value: "100%", label: "Satisfaction" },
 ];
 
+// Smooth-scroll in-page anchor clicks. Native `href="#id"` navigation computes
+// the target offset from the *current* layout — but the marketing page's
+// `cv-section` wrappers (content-visibility: auto) reserve a placeholder
+// height for sections that haven't been rendered yet. On mobile, that
+// placeholder is shorter than the real section, so clicking `#pricing` from
+// the hero lands inside HowItWorks instead. `scrollIntoView` forces a layout
+// pass that expands intermediate sections to their real height first.
+function smoothAnchorClick(e: React.MouseEvent<HTMLAnchorElement>) {
+  const href = e.currentTarget.getAttribute("href") ?? "";
+  if (!href.startsWith("#") || href.length < 2) return;
+  const el = document.getElementById(href.slice(1));
+  if (!el) return;
+  e.preventDefault();
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  // Keep the URL in sync so back/forward + share-the-link still work.
+  if (history.pushState) history.pushState(null, "", href);
+}
+
 // Hero background plays these in sequence, looping back to the first when the
 // last finishes. Files live in /public.
 export default function Hero() {
@@ -57,14 +75,30 @@ export default function Hero() {
   const orbBY = useTransform(sy, (v) => v * -55);
 
   useEffect(() => {
+    // Parallax is mouse-only; skip on touch devices (where mousemove fires
+    // synthetically on every tap) and when the OS asks for reduced motion.
+    if (typeof window === "undefined") return;
+    const isTouch = window.matchMedia("(hover: none), (pointer: coarse)").matches;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (isTouch || reduce) return;
+    let raf = 0;
+    let nextX = 0;
+    let nextY = 0;
+    const apply = () => {
+      raf = 0;
+      mx.set(nextX);
+      my.set(nextY);
+    };
     const onMove = (e: MouseEvent) => {
-      const x = (e.clientX / window.innerWidth) - 0.5;
-      const y = (e.clientY / window.innerHeight) - 0.5;
-      mx.set(x);
-      my.set(y);
+      nextX = (e.clientX / window.innerWidth) - 0.5;
+      nextY = (e.clientY / window.innerHeight) - 0.5;
+      if (!raf) raf = requestAnimationFrame(apply);
     };
     window.addEventListener("mousemove", onMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onMove);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [mx, my]);
 
   return (
@@ -318,6 +352,7 @@ export default function Hero() {
           <Magnetic className="w-full sm:w-auto">
             <motion.a
               href="#pricing"
+              onClick={smoothAnchorClick}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.97 }}
               transition={{ type: "spring", stiffness: 320, damping: 20 }}
@@ -330,6 +365,7 @@ export default function Hero() {
           <Magnetic className="w-full sm:w-auto">
             <motion.a
               href="#services"
+              onClick={smoothAnchorClick}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.97 }}
               transition={{ type: "spring", stiffness: 320, damping: 20 }}

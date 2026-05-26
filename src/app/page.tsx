@@ -24,10 +24,14 @@ export default function Home() {
     <main className="flex flex-col bg-[#050E21]">
       <Navbar />
       <Hero />
-      {/* Below-the-fold sections skip off-screen rendering for smoother scroll */}
-      <div className="cv-section"><Services /></div>
-      <div className="cv-section"><HowItWorks /></div>
-      <div className="cv-section"><Pricing /></div>
+      {/* Sections that contain in-page anchor targets (#services, #pricing) and
+          everything between them must NOT use content-visibility: auto — its
+          intrinsic-size placeholder reports the wrong layout height before
+          render, so hash-link jumps from the hero land in the wrong section.
+          Only the deep-bottom sections skip off-screen rendering. */}
+      <Services />
+      <HowItWorks />
+      <Pricing />
       <div className="cv-section"><Testimonials /></div>
       <div className="cv-section"><BookingTeaser /></div>
       <div className="cv-section"><LocalSeoContent /></div>

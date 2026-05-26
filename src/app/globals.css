@@ -114,6 +114,18 @@ body {
 .animate-float { animation: floatAnim 4s ease-in-out infinite; }
 .animate-fade-up { animation: fadeUp 0.7s ease-out forwards; }
 
+/* Rotating conic-gradient border used by the pricing cards. CSS keyframes so
+   the compositor owns the animation (no JS / no framer-motion per-frame work);
+   `will-change` promotes it to its own layer. */
+@keyframes klicseoSpin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+.klicseo-spin {
+  animation: klicseoSpin 4s linear infinite;
+  will-change: transform;
+}
+
 /* Skip rendering/painting off-screen sections until they're near the viewport.
    Big scroll-smoothness win on long pages; `auto` remembers each section's
    measured height so there's no scrollbar jump after the first pass. */
@@ -123,6 +135,7 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .animate-float { animation: none; }
+  .klicseo-spin { animation: none; }
 }
 
 /* Force dark color-scheme on form widgets so Chromium/WebKit draw native

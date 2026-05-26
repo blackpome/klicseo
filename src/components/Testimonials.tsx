@@ -125,23 +125,10 @@ function TiltTestimonial({
             />
           </div>
 
-          {/* Stars — pop in one by one */}
+          {/* Stars */}
           <div className="flex gap-0.5 mb-3">
             {Array.from({ length: t.rating }).map((_, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, scale: 0.4, rotate: -30 }}
-                whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
-                viewport={{ once: true, amount: 0.5 }}
-                transition={{
-                  duration: 0.35,
-                  delay: index * 0.08 + 0.25 + i * 0.05,
-                  type: "spring",
-                  stiffness: 320,
-                }}
-              >
-                <Star size={13} className="text-[#C9A84C]" fill="#C9A84C" />
-              </motion.div>
+              <Star key={i} size={13} className="text-[#C9A84C]" fill="#C9A84C" />
             ))}
           </div>
 
@@ -197,16 +184,8 @@ export default function Testimonials() {
           className="flex items-center justify-center gap-3 mb-12"
         >
           <div className="flex gap-1">
-            {[1, 2, 3, 4, 5].map((s, i) => (
-              <motion.div
-                key={s}
-                initial={{ opacity: 0, y: -8, rotate: -20 }}
-                whileInView={{ opacity: 1, y: 0, rotate: 0 }}
-                viewport={{ once: true, amount: 0.5 }}
-                transition={{ duration: 0.4, delay: 0.2 + i * 0.07, type: "spring", stiffness: 260 }}
-              >
-                <Star size={20} className="text-[#C9A84C]" fill="#C9A84C" />
-              </motion.div>
+            {[1, 2, 3, 4, 5].map((s) => (
+              <Star key={s} size={20} className="text-[#C9A84C]" fill="#C9A84C" />
             ))}
           </div>
           <span
