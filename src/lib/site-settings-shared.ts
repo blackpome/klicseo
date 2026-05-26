@@ -355,6 +355,14 @@ export function normalizeField(raw: unknown): CustomField | null {
 // to keep this module client-safe. The actual queries live in serviceCatalog.ts.
 import type { ServiceCatalog } from "./serviceCatalog-shared";
 
+// Footer location row. Empty text falls back to the SEO defaults
+// (primaryCity + serviceAreaText). `enabled: false` hides the row entirely.
+export interface FooterLocation {
+  text: string;
+  enabled: boolean;
+}
+export const FOOTER_LOCATION_DEFAULTS: FooterLocation = { text: "", enabled: true };
+
 export interface SiteSettings {
   startPrice: number;
   phone: string;
@@ -365,6 +373,7 @@ export interface SiteSettings {
   booking: BookingConfig;
   serviceRadius: ServiceRadius;
   messageTemplates: MessageTemplates;
+  footerLocation: FooterLocation;
   /** Dynamic service catalog (categories + options + price lines). Null until
    *  loaded — consumers must fall back to legacy hardcoded data. */
   catalog: ServiceCatalog | null;
@@ -381,6 +390,7 @@ export const SITE_SETTINGS_FALLBACK: SiteSettings = {
   booking: BOOKING_DEFAULTS,
   serviceRadius: SERVICE_RADIUS_DEFAULTS,
   messageTemplates: MESSAGE_TEMPLATE_DEFAULTS,
+  footerLocation: FOOTER_LOCATION_DEFAULTS,
   catalog: null,
 };
 

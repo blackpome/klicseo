@@ -48,6 +48,11 @@ export async function saveSiteSettingsAction(
       };
     }
 
+    const footerLocation = {
+      text: String(formData.get("footer_location_text") ?? "").trim(),
+      enabled: formData.get("footer_location_on") === "on",
+    };
+
     const beforeSettings = await getSiteSettings();
     const before = {
       startPrice: beforeSettings.startPrice,
@@ -55,13 +60,14 @@ export async function saveSiteSettingsAction(
       whatsapp: beforeSettings.whatsapp,
       cardPrices: beforeSettings.cardPrices,
       social: beforeSettings.social,
+      footerLocation: beforeSettings.footerLocation,
     };
-    await setSiteSettings({ startPrice, phone, whatsapp, cardPrices, social });
+    await setSiteSettings({ startPrice, phone, whatsapp, cardPrices, social, footerLocation });
     await logAudit("settings.save", {
       entity: "settings",
       summary: "Updated site settings",
       before: before as unknown as Record<string, unknown>,
-      after: { startPrice, phone, whatsapp, cardPrices, social } as unknown as Record<string, unknown>,
+      after: { startPrice, phone, whatsapp, cardPrices, social, footerLocation } as unknown as Record<string, unknown>,
     });
     revalidatePath("/", "layout");
     revalidatePath("/admin/settings");

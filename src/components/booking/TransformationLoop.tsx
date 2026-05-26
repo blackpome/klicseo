@@ -61,7 +61,7 @@ export default function TransformationLoop({ src, label }: Props) {
             loop
             playsInline
             webkit-playsinline="true"
-            preload="auto"
+            preload="metadata"
             poster="/car_wash.jpeg"
             aria-hidden
             className="w-full h-[260px] sm:h-[320px] object-cover"

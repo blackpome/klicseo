@@ -101,7 +101,7 @@ export default function Hero() {
             autoPlay
             playsInline
             webkit-playsinline="true"
-            preload="auto"
+            preload="metadata"
             aria-hidden
             className="absolute inset-0 w-full h-full object-cover"
           />

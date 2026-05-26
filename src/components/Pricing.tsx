@@ -324,15 +324,8 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
         </div>
 
         <ul className="space-y-3 mb-8 flex-1">
-          {plan.features.map((feature, idx) => (
-            <motion.li
-              key={feature}
-              initial={{ opacity: 0, x: -8 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, amount: 0.5 }}
-              transition={{ duration: 0.4, delay: 0.4 + idx * 0.06 }}
-              className="flex items-start gap-3 text-sm"
-            >
+          {plan.features.map((feature) => (
+            <li key={feature} className="flex items-start gap-3 text-sm">
               <div
                 className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center mt-0.5"
                 style={{ backgroundColor: `${plan.borderColor}30` }}
@@ -342,7 +335,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
               <span className={plan.highlight ? "text-white/85" : "text-white/60"}>
                 {feature}
               </span>
-            </motion.li>
+            </li>
           ))}
         </ul>
 

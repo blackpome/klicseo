@@ -11,7 +11,11 @@ export type { SiteSettings };
 // already-open client without a full page reload.
 const SiteSettingsContext = createContext<SiteSettings>(SITE_SETTINGS_FALLBACK);
 
-const POLL_INTERVAL_MS = 30_000;
+// Settings change rarely (admin edits). Polling every 30s hit Supabase from
+// every open tab — 5 min is more than fresh enough, and we still refetch on
+// focus (throttled below) so coming back to the tab pulls the latest.
+const POLL_INTERVAL_MS = 300_000;
+const FOCUS_REFETCH_MIN_GAP_MS = 60_000;
 
 export function SiteSettingsProvider({
   value,
@@ -26,18 +30,24 @@ export function SiteSettingsProvider({
 
   useEffect(() => {
     let cancelled = false;
+    let lastFetch = Date.now();
     const refresh = async () => {
       try {
         const res = await fetch("/api/site-settings", { cache: "no-store" });
         if (!res.ok) return;
         const data = (await res.json()) as SiteSettings;
-        if (!cancelled) setCurrent(data);
+        if (!cancelled) {
+          setCurrent(data);
+          lastFetch = Date.now();
+        }
       } catch {
         // network blip — keep last good value
       }
     };
     const id = setInterval(refresh, POLL_INTERVAL_MS);
-    const onFocus = () => refresh();
+    const onFocus = () => {
+      if (Date.now() - lastFetch >= FOCUS_REFETCH_MIN_GAP_MS) refresh();
+    };
     window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;

@@ -4,7 +4,6 @@ import Image from "next/image";
 import { MapPin, Phone, Mail } from "lucide-react";
 import { FaInstagram, FaFacebook, FaYoutube, FaXTwitter, FaWhatsapp, FaLinkedin } from "react-icons/fa6";
 import type { IconType } from "react-icons";
-import { motion } from "framer-motion";
 import { businessEmail, primaryCity, serviceAreaText } from "@/lib/seo";
 import { useSiteSettings } from "./SiteSettingsContext";
 import { SOCIAL_PLATFORMS, type SocialKey } from "@/lib/site-settings-shared";
@@ -38,8 +37,10 @@ const footerLinks = {
 };
 
 export default function Footer() {
-  const { phone: businessPhone, social } = useSiteSettings();
+  const { phone: businessPhone, social, footerLocation } = useSiteSettings();
   const socialLinks = SOCIAL_PLATFORMS.filter((p) => social[p.key].enabled && social[p.key].url.trim());
+  const locationText = footerLocation.text.trim() || `${primaryCity} · ${serviceAreaText}`;
+  const showLocation = footerLocation.enabled;
   return (
     <footer className="relative border-t border-white/5">
       <div className="divider-gold" />
@@ -52,21 +53,11 @@ export default function Footer() {
       <div className="relative z-10 max-w-6xl mx-auto px-4 pt-16 pb-8">
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
           {/* Brand column */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.6 }}
-            className="col-span-2 lg:col-span-2"
-          >
+          <div className="col-span-2 lg:col-span-2">
             <div className="flex items-center gap-3 mb-5">
-              <motion.div
-                whileHover={{ rotate: 8, scale: 1.06 }}
-                transition={{ type: "spring", stiffness: 320, damping: 18 }}
-                className="relative w-11 h-11 rounded-full overflow-hidden ring-2 ring-[#1A5FD4]/40"
-              >
+              <div className="relative w-11 h-11 rounded-full overflow-hidden ring-2 ring-[#1A5FD4]/40 transition-transform hover:rotate-6 hover:scale-105">
                 <Image src="/Logo.png" alt="Klicseo" fill className="object-cover" sizes="44px" />
-              </motion.div>
+              </div>
               <span
                 className="text-xl font-bold text-white"
                 style={{ fontFamily: "var(--font-playfair)" }}
@@ -85,35 +76,26 @@ export default function Footer() {
                 {socialLinks.map((p) => {
                   const Icon = SOCIAL_ICON[p.key];
                   return (
-                    <motion.a
+                    <a
                       key={p.key}
                       href={social[p.key].url}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={p.label}
-                      whileHover={{ scale: 1.15, y: -3, rotate: -4 }}
-                      whileTap={{ scale: 0.92 }}
-                      transition={{ type: "spring", stiffness: 380, damping: 18 }}
-                      className="w-9 h-9 rounded-lg flex items-center justify-center text-white ring-1 ring-white/10 shadow-sm"
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-white ring-1 ring-white/10 shadow-sm transition-transform hover:-translate-y-0.5 hover:scale-110 active:scale-95"
                       style={{ background: SOCIAL_BG[p.key] }}
                     >
                       <Icon size={16} />
-                    </motion.a>
+                    </a>
                   );
                 })}
               </div>
             )}
-          </motion.div>
+          </div>
 
           {/* Nav columns */}
-          {Object.entries(footerLinks).map(([title, links], colIdx) => (
-            <motion.div
-              key={title}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.5, delay: 0.1 + colIdx * 0.08 }}
-            >
+          {Object.entries(footerLinks).map(([title, links]) => (
+            <div key={title}>
               <h4 className="text-xs font-bold text-white/50 uppercase tracking-[0.15em] mb-4">
                 {title}
               </h4>
@@ -132,23 +114,19 @@ export default function Footer() {
                   </li>
                 ))}
               </ul>
-            </motion.div>
+            </div>
           ))}
         </div>
 
         {/* Contact row */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
+        <div
           className="glass-card rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8 mb-10"
         >
           {[
-            { icon: MapPin, text: `${primaryCity} · ${serviceAreaText}`, href: undefined },
+            showLocation ? { icon: MapPin, text: locationText, href: undefined } : null,
             { icon: Phone, text: businessPhone, href: `tel:${businessPhone.replace(/\s+/g, "")}` },
             { icon: Mail, text: businessEmail, href: `mailto:${businessEmail}` },
-          ].map(({ icon: Icon, text, href }) => {
+          ].filter((r): r is { icon: typeof MapPin; text: string; href: string | undefined } => r !== null).map(({ icon: Icon, text, href }) => {
             const inner = (
               <>
                 <Icon size={15} className="text-[#C9A84C] flex-shrink-0" />
@@ -165,7 +143,7 @@ export default function Footer() {
               </div>
             );
           })}
-        </motion.div>
+        </div>
 
         {/* Bottom bar */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-white/5">

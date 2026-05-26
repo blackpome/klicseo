@@ -19,6 +19,7 @@ export default function SiteSettingsForm({ current }: { current: SiteSettings })
     for (const p of SOCIAL_PLATFORMS) init[p.key] = current.social[p.key].enabled;
     return init;
   });
+  const [footerLocationOn, setFooterLocationOn] = useState<boolean>(current.footerLocation.enabled);
 
   return (
     <form action={action} className="space-y-5 max-w-lg">
@@ -160,6 +161,34 @@ export default function SiteSettingsForm({ current }: { current: SiteSettings })
             </div>
           );
         })}
+      </div>
+
+      {/* Footer location row */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-white/50">Footer location</h2>
+            <p className="text-[11px] text-white/35">The pin row shown in the site footer. Leave blank to use the default city + areas. Toggle off to hide entirely.</p>
+          </div>
+          <input type="hidden" name="footer_location_on" value={footerLocationOn ? "on" : "off"} />
+          <button
+            type="button"
+            role="switch"
+            aria-checked={footerLocationOn}
+            aria-label="Show footer location"
+            onClick={() => setFooterLocationOn((v) => !v)}
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${footerLocationOn ? "bg-[#10b981]" : "bg-white/15"}`}
+          >
+            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${footerLocationOn ? "left-[18px]" : "left-0.5"}`} />
+          </button>
+        </div>
+        <input
+          type="text"
+          name="footer_location_text"
+          defaultValue={current.footerLocation.text}
+          placeholder="Chennai · Adyar, Velachery, OMR, ECR…"
+          className={`w-full bg-white/5 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C] ${footerLocationOn ? "border-white/10" : "border-white/5 opacity-50"}`}
+        />
       </div>
 
       <div className="flex items-center gap-3">

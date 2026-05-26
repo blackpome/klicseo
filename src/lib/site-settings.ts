@@ -17,6 +17,7 @@ import {
   RADIUS_MAX_KM,
   MESSAGE_TEMPLATE_DEFAULTS,
   MESSAGE_TEMPLATE_DEFS,
+  FOOTER_LOCATION_DEFAULTS,
   isMessageTemplateKey,
   isMediaKey,
   isSocialKey,
@@ -30,6 +31,7 @@ import {
   type MessageTemplates,
   type SiteSettings,
   type SocialLinks,
+  type FooterLocation,
 } from "./site-settings-shared";
 
 export * from "./site-settings-shared";
@@ -47,6 +49,7 @@ export const SITE_DEFAULTS: SiteSettings = {
   booking: BOOKING_DEFAULTS,
   serviceRadius: SERVICE_RADIUS_DEFAULTS,
   messageTemplates: MESSAGE_TEMPLATE_DEFAULTS,
+  footerLocation: FOOTER_LOCATION_DEFAULTS,
   catalog: null,
 };
 
@@ -60,7 +63,20 @@ const KEYS = {
   booking: "booking",
   serviceRadius: "service_radius",
   messageTemplates: "message_templates",
+  footerLocation: "footer_location",
 } as const;
+
+function parseFooterLocation(raw: string): FooterLocation {
+  try {
+    const obj = JSON.parse(raw) as { text?: unknown; enabled?: unknown };
+    return {
+      text: typeof obj.text === "string" ? obj.text : "",
+      enabled: obj.enabled !== false,
+    };
+  } catch {
+    return { ...FOOTER_LOCATION_DEFAULTS };
+  }
+}
 
 function parseMessageTemplates(raw: string): MessageTemplates {
   const out: MessageTemplates = { ...MESSAGE_TEMPLATE_DEFAULTS };
@@ -239,6 +255,8 @@ export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
         out.serviceRadius = parseServiceRadius(row.value);
       } else if (row.key === KEYS.messageTemplates && row.value) {
         out.messageTemplates = parseMessageTemplates(row.value);
+      } else if (row.key === KEYS.footerLocation && row.value) {
+        out.footerLocation = parseFooterLocation(row.value);
       }
     }
   } catch {
@@ -250,7 +268,7 @@ export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
 
 // Save the text settings + social links (media is managed via upload/reset).
 export async function setSiteSettings(
-  s: Pick<SiteSettings, "startPrice" | "phone" | "whatsapp" | "cardPrices" | "social">,
+  s: Pick<SiteSettings, "startPrice" | "phone" | "whatsapp" | "cardPrices" | "social" | "footerLocation">,
 ): Promise<void> {
   const rows = [
     { key: KEYS.startPrice, value: String(Math.max(0, Math.round(s.startPrice))) },
@@ -258,6 +276,7 @@ export async function setSiteSettings(
     { key: KEYS.whatsapp, value: s.whatsapp.trim() },
     { key: KEYS.cardPrices, value: JSON.stringify(s.cardPrices) },
     { key: KEYS.social, value: JSON.stringify(s.social) },
+    { key: KEYS.footerLocation, value: JSON.stringify({ text: s.footerLocation.text.trim(), enabled: !!s.footerLocation.enabled }) },
   ].map((r) => ({ ...r, updated_at: new Date().toISOString() }));
   const { error } = await supabase().from("app_settings").upsert(rows, { onConflict: "key" });
   if (error) throw error;
