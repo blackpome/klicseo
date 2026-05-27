@@ -545,7 +545,7 @@ script.
 
 ## 17. Reporting / contact
 
-Owner: jv@blackpome.com.
+Owner: klicseo@gmail.com.
 For security issues use the subject `SECURITY` (see `SECURITY.md` for the
 disclosure policy). Do **not** open public issues for security bugs.
 
