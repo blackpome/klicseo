@@ -27,17 +27,32 @@ const faqs = [
   },
 ] as const;
 
+const serviceCatalog = [
+  { name: "Doorstep Car Wash (Monthly Subscription)", desc: "Recurring monthly doorstep car wash plan at your home or office in Chennai." },
+  { name: "Doorstep Car Wash (Weekly Plan)", desc: "Weekly recurring doorstep car wash for consistent upkeep." },
+  { name: "One-Time Manual Wash", desc: "Single-visit manual exterior and interior wash at your address." },
+  { name: "One-Time Machine Wash", desc: "Machine-assisted one-time wash for a deeper clean." },
+  { name: "Ceramic Sealant Coating", desc: "Protective ceramic sealant for long-lasting shine and easier maintenance." },
+  { name: "Interior Detailing", desc: "Deep interior cleaning, vacuuming, and add-on detailing services." },
+];
+
 const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
     {
-      "@type": "AutoWash",
+      "@type": ["LocalBusiness", "AutoWash"],
       "@id": `${siteUrl}/#business`,
       name: businessName,
+      alternateName: "Klicseo Doorstep Car Wash",
       url: siteUrl,
       telephone: SUPPORT_PHONE,
       email: businessEmail,
       description: homeDescription,
+      image: `${siteUrl}/opengraph-image`,
+      logo: `${siteUrl}/Logo.png`,
+      priceRange: "₹₹",
+      currenciesAccepted: "INR",
+      paymentAccepted: "Cash, UPI, Credit Card, Debit Card",
       areaServed: serviceAreas.map((area) => ({
         "@type": "Place",
         name: `${area}, ${primaryCity}`,
@@ -45,17 +60,55 @@ const jsonLd = {
       address: {
         "@type": "PostalAddress",
         addressLocality: primaryCity,
+        addressRegion: "Tamil Nadu",
         addressCountry: "IN",
       },
-      serviceType: [
-        "Doorstep car wash",
-        "Car detailing",
-        "One-time wash",
-        "Monthly car wash subscription",
-        "Weekly car wash",
-        "Ceramic sealant coating",
+      geo: {
+        "@type": "GeoCoordinates",
+        latitude: 12.9716,
+        longitude: 80.1946,
+      },
+      openingHoursSpecification: [
+        {
+          "@type": "OpeningHoursSpecification",
+          dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+          opens: "07:00",
+          closes: "20:00",
+        },
       ],
+      serviceType: serviceCatalog.map((s) => s.name),
+      hasOfferCatalog: {
+        "@type": "OfferCatalog",
+        name: "Klicseo Services",
+        itemListElement: serviceCatalog.map((s) => ({
+          "@type": "Offer",
+          itemOffered: {
+            "@type": "Service",
+            name: s.name,
+            description: s.desc,
+            areaServed: `${primaryCity}, Tamil Nadu, India`,
+            provider: { "@id": `${siteUrl}/#business` },
+          },
+        })),
+      },
       sameAs: [siteUrl],
+    },
+    {
+      "@type": "Organization",
+      "@id": `${siteUrl}/#organization`,
+      name: businessName,
+      url: siteUrl,
+      logo: `${siteUrl}/Logo.png`,
+      email: businessEmail,
+      contactPoint: [
+        {
+          "@type": "ContactPoint",
+          telephone: SUPPORT_PHONE,
+          contactType: "customer service",
+          areaServed: "IN",
+          availableLanguage: ["English", "Tamil"],
+        },
+      ],
     },
     {
       "@type": "WebSite",
@@ -64,6 +117,12 @@ const jsonLd = {
       name: businessName,
       description: homeDescription,
       inLanguage: "en-IN",
+      publisher: { "@id": `${siteUrl}/#organization` },
+      potentialAction: {
+        "@type": "SearchAction",
+        target: `${siteUrl}/booking?service={search_term_string}`,
+        "query-input": "required name=search_term_string",
+      },
     },
     {
       "@type": "FAQPage",
