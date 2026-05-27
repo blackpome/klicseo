@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, Clock, Briefcase, MapPin, IndianRupee } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import BreadcrumbsJsonLd from "@/components/BreadcrumbsJsonLd";
 import ApplicationForm from "./ApplicationForm";
 import { getJobBySlug } from "@/lib/jobs";
 
@@ -25,6 +26,13 @@ export default async function JobPage({ params }: { params: Promise<{ role: stri
 
   return (
     <>
+      <BreadcrumbsJsonLd
+        items={[
+          { name: "Home", path: "/" },
+          { name: "Careers", path: "/careers" },
+          { name: job.title, path: `/careers/${job.slug}` },
+        ]}
+      />
       <Navbar />
       <main className="min-h-screen bg-[#050E21] text-white pt-28 pb-20 px-4">
         <div className="max-w-2xl mx-auto">

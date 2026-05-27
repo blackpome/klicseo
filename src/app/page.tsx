@@ -9,6 +9,7 @@ import LocalSeoContent from "@/components/LocalSeoContent";
 import Footer from "@/components/Footer";
 import StickyMobileCTA from "@/components/StickyMobileCTA";
 import FloatingContact from "@/components/FloatingContact";
+import BreadcrumbsJsonLd from "@/components/BreadcrumbsJsonLd";
 import { homeDescription, seoKeywords, siteUrl } from "@/lib/seo";
 
 export const metadata = {
@@ -22,6 +23,7 @@ export const metadata = {
 export default function Home() {
   return (
     <main className="flex flex-col bg-[#050E21]">
+      <BreadcrumbsJsonLd items={[{ name: "Home", path: "/" }]} />
       <Navbar />
       <Hero />
       {/* Sections that contain in-page anchor targets (#services, #pricing) and

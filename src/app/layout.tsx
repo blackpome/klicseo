@@ -28,8 +28,8 @@ const inter = Inter({
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: `${businessName} | Doorstep Car Wash in ${primaryCity}`,
-    template: `%s | ${businessName}`,
+    default: `Doorstep Car Wash in ${primaryCity} | ${businessName}`,
+    template: `%s | ${businessName} Doorstep Car Wash ${primaryCity}`,
   },
   description: homeDescription,
   keywords: [...seoKeywords],
@@ -39,14 +39,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: siteUrl,
-    title: `${businessName} | Doorstep Car Wash in ${primaryCity}`,
+    title: `Doorstep Car Wash in ${primaryCity} | ${businessName}`,
     description: homeDescription,
     siteName: businessName,
     locale: "en_IN",
   },
   twitter: {
     card: "summary_large_image",
-    title: `${businessName} | Doorstep Car Wash in ${primaryCity}`,
+    title: `Doorstep Car Wash in ${primaryCity} | ${businessName}`,
     description: homeDescription,
   },
   robots: {

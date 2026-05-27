@@ -2,10 +2,11 @@ import { Suspense } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BookingWizard from "@/components/booking/BookingWizard";
+import BreadcrumbsJsonLd from "@/components/BreadcrumbsJsonLd";
 import { bookingDescription, siteUrl } from "@/lib/seo";
 
 export const metadata = {
-  title: `Book Doorstep Car Wash`,
+  title: `Book Doorstep Car Wash in Chennai`,
   description: bookingDescription,
   alternates: {
     canonical: `${siteUrl}/booking`,
@@ -15,6 +16,12 @@ export const metadata = {
 export default function BookingPage() {
   return (
     <main className="min-h-screen flex flex-col bg-[#050E21]">
+      <BreadcrumbsJsonLd
+        items={[
+          { name: "Home", path: "/" },
+          { name: "Book a Service", path: "/booking" },
+        ]}
+      />
       <Navbar />
 
       <div className="flex-1 relative pt-16 sm:pt-20">

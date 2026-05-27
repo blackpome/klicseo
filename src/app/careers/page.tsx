@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listJobs, type Job } from "@/lib/jobs";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import BreadcrumbsJsonLd from "@/components/BreadcrumbsJsonLd";
 import { ArrowRight, Clock, Briefcase } from "lucide-react";
 
 export const metadata = {
@@ -21,6 +22,12 @@ export default async function CareersPage() {
 
   return (
     <>
+      <BreadcrumbsJsonLd
+        items={[
+          { name: "Home", path: "/" },
+          { name: "Careers", path: "/careers" },
+        ]}
+      />
       <Navbar />
       <main className="min-h-screen bg-[#050E21] text-white pt-28 pb-20 px-4">
         <div className="max-w-5xl mx-auto">
