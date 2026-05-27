@@ -254,13 +254,12 @@ export default function Hero() {
           ]}
         />
 
-        {/* LCP element. Rendered as plain <p> (no framer-motion wrapper) so it
-            paints on first frame instead of waiting for JS hydration + the
-            motion library's initial animation. CSS keyframes handle the fade. */}
-        <p
-          className="text-base sm:text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-up"
-          style={{ animationDelay: "0.3s", animationFillMode: "backwards" }}
-        >
+        {/* LCP element. Painted with no animation and no opacity-0 starting
+            state — Lighthouse measures LCP as "first paint of visible
+            content", and any opacity:0 → 1 or fill-mode:backwards prelude
+            delays LCP by the full animation length. The subtitle below the
+            heading is the LCP candidate on most viewports. */}
+        <p className="text-base sm:text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-10 leading-relaxed">
           No queues, no driving out. Our detailing studio comes to your
           doorstep — washing, detailing, and protecting your car with showroom
           precision while it stays right where you parked it.
