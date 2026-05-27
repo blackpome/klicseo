@@ -40,6 +40,12 @@ export default function Hero() {
   const { startPrice, media } = useSiteSettings();
   const hero = resolveMedia(media, "heroVideo");
   const heroSrc = hero.url;
+  // For the bundled defaults we ship a same-name JPG poster so the LCP frame
+  // paints instantly (~70 KB) instead of waiting on the 2 MB video. Admin
+  // uploads fall back to no poster.
+  const heroPoster = /^\/car-detail-\d+\.mp4$/.test(heroSrc)
+    ? heroSrc.replace(/\.mp4$/, ".jpg")
+    : undefined;
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Kick off autoplay. Browser autoplay rules require muted + playsInline (set
@@ -136,6 +142,7 @@ export default function Hero() {
             playsInline
             webkit-playsinline="true"
             preload="metadata"
+            poster={heroPoster}
             aria-hidden
             className="absolute inset-0 w-full h-full object-cover"
           />
