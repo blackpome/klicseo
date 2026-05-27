@@ -44,7 +44,7 @@ export default function Hero() {
   // paints instantly (~70 KB) instead of waiting on the 2 MB video. Admin
   // uploads fall back to no poster.
   const heroPoster = /^\/car-detail-\d+\.mp4$/.test(heroSrc)
-    ? heroSrc.replace(/\.mp4$/, ".jpg")
+    ? heroSrc.replace(/\.mp4$/, ".webp")
     : undefined;
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -228,13 +228,13 @@ export default function Hero() {
             className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-full overflow-hidden ring-4 ring-[#1A5FD4]/30 shadow-[0_0_60px_rgba(26,95,212,0.4)]"
           >
             <Image src="/Logo.png" alt="Klicseo" fill className="object-cover" priority sizes="(max-width: 640px) 96px, 128px" />
-            {/* Sweeping shine */}
+            {/* Static highlight (previously an animated sweeping shine that
+                Lighthouse flagged as non-composited and was repainting the
+                logo every frame). */}
             <div
-              className="absolute inset-0 pointer-events-none opacity-50"
+              className="absolute inset-0 pointer-events-none opacity-30"
               style={{
-                background: "linear-gradient(120deg, transparent 35%, rgba(255,255,255,0.3) 50%, transparent 65%)",
-                backgroundSize: "200% 200%",
-                animation: "logoShine 4s linear infinite",
+                background: "linear-gradient(120deg, transparent 40%, rgba(255,255,255,0.25) 50%, transparent 60%)",
               }}
             />
           </motion.div>
@@ -254,16 +254,17 @@ export default function Hero() {
           ]}
         />
 
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
-          className="text-base sm:text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-10 leading-relaxed"
+        {/* LCP element. Rendered as plain <p> (no framer-motion wrapper) so it
+            paints on first frame instead of waiting for JS hydration + the
+            motion library's initial animation. CSS keyframes handle the fade. */}
+        <p
+          className="text-base sm:text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-up"
+          style={{ animationDelay: "0.3s", animationFillMode: "backwards" }}
         >
           No queues, no driving out. Our detailing studio comes to your
           doorstep — washing, detailing, and protecting your car with showroom
           precision while it stays right where you parked it.
-        </motion.p>
+        </p>
 
         {/* Hero "Book Now from ₹19" pill. Background is a single brand-blue
             fill (no gradient) for a cleaner, more confident look on the
@@ -441,12 +442,6 @@ export default function Hero() {
         <ChevronDown size={20} />
       </motion.a>
 
-      <style>{`
-        @keyframes logoShine {
-          0%   { background-position: -100% -100%; }
-          100% { background-position: 200% 200%; }
-        }
-      `}</style>
     </section>
   );
 }

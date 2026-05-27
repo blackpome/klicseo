@@ -14,7 +14,7 @@
 
   --animate-float: floatAnim 4s ease-in-out infinite;
   --animate-fade-up: fadeUp 0.7s ease-out forwards;
-  --animate-gold-shimmer: goldShimmer 3s linear infinite;
+  --animate-gold-shimmer: none;
 }
 
 :root {
@@ -46,7 +46,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Gold shimmer text */
+/* Gold gradient text. Previously animated background-position for a sweeping
+   shimmer; Lighthouse flagged it as non-composited (every frame repaints the
+   text) and it ran continuously on 3 hero stats — measurable Style & Layout
+   cost. Kept the gradient, dropped the animation. */
 .gold-shimmer {
   background: linear-gradient(
     90deg,
@@ -56,16 +59,9 @@ body {
     #C9A84C 75%,
     #9C7A2A 100%
   );
-  background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: goldShimmer 3s linear infinite;
-}
-
-@keyframes goldShimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
 }
 
 /* Hero headline accent — solid light azure, high contrast on the navy so it
