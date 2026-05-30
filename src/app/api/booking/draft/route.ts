@@ -31,7 +31,7 @@ interface DraftBody {
   phone?: string | null;
   service?: string | null;
   serviceOption?: string | null;
-  interiorAddOn?: boolean;
+  addOnSelections?: Record<string, boolean>;
   vehicleType?: string | null;
   carBrand?: string | null;
   carModel?: string | null;
@@ -53,10 +53,17 @@ interface DraftBody {
 // Price the in-progress draft exactly like the final submit, so admins see a
 // price as soon as a car + service are entered. Resolves to nulls when the car
 // or service isn't chosen yet, or if pricing config can't be loaded.
-async function priceForDraft(body: DraftBody): Promise<{ price_total: number | null; price_base: number | null; price_interior_addon: number | null; discount_percent: number | null }> {
+async function priceForDraft(body: DraftBody): Promise<{ price_total: number | null; price_base: number | null; price_interior_addon: number | null; discount_percent: number | null; add_on_labels: string[] | null }> {
   const carPrices = body.carPrices ?? null;
   const serviceOption = nz(body.serviceOption);
-  if (!carPrices || !serviceOption) return { price_total: null, price_base: null, price_interior_addon: null, discount_percent: null };
+  const addOnSel = (typeof body.addOnSelections === "object" && body.addOnSelections !== null) ? body.addOnSelections : {};
+  if (!carPrices || !serviceOption) {
+    // Still resolve labels even without car prices.
+    const labels = Object.keys(addOnSel).length
+      ? await getServiceCatalog().then((c) => c.options.filter((o) => addOnSel[o.id] && o.is_addon).map((o) => o.label)).catch(() => [])
+      : [];
+    return { price_total: null, price_base: null, price_interior_addon: null, discount_percent: null, add_on_labels: labels.length ? labels : null };
+  }
   try {
     const parking = ((body.parkingLocation as ParkingLocation) || "") as ParkingLocation;
     const [catalog, discounts, cfg] = await Promise.all([
@@ -64,16 +71,18 @@ async function priceForDraft(body: DraftBody): Promise<{ price_total: number | n
       getServiceDiscounts(),
       getDiscountConfig(),
     ]);
-    const priced = combinedPrice(carPrices, serviceOption, parking, !!body.interiorAddOn, catalog, discounts, cfg.percentsByLineId, cfg.badgesByLineId);
+    const priced = combinedPrice(carPrices, serviceOption, parking, addOnSel, catalog, discounts, cfg.percentsByLineId, cfg.badgesByLineId);
     const addonAmount = priced ? (priced.discountedTotal - priced.discountedBase) || null : null;
+    const labels = catalog.options.filter((o) => addOnSel[o.id] && o.is_addon).map((o) => o.label);
     return {
       price_total: priced?.discountedTotal ?? null,
       price_base: priced?.discountedBase ?? null,
       price_interior_addon: addonAmount,
       discount_percent: priced?.basePercent ?? null,
+      add_on_labels: labels.length ? labels : null,
     };
   } catch {
-    return { price_total: null, price_base: null, price_interior_addon: null, discount_percent: null };
+    return { price_total: null, price_base: null, price_interior_addon: null, discount_percent: null, add_on_labels: null };
   }
 }
 
@@ -92,7 +101,7 @@ function mapDraft(body: DraftBody) {
     phone: nz(body.phone),
     service: nz(body.service),
     service_option: nz(body.serviceOption),
-    interior_add_on: !!body.interiorAddOn,
+    interior_add_on: Object.values(body.addOnSelections ?? {}).some(Boolean),
     vehicle_type: nz(body.vehicleType),
     car_brand: nz(body.carBrand),
     car_model: nz(body.carModel),
@@ -124,7 +133,7 @@ function hasAnyDraftData(p: ReturnType<typeof mapDraft>): boolean {
     p.parking_location || p.car_cover_choice || p.shift ||
     p.callback_date || p.callback_time
   ) return true;
-  if (p.interior_add_on || p.gate_access_consent) return true;
+  if (p.interior_add_on || p.gate_access_consent) return true; // interior_add_on is true if any add-on selected
   if (p.latitude != null || p.longitude != null) return true;
   if (p.custom_fields && Object.keys(p.custom_fields).length > 0) return true;
   return false;

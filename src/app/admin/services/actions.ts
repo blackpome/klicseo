@@ -55,7 +55,9 @@ export async function saveOptionAction(
     const short_label = String(formData.get("short_label") ?? "").trim() || null;
     const blurb = String(formData.get("blurb") ?? "").trim() || null;
     const enabled = formData.get("enabled") === "true";
-    await updateOption(id, { label, short_label, blurb, enabled });
+    const hasAddonRaw = formData.get("has_addon");
+    const patch = { label, short_label, blurb, enabled, ...(hasAddonRaw !== null ? { has_addon: hasAddonRaw === "true" } : {}) };
+    await updateOption(id, patch);
     await logAudit("service.option.update", { entity: "booking", entityId: id, summary: `Saved option "${label}"` });
     refresh();
     return { ok: "Saved." };

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Phone, User, Sparkles, Droplets, Wrench, Check } from "lucide-react";
 import type { BookingData, ServiceCategory } from "./BookingWizard";
 import { OPTIONS_BY_CATEGORY, SERVICE_OPTIONS, isServiceOptionId, CATEGORY_COLORS } from "@/lib/pricing";
-import { interiorAddonOptionFor } from "@/lib/serviceCatalog-shared";
+import { addonOptionsFor } from "@/lib/serviceCatalog-shared";
 import { useSiteSettings } from "@/components/SiteSettingsContext";
 import { stepCopy, msg } from "@/lib/site-settings-shared";
 import CustomFields from "./CustomFields";
@@ -169,16 +169,17 @@ export default function StepContact({ data, update, onNext }: Props) {
   // Interior add-on is catalog-driven: the category's enabled is_addon option,
   // shown only when the selected base option offers it (has_addon).
   const addonCatCat = data.service ? settings.catalog?.categories.find((c) => c.legacy_key === data.service) ?? null : null;
-  const interiorOpt = settings.catalog && addonCatCat ? interiorAddonOptionFor(settings.catalog, addonCatCat.id) : null;
+  const addonOpts = settings.catalog && addonCatCat ? addonOptionsFor(settings.catalog, addonCatCat.id) : [];
   const selectedCatalogOpt = settings.catalog?.options.find((o) => (o.legacy_id ?? o.slug) === data.serviceOption) ?? null;
-  const interiorAvailable = !!interiorOpt && (selectedCatalogOpt?.has_addon ?? !!selectedOptionDef?.addOn);
+  const baseHasAddon = selectedCatalogOpt?.has_addon ?? !!selectedOptionDef?.addOn;
+  const availableAddonOpts = baseHasAddon ? addonOpts : [];
 
   function selectServiceCategory(c: (typeof categories)[number]) {
     if (c.id === data.service) return;
     update({
       service: c.id,
       serviceOption: "",
-      interiorAddOn: false,
+      addOnSelections: {},
       pkg: c.defaultPkg,
     });
   }
@@ -186,10 +187,8 @@ export default function StepContact({ data, update, onNext }: Props) {
   function selectServiceOption(optionId: string) {
     update({
       serviceOption: optionId,
-      // For admin-created options (no optionToPkg mapping) fall back to the
-      // category's default visual so CarShowcase still has a pkg hint.
       pkg: optionToPkg[optionId] ?? activeCategory?.defaultPkg ?? null,
-      interiorAddOn: false,
+      addOnSelections: {},
     });
   }
 
@@ -398,43 +397,45 @@ export default function StepContact({ data, update, onNext }: Props) {
                             })}
                           </div>
 
-                          {interiorAvailable && interiorOpt && (
-                            <button
-                              type="button"
-                              onClick={() => update({ interiorAddOn: !data.interiorAddOn })}
-                              className="mt-2 w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border text-left transition-all"
-                              style={
-                                data.interiorAddOn
-                                  ? { borderColor: c.borderColor, background: `${c.borderColor}14` }
-                                  : { borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }
-                              }
-                            >
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border"
-                                  style={
-                                    data.interiorAddOn
-                                      ? {
-                                          borderColor: c.borderColor,
-                                          background: `linear-gradient(135deg, ${c.borderColor}DD, ${c.borderColor}, ${c.borderColor}AA)`,
-                                        }
-                                      : { borderColor: "rgba(255,255,255,0.25)" }
-                                  }
-                                >
-                                  {data.interiorAddOn && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
+                          {availableAddonOpts.map((addonOpt) => {
+                            const on = !!data.addOnSelections[addonOpt.id];
+                            return (
+                              <button
+                                key={addonOpt.id}
+                                type="button"
+                                onClick={() => update({ addOnSelections: { ...data.addOnSelections, [addonOpt.id]: !on } })}
+                                className="mt-2 w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border text-left transition-all"
+                                style={
+                                  on
+                                    ? { borderColor: c.borderColor, background: `${c.borderColor}14` }
+                                    : { borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }
+                                }
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border"
+                                    style={
+                                      on
+                                        ? {
+                                            borderColor: c.borderColor,
+                                            background: `linear-gradient(135deg, ${c.borderColor}DD, ${c.borderColor}, ${c.borderColor}AA)`,
+                                          }
+                                        : { borderColor: "rgba(255,255,255,0.25)" }
+                                    }
+                                  >
+                                    {on && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-semibold text-white leading-tight">{addonOpt.label}</p>
+                                    <p className="text-[11px] text-white/45 mt-0.5">
+                                      {addonOpt.blurb ?? "Add to this service"}
+                                    </p>
+                                  </div>
                                 </div>
-                                <div>
-                                  <p className="text-sm font-semibold text-white leading-tight">{interiorOpt.label}</p>
-                                  <p className="text-[11px] text-white/45 mt-0.5">
-                                    {interiorOpt.blurb ?? "Add interior cleaning to this service"}
-                                  </p>
-                                </div>
-                              </div>
-                              {/* Price intentionally hidden here; the actual
-                                  add-on price is confirmed on the Package
-                                  step alongside the vehicle's tier price. */}
-                            </button>
-                          )}
+                                {/* Price shown on the Package step once vehicle tier is known. */}
+                              </button>
+                            );
+                          })}
                         </div>
                       </motion.div>
                     )}

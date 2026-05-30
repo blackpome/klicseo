@@ -29,15 +29,24 @@ export async function POST(req: NextRequest) {
   const carPrices = (body.carPrices ?? null) as CarPrices | null;
   const discounts = await getServiceDiscounts();
   const parking = ((body.parkingLocation as ParkingLocation) || "") as ParkingLocation;
-  const interiorAddOn = Boolean(body.interiorAddOn);
+  const addOnSelections = (typeof body.addOnSelections === "object" && body.addOnSelections !== null)
+    ? (body.addOnSelections as Record<string, boolean>)
+    : {};
 
-  // Base price (legacy keyed path or catalog path) plus the category's interior
-  // add-on (its own catalog line). Same helper the wizard uses, so the charged
-  // total matches what the customer saw. Both paths apply the discount badge gate.
   let priced: CarPriceResult | null = null;
+  let addOnLabels: string[] | null = null;
   if (carPrices && serviceOption) {
     const [catalog, cfg] = await Promise.all([getServiceCatalog(), getDiscountConfig()]);
-    priced = combinedPrice(carPrices, serviceOption, parking, interiorAddOn, catalog, discounts, cfg.percentsByLineId, cfg.badgesByLineId);
+    priced = combinedPrice(carPrices, serviceOption, parking, addOnSelections, catalog, discounts, cfg.percentsByLineId, cfg.badgesByLineId);
+    const selected = catalog.options.filter((o) => addOnSelections[o.id] && o.is_addon).map((o) => o.label);
+    if (selected.length) addOnLabels = selected;
+  } else if (Object.keys(addOnSelections).length) {
+    // No car price snapshot but user did pick add-ons — resolve labels from catalog for the record.
+    const catalog = await getServiceCatalog().catch(() => null);
+    if (catalog) {
+      const selected = catalog.options.filter((o) => addOnSelections[o.id] && o.is_addon).map((o) => o.label);
+      if (selected.length) addOnLabels = selected;
+    }
   }
 
   const settings = await getSiteSettings();
@@ -89,7 +98,8 @@ export async function POST(req: NextRequest) {
     phone,
     service: (body.service as string | null) ?? null,
     service_option: String(body.serviceOption ?? "") || null,
-    interior_add_on: Boolean(body.interiorAddOn),
+    interior_add_on: Object.values(addOnSelections).some(Boolean),
+    add_on_labels: addOnLabels,
     vehicle_type: String(body.vehicleType ?? "") || null,
     car_brand: String(body.carBrand ?? "") || null,
     car_model: String(body.carModel ?? "") || null,

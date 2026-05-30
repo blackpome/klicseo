@@ -136,7 +136,16 @@ export default async function LeadDetailPage({
         <Section title="Service" icon={Sparkles}>
           <Field label="Category" value={fmt(lead.service)} />
           <Field label="Option" value={fmt(lead.service_option)} />
-          <Field label="Interior add-on" value={fmt(lead.interior_add_on)} />
+          <Field
+            label="Add-ons"
+            value={
+              lead.add_on_labels && lead.add_on_labels.length
+                ? lead.add_on_labels.join(", ")
+                : lead.interior_add_on
+                ? "Yes (legacy)"
+                : "—"
+            }
+          />
           <Field
             label="Price (snapshot)"
             value={
@@ -145,7 +154,12 @@ export default async function LeadDetailPage({
                   <span className="flex flex-col gap-0.5">
                     <span>₹{lead.price_base.toLocaleString("en-IN")} <span className="text-white/40 text-[11px]">base</span></span>
                     {lead.price_interior_addon != null && lead.price_interior_addon > 0 && (
-                      <span>₹{lead.price_interior_addon.toLocaleString("en-IN")} <span className="text-white/40 text-[11px]">interior add-on</span></span>
+                      <span>
+                        ₹{lead.price_interior_addon.toLocaleString("en-IN")}{" "}
+                        <span className="text-white/40 text-[11px]">
+                          {lead.add_on_labels?.length ? lead.add_on_labels.join(" + ") : "add-ons"}
+                        </span>
+                      </span>
                     )}
                     <span className="font-bold text-[#C9A84C]">₹{lead.price_total.toLocaleString("en-IN")} <span className="text-[11px] font-normal text-white/40">total</span></span>
                   </span>

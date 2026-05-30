@@ -13,7 +13,7 @@ import {
   CATEGORY_COLORS,
 } from "@/lib/pricing";
 import { carPriceFor, carPriceForCatalog, linePrice, type LinePriceResult, type CarPriceResult } from "@/lib/carPricing";
-import { interiorAddonOptionFor, baseLineForOption } from "@/lib/serviceCatalog-shared";
+import { addonOptionsFor, baseLineForOption } from "@/lib/serviceCatalog-shared";
 import { useServiceDiscounts, useDiscountsByLineId } from "@/components/DiscountContext";
 import { flag } from "@/lib/site-settings-shared";
 import { useSiteSettings } from "@/components/SiteSettingsContext";
@@ -121,27 +121,33 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
     return carPriceForCatalog(cp, id, data.parkingLocation, false, settings.catalog, percentsByLineId, badgesByLineId);
   }
 
-  // The category's interior add-on: an enabled catalog option flagged is_addon,
-  // plus its own base price line. Drives the toggle's visibility AND its price.
+  // All enabled add-on options for the current category, with per-car prices.
   const catCat = category ? settings.catalog?.categories.find((c) => c.legacy_key === category) ?? null : null;
-  const interiorOpt = settings.catalog && catCat ? interiorAddonOptionFor(settings.catalog, catCat.id) : null;
-  const interiorLine = settings.catalog && interiorOpt ? baseLineForOption(settings.catalog, interiorOpt.id) : null;
-  const interiorPriced: LinePriceResult | null =
-    cp && interiorLine ? linePrice(cp, interiorLine.id, percentsByLineId, badgesByLineId) : null;
+  const allAddonOpts = settings.catalog && catCat ? addonOptionsFor(settings.catalog, catCat.id) : [];
+  // For each add-on, resolve its price line and per-car price.
+  interface AddonEntry { opt: (typeof allAddonOpts)[0]; line: ReturnType<typeof baseLineForOption>; priced: LinePriceResult | null }
+  const addonEntries: AddonEntry[] = allAddonOpts.map((opt) => {
+    const line = settings.catalog ? baseLineForOption(settings.catalog, opt.id) : null;
+    const priced = cp && line ? linePrice(cp, line.id, percentsByLineId, badgesByLineId) : null;
+    return { opt, line, priced };
+  });
 
   const carLabel = [data.carBrand, data.carModel].filter(Boolean).join(" ");
   const selectedRow = optionRows.find((r) => r.id === selectedOption);
-  // Interior toggle shows only when the selected base service offers it and the
-  // category's interior add-on is enabled by the admin.
-  const interiorAvailable = !!selectedRow?.hasAddon && !!interiorOpt && !!interiorLine;
-  const addOnOn = interiorAvailable && data.interiorAddOn;
+  // Add-on toggles visible only when the selected base service has has_addon=true.
+  const addonsAvailable = !!selectedRow?.hasAddon && addonEntries.length > 0;
   const selectedBase = basePrice(selectedOption);
-  // Combined base + (optional) interior add-on for the estimated-total panel.
-  const addOnNet = addOnOn && interiorPriced ? interiorPriced.net : 0;
-  const addOnStrike = addOnOn && interiorPriced ? interiorPriced.strike : 0;
+  // Sum prices of all selected add-ons for the estimated-total panel.
+  const addOnNet = addonsAvailable
+    ? addonEntries.reduce((s, e) => s + (data.addOnSelections[e.opt.id] && e.priced ? e.priced.net : 0), 0)
+    : 0;
+  const addOnStrike = addonsAvailable
+    ? addonEntries.reduce((s, e) => s + (data.addOnSelections[e.opt.id] && e.priced ? e.priced.strike : 0), 0)
+    : 0;
   const totalNet = selectedBase ? selectedBase.discountedTotal + addOnNet : 0;
   const totalStrike = selectedBase ? selectedBase.total + addOnStrike : 0;
-  const totalHasDiscount = !!selectedBase && (selectedBase.hasDiscount || (addOnOn && !!interiorPriced?.hasDiscount));
+  const anyAddonDiscount = addonsAvailable && addonEntries.some((e) => data.addOnSelections[e.opt.id] && e.priced?.hasDiscount);
+  const totalHasDiscount = !!selectedBase && (selectedBase.hasDiscount || anyAddonDiscount);
 
   function handleContinue() {
     if (selectedDef) {
@@ -157,12 +163,8 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
     update({
       serviceOption: id,
       pkg: optionToPkg[id] ?? null,
-      interiorAddOn: false,
+      addOnSelections: {},
     });
-  }
-
-  function toggleAddOn() {
-    update({ interiorAddOn: !data.interiorAddOn });
   }
 
   return (
@@ -265,11 +267,11 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
                     )}
                   </div>
                   <p className="text-white/40 text-[11px] mb-1">{opt.blurb}</p>
-                  {row.hasAddon && interiorOpt && interiorPriced && interiorPriced.net > 0 && (
-                    <p className="text-[10px] text-white/35">
-                      {interiorOpt.label}: +{inr(interiorPriced.net)}
+                  {row.hasAddon && addonEntries.map((e) => e.priced && e.priced.net > 0 ? (
+                    <p key={e.opt.id} className="text-[10px] text-white/35">
+                      {e.opt.label}: +{inr(e.priced.net)}
                     </p>
-                  )}
+                  ) : null)}
                 </div>
 
                 <div className="text-right flex-shrink-0 ml-1">
@@ -305,42 +307,44 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
       {errOption && <p className="text-[11px] text-red-300 mt-2 mb-3">Pick an option to continue.</p>}
       {!errOption && <div className="mb-3" />}
 
-      {/* Interior add-on — one per category, admin-managed (catalog is_addon). */}
-      {interiorAvailable && interiorOpt && (
-        <button
-          onClick={toggleAddOn}
-          className={`w-full flex items-center justify-between gap-3 px-3 py-3 rounded-xl border text-left mb-4 transition-all ${
-            data.interiorAddOn
-              ? `border-[${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}] bg-[${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}15]`
-              : "glass-card hover:border-[#1A5FD4]/40"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border ${
-                data.interiorAddOn
-                  ? ""
-                  : "border-white/25"
-              }`}
-              style={data.interiorAddOn ? {
-                background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#E8CC7A"})`,
-                borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"
-              } : {}}
-            >
-              {data.interiorAddOn && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
+      {/* Add-on toggles — one per catalog is_addon option for this category. */}
+      {addonsAvailable && addonEntries.map(({ opt, priced: addonPriced }) => {
+        const on = !!data.addOnSelections[opt.id];
+        return (
+          <button
+            key={opt.id}
+            onClick={() => update({ addOnSelections: { ...data.addOnSelections, [opt.id]: !on } })}
+            className={`w-full flex items-center justify-between gap-3 px-3 py-3 rounded-xl border text-left mb-3 transition-all ${
+              on ? "" : "glass-card hover:border-[#1A5FD4]/40"
+            }`}
+            style={on ? {
+              borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C",
+              background: `${data.service ? CATEGORY_COLORS[data.service] : "#C9A84C"}15`,
+            } : {}}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border ${on ? "" : "border-white/25"}`}
+                style={on ? {
+                  background: `linear-gradient(135deg, ${data.service ? CATEGORY_COLORS[data.service] : "#9C7A2A"}, ${data.service ? CATEGORY_COLORS[data.service] : "#E8CC7A"})`,
+                  borderColor: data.service ? CATEGORY_COLORS[data.service] : "#C9A84C",
+                } : {}}
+              >
+                {on && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white leading-tight">{opt.label}</p>
+                <p className="text-[11px] text-white/45 mt-0.5">
+                  {opt.blurb ?? "Add to this service"}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-white leading-tight">{interiorOpt.label}</p>
-              <p className="text-[11px] text-white/45 mt-0.5">
-                {interiorOpt.blurb ?? "Add interior cleaning to this service"}
-              </p>
-            </div>
-          </div>
-          <span className="text-sm font-bold whitespace-nowrap" style={{ color: accent }}>
-            {interiorPriced && interiorPriced.net > 0 ? `+${inr(interiorPriced.net)}` : "on call"}
-          </span>
-        </button>
-      )}
+            <span className="text-sm font-bold whitespace-nowrap" style={{ color: accent }}>
+              {addonPriced && addonPriced.net > 0 ? `+${inr(addonPriced.net)}` : "on call"}
+            </span>
+          </button>
+        );
+      })}
 
       {/* Total preview / call-back fallback */}
       {selectedDef && selectedBase && (

@@ -16,6 +16,7 @@ import {
   type ServiceDiscounts,
 } from "./pricing";
 import {
+  addonOptionsFor,
   interiorAddonOptionFor,
   baseLineForOption,
   type ServiceCatalog,
@@ -199,20 +200,18 @@ export function carPriceFor(
 }
 
 /**
- * Full price for a selected service = its base price + (optionally) the
- * category's interior add-on, which lives on its own catalog price line. This is
- * the single source of truth shared by the package step, the confirm step, and
- * the booking-submit API so the displayed and charged totals always agree.
+ * Full price for a selected service + any selected add-ons. This is the single
+ * source of truth shared by the package step, the confirm step, and the booking
+ * API so the displayed and charged totals always agree.
  *
- * Base price uses the legacy keyed path for legacy options and the catalog path
- * for admin-created ones. The interior add-on is always read from the category's
- * is_addon option's base line. Returns null when the base price is unavailable.
+ * addOnSelections is keyed by catalog option id (UUID); true = selected.
+ * All selected add-ons' prices are summed. Returns null when base price is missing.
  */
 export function combinedPrice(
   prices: CarPrices,
   serviceOption: string,
   parking: ParkingLocation,
-  withInterior: boolean,
+  addOnSelections: Record<string, boolean>,
   catalog: ServiceCatalog,
   discounts: ServiceDiscounts,
   percentsByLineId: Record<string, number>,
@@ -224,21 +223,38 @@ export function combinedPrice(
   if (!base) return null;
 
   const opt = catalog.options.find((o) => (o.legacy_id ?? o.slug) === serviceOption);
-  const interiorOpt = opt?.has_addon ? interiorAddonOptionFor(catalog, opt.category_id) : null;
-  const interiorLine = interiorOpt ? baseLineForOption(catalog, interiorOpt.id) : null;
-  const addon = withInterior && interiorLine ? linePrice(prices, interiorLine.id, percentsByLineId, badgesByLineId) : null;
-  if (!addon) return base;
+  if (!opt || !opt.has_addon) return base;
+
+  const addonOpts = addonOptionsFor(catalog, opt.category_id);
+  let totalAddOnNet = 0;
+  let totalAddOnStrike = 0;
+  let anyAddonDiscount = false;
+  let lastAddonPercent = 0;
+
+  for (const addonOpt of addonOpts) {
+    if (!addOnSelections[addonOpt.id]) continue;
+    const addonLine = baseLineForOption(catalog, addonOpt.id);
+    if (!addonLine) continue;
+    const addonPriced = linePrice(prices, addonLine.id, percentsByLineId, badgesByLineId);
+    if (!addonPriced) continue;
+    totalAddOnNet += addonPriced.net;
+    totalAddOnStrike += addonPriced.strike;
+    if (addonPriced.hasDiscount) anyAddonDiscount = true;
+    lastAddonPercent = addonPriced.percent;
+  }
+
+  if (totalAddOnNet === 0 && totalAddOnStrike === 0) return base;
 
   return {
     base: base.base,
-    addOn: addon.strike,
-    total: base.total + addon.strike,
+    addOn: totalAddOnStrike,
+    total: base.total + totalAddOnStrike,
     basePercent: base.basePercent,
-    addOnPercent: addon.percent,
+    addOnPercent: lastAddonPercent,
     discountedBase: base.discountedBase,
-    discountedAddOn: addon.net,
-    discountedTotal: base.discountedTotal + addon.net,
-    hasDiscount: base.hasDiscount || addon.hasDiscount,
+    discountedAddOn: totalAddOnNet,
+    discountedTotal: base.discountedTotal + totalAddOnNet,
+    hasDiscount: base.hasDiscount || anyAddonDiscount,
   };
 }
 

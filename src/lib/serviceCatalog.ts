@@ -103,6 +103,7 @@ export interface OptionPatch {
   blurb?: string | null;
   enabled?: boolean;
   sort_order?: number;
+  has_addon?: boolean;
 }
 
 export async function updateOption(id: string, patch: OptionPatch): Promise<void> {

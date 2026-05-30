@@ -32,6 +32,7 @@ export interface LeadRow {
   service: string | null;
   service_option: string | null;
   interior_add_on: boolean;
+  add_on_labels: string[] | null;
 
   vehicle_type: string | null;
   car_brand: string | null;
@@ -64,10 +65,11 @@ export interface LeadRow {
   notes: string | null;
 }
 
-export type NewLead = Omit<LeadRow, "id" | "created_at" | "status" | "price_base" | "price_interior_addon"> & {
+export type NewLead = Omit<LeadRow, "id" | "created_at" | "status" | "price_base" | "price_interior_addon" | "add_on_labels"> & {
   status?: LeadStatus;
   price_base?: number | null;
   price_interior_addon?: number | null;
+  add_on_labels?: string[] | null;
 };
 
 export async function insertLead(lead: NewLead): Promise<LeadRow> {
@@ -199,6 +201,7 @@ function fullFromPartial(p: DraftPayload): NewLead {
     service: p.service ?? null,
     service_option: p.service_option ?? null,
     interior_add_on: p.interior_add_on ?? false,
+    add_on_labels: p.add_on_labels ?? null,
     vehicle_type: p.vehicle_type ?? null,
     car_brand: p.car_brand ?? null,
     car_model: p.car_model ?? null,

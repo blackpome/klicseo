@@ -54,18 +54,23 @@ export interface ServiceCatalog {
   byLegacyLine: Record<string, CatalogPriceLine>;
 }
 
+/** All enabled add-on options for a category (each renders as its own toggle). */
+export function addonOptionsFor(
+  catalog: ServiceCatalog,
+  categoryId: string,
+): CatalogOption[] {
+  return catalog.options.filter((o) => o.category_id === categoryId && o.is_addon && o.enabled);
+}
+
 /**
- * The enabled interior add-on option for a category (the one flagged is_addon),
- * or null when none / disabled. Used by the wizard to decide whether to show the
- * "Add interior…" toggle and where to read its price from.
+ * The first enabled interior add-on option for a category, or null.
+ * @deprecated Use addonOptionsFor for multi-add-on support.
  */
 export function interiorAddonOptionFor(
   catalog: ServiceCatalog,
   categoryId: string,
 ): CatalogOption | null {
-  return (
-    catalog.options.find((o) => o.category_id === categoryId && o.is_addon && o.enabled) ?? null
-  );
+  return addonOptionsFor(catalog, categoryId)[0] ?? null;
 }
 
 /** The base price line owned by an option (its per-tier price), or null. */

@@ -302,6 +302,7 @@ function OptionForm({ opt, onDone }: { opt: CatalogOption; onDone: () => void })
   const labelRef = useRef<HTMLInputElement>(null);
   const shortRef = useRef<HTMLInputElement>(null);
   const blurbRef = useRef<HTMLInputElement>(null);
+  const [hasAddon, setHasAddon] = useState(opt.has_addon);
   useEffect(() => { if (state.ok) onDone(); }, [state.ok, onDone]);
 
   const submit = () => {
@@ -311,6 +312,7 @@ function OptionForm({ opt, onDone }: { opt: CatalogOption; onDone: () => void })
     fd.set("label", labelRef.current?.value ?? "");
     fd.set("short_label", shortRef.current?.value ?? "");
     fd.set("blurb", blurbRef.current?.value ?? "");
+    fd.set("has_addon", hasAddon ? "true" : "false");
     startTransition(() => dispatch(fd));
   };
 
@@ -338,6 +340,10 @@ function OptionForm({ opt, onDone }: { opt: CatalogOption; onDone: () => void })
         placeholder="Short description (optional)"
         className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#C9A84C]"
       />
+      {/* Only show has_addon toggle on base (non-addon) options. */}
+      {!opt.is_addon && (
+        <FlagChip on={hasAddon} onToggle={() => setHasAddon((v) => !v)} label="Offers add-on" />
+      )}
       <FormFooter onCancel={onDone} onSubmit={submit} pending={pending} error={state.error} />
     </div>
   );

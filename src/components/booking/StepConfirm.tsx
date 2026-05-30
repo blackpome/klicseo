@@ -8,7 +8,7 @@ import type { BookingData } from "./BookingWizard";
 import { clearBookingDraft } from "./BookingWizard";
 import { SERVICE_OPTIONS, isServiceOptionId, inr, baseLineFor, CATEGORY_COLORS } from "@/lib/pricing";
 import { combinedPrice } from "@/lib/carPricing";
-import { interiorAddonOptionFor } from "@/lib/serviceCatalog-shared";
+import { addonOptionsFor } from "@/lib/serviceCatalog-shared";
 import { useServiceDiscounts, useBadges, useDiscountsByLineId } from "@/components/DiscountContext";
 import { useSiteSettings } from "@/components/SiteSettingsContext";
 import { stepCopy, msg, flag } from "@/lib/site-settings-shared";
@@ -61,14 +61,18 @@ export default function StepConfirm({ data, onBack }: Props) {
   const priced =
     data.carPrices && data.serviceOption && settings.catalog
       ? combinedPrice(
-          data.carPrices, data.serviceOption, data.parkingLocation, data.interiorAddOn,
+          data.carPrices, data.serviceOption, data.parkingLocation, data.addOnSelections,
           settings.catalog, discounts, percentsByLineId, badgesByLineId,
         )
       : null;
   const total = priced?.discountedTotal ?? null;
-  // The category's interior add-on option (for the summary label).
+  // Selected add-on labels for the summary row.
   const catCat = data.service ? settings.catalog?.categories.find((c) => c.legacy_key === data.service) ?? null : null;
-  const interiorOpt = settings.catalog && catCat ? interiorAddonOptionFor(settings.catalog, catCat.id) : null;
+  const selectedAddonLabels = settings.catalog && catCat
+    ? addonOptionsFor(settings.catalog, catCat.id)
+        .filter((o) => data.addOnSelections[o.id])
+        .map((o) => o.label)
+    : [];
   const isMonthly = optionDef?.recurring === "monthly";
   const carLabel = [data.carBrand, data.carModel].filter(Boolean).join(" ");
 
@@ -202,7 +206,7 @@ export default function StepConfirm({ data, onBack }: Props) {
             value={[
               serviceLabel[data.service],
               optionDef?.label,
-              data.interiorAddOn && interiorOpt ? `+ ${interiorOpt.label}` : "",
+              ...selectedAddonLabels.map((l) => `+ ${l}`),
             ].filter(Boolean).join(" · ")}
           />
         )}

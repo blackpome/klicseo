@@ -20,8 +20,8 @@ export interface BookingData {
   // Canonical ServiceOptionId from src/lib/pricing.ts (e.g. "Monthly",
   // "OneTimeManual", "CeramicSealant"). "" until the user picks one on Step 1.
   serviceOption: string;
-  // Only meaningful for OneTimeManual today.
-  interiorAddOn: boolean;
+  // Keyed by catalog option id (UUID). True = user has enabled that add-on.
+  addOnSelections: Record<string, boolean>;
   // Visual hint only — drives CarShowcase styling. Derived from serviceOption
   // by StepContact / deep-link handler; not used for pricing.
   pkg: "Daily" | "TriWeekly" | "OneTime" | null;
@@ -95,7 +95,7 @@ function hasAnyData(d: BookingData): boolean {
     d.parkingLocation, d.carCoverChoice, d.shift, d.date,
   ];
   if (strings.some((s) => s && String(s).trim().length > 0)) return true;
-  if (d.interiorAddOn || d.gateAccessConsent) return true;
+  if (Object.values(d.addOnSelections).some(Boolean) || d.gateAccessConsent) return true;
   if (d.latitude != null || d.longitude != null) return true;
   if (d.customFields && Object.keys(d.customFields).length > 0) return true;
   return false;
@@ -111,7 +111,7 @@ function wizardToDraftPayload(d: BookingData) {
     phone: d.phone,
     service: d.service,
     serviceOption: d.serviceOption,
-    interiorAddOn: d.interiorAddOn,
+    addOnSelections: d.addOnSelections,
     carPrices: d.carPrices,
     vehicleType: d.vehicleType,
     carBrand: d.carBrand,
@@ -145,7 +145,7 @@ export default function BookingWizard() {
   const [data, setData] = useState<BookingData>({
     service: null,
     serviceOption: "",
-    interiorAddOn: false,
+    addOnSelections: {},
     pkg: null,
     vehicleType: "",
     carBrand: "",

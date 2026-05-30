@@ -188,7 +188,9 @@ export default async function AdminLeadsPage({
                   </td>
                   <td className="px-3 py-2">
                     <div>{l.service ?? "—"}</div>
-                    <div className="text-[11px] text-white/45">{l.service_option ?? ""}{l.interior_add_on ? " + interior" : ""}</div>
+                    <div className="text-[11px] text-white/45">
+                      {[l.service_option, ...(l.add_on_labels ?? []).map((lbl) => `+ ${lbl}`)].filter(Boolean).join(" · ")}
+                    </div>
                   </td>
                   <td className="px-3 py-2">
                     <div>{[l.car_brand, l.car_model].filter(Boolean).join(" ") || l.vehicle_type || "—"}</div>
