@@ -8,6 +8,13 @@ import {
   seoKeywords,
   siteUrl,
 } from "@/lib/seo";
+
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: businessName,
+  url: siteUrl,
+};
 import { DiscountProvider } from "@/components/DiscountContext";
 import { getDiscountConfig } from "@/lib/discounts";
 import { SiteSettingsProvider } from "@/components/SiteSettingsContext";
@@ -86,6 +93,10 @@ export default async function RootLayout({
       style={{ fontFamily: "var(--font-inter)" }}
     >
       <body className="min-h-full flex flex-col bg-[#050E21] text-white">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+        />
         <SiteSettingsProvider value={site}>
           <DiscountProvider
             discounts={percents}
