@@ -139,7 +139,21 @@ export default async function LeadDetailPage({
           <Field label="Interior add-on" value={fmt(lead.interior_add_on)} />
           <Field
             label="Price (snapshot)"
-            value={lead.price_total != null ? `₹${lead.price_total.toLocaleString("en-IN")}` : "—"}
+            value={
+              lead.price_total != null ? (
+                lead.price_base != null ? (
+                  <span className="flex flex-col gap-0.5">
+                    <span>₹{lead.price_base.toLocaleString("en-IN")} <span className="text-white/40 text-[11px]">base</span></span>
+                    {lead.price_interior_addon != null && lead.price_interior_addon > 0 && (
+                      <span>₹{lead.price_interior_addon.toLocaleString("en-IN")} <span className="text-white/40 text-[11px]">interior add-on</span></span>
+                    )}
+                    <span className="font-bold text-[#C9A84C]">₹{lead.price_total.toLocaleString("en-IN")} <span className="text-[11px] font-normal text-white/40">total</span></span>
+                  </span>
+                ) : (
+                  `₹${lead.price_total.toLocaleString("en-IN")}`
+                )
+              ) : "—"
+            }
           />
         </Section>
 

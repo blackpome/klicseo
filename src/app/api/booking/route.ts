@@ -109,6 +109,8 @@ export async function POST(req: NextRequest) {
     latitude: typeof body.latitude === "number" ? body.latitude : null,
     longitude: typeof body.longitude === "number" ? body.longitude : null,
     price_total: priced?.discountedTotal ?? null,
+    price_base: priced?.discountedBase ?? null,
+    price_interior_addon: priced ? (priced.discountedTotal - priced.discountedBase) || null : null,
     discount_percent: priced?.basePercent ?? null,
     custom_fields: Object.keys(custom_fields).length ? custom_fields : null,
     notes: null,

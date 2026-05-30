@@ -132,24 +132,43 @@ export async function deleteEmployee(id: string): Promise<void> {
 }
 
 /**
- * Employees whose `reminder_call_date` is today or overdue — surfaced in the
- * notification bell on employee admin pages. Mirrors the lead `due` reminders.
- * Phone is decrypted via `unseal`. Resigned and rejected employees are skipped.
+ * Employee call reminders + new applicant notifications — surfaced in the
+ * notification bell on employee admin pages.
+ *
+ * Two feeds merged and sorted:
+ *  1. "due"     — reminder_call_date ≤ today (overdue or today), non-resigned/rejected.
+ *  2. "applied" — status="applied" employees not yet moved to screening/beyond.
+ *                 Sorted newest first so the freshest applicants surface on top.
  */
 export async function listEmployeeCallReminders(limit = 50): Promise<CallReminder[]> {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  const { data, error } = await supabase()
-    .from("employees")
-    .select("id,name,phone,status,reminder_call_date")
-    .not("reminder_call_date", "is", null)
-    .lte("reminder_call_date", today)
-    .order("reminder_call_date", { ascending: true })
-    .limit(limit * 4);
-  if (error) throw error;
+  const sb = supabase();
 
-  type Row = { id: string; name: string; phone: string | null; status: EmployeeStatus; reminder_call_date: string };
+  const [dueRes, appliedRes] = await Promise.all([
+    sb
+      .from("employees")
+      .select("id,name,phone,status,reminder_call_date,created_at")
+      .not("reminder_call_date", "is", null)
+      .lte("reminder_call_date", today)
+      .order("reminder_call_date", { ascending: true })
+      .limit(limit * 2),
+    sb
+      .from("employees")
+      .select("id,name,phone,job_role,created_at")
+      .eq("status", "applied")
+      .order("created_at", { ascending: false })
+      .limit(limit),
+  ]);
+  if (dueRes.error) throw dueRes.error;
+  if (appliedRes.error) throw appliedRes.error;
+
+  type DueRow = { id: string; name: string; phone: string | null; status: EmployeeStatus; reminder_call_date: string };
+  type AppliedRow = { id: string; name: string; phone: string | null; job_role: string; created_at: string };
+
   const out: CallReminder[] = [];
-  for (const r of (data ?? []) as Row[]) {
+
+  // 1. Call reminders (due/overdue).
+  for (const r of (dueRes.data ?? []) as DueRow[]) {
     if (r.status === "resigned" || r.status === "rejected") continue;
     const overdue = r.reminder_call_date < today;
     out.push({
@@ -160,7 +179,26 @@ export async function listEmployeeCallReminders(limit = 50): Promise<CallReminde
       kind: "due",
       href: `/admin/employees/${r.id}`,
     });
-    if (out.length >= limit) break;
   }
-  return out;
+
+  // 2. New applicants — show how recently they applied for the "wow" factor.
+  for (const r of (appliedRes.data ?? []) as AppliedRow[]) {
+    const daysAgo = Math.floor(
+      (Date.now() - new Date(r.created_at).getTime()) / 86_400_000,
+    );
+    const when =
+      daysAgo === 0 ? "Applied today" :
+      daysAgo === 1 ? "Applied yesterday" :
+      `Applied ${daysAgo} days ago`;
+    out.push({
+      id: r.id,
+      name: r.name,
+      phone: unseal(r.phone),
+      reason: when,
+      kind: "applied",
+      href: `/admin/employees/${r.id}`,
+    });
+  }
+
+  return out.slice(0, limit);
 }

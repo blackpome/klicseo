@@ -57,13 +57,17 @@ export interface LeadRow {
   longitude: number | null;
 
   price_total: number | null;
+  price_base: number | null;
+  price_interior_addon: number | null;
   discount_percent: number | null;
   custom_fields: Record<string, string> | null;
   notes: string | null;
 }
 
-export type NewLead = Omit<LeadRow, "id" | "created_at" | "status"> & {
+export type NewLead = Omit<LeadRow, "id" | "created_at" | "status" | "price_base" | "price_interior_addon"> & {
   status?: LeadStatus;
+  price_base?: number | null;
+  price_interior_addon?: number | null;
 };
 
 export async function insertLead(lead: NewLead): Promise<LeadRow> {
@@ -213,6 +217,8 @@ function fullFromPartial(p: DraftPayload): NewLead {
     latitude: p.latitude ?? null,
     longitude: p.longitude ?? null,
     price_total: p.price_total ?? null,
+    price_base: p.price_base ?? null,
+    price_interior_addon: p.price_interior_addon ?? null,
     discount_percent: p.discount_percent ?? null,
     custom_fields: p.custom_fields ?? null,
     notes: p.notes ?? null,

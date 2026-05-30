@@ -36,9 +36,10 @@ export const LEAD_STATUS_COLOR: Record<LeadStatus, string> = {
 };
 
 // A lead OR employee surfaced as a "call reminder" in the notification bell.
-//   due → a scheduled callback whose date+time has arrived
-//   new → a fresh, uncontacted lead with no scheduled callback
-export type ReminderKind = "due" | "new";
+//   due     → a scheduled callback whose date+time has arrived
+//   new     → a fresh, uncontacted lead with no scheduled callback
+//   applied → a new job application awaiting review
+export type ReminderKind = "due" | "new" | "applied";
 
 export interface CallReminder {
   id: string;

@@ -53,10 +53,10 @@ interface DraftBody {
 // Price the in-progress draft exactly like the final submit, so admins see a
 // price as soon as a car + service are entered. Resolves to nulls when the car
 // or service isn't chosen yet, or if pricing config can't be loaded.
-async function priceForDraft(body: DraftBody): Promise<{ price_total: number | null; discount_percent: number | null }> {
+async function priceForDraft(body: DraftBody): Promise<{ price_total: number | null; price_base: number | null; price_interior_addon: number | null; discount_percent: number | null }> {
   const carPrices = body.carPrices ?? null;
   const serviceOption = nz(body.serviceOption);
-  if (!carPrices || !serviceOption) return { price_total: null, discount_percent: null };
+  if (!carPrices || !serviceOption) return { price_total: null, price_base: null, price_interior_addon: null, discount_percent: null };
   try {
     const parking = ((body.parkingLocation as ParkingLocation) || "") as ParkingLocation;
     const [catalog, discounts, cfg] = await Promise.all([
@@ -65,9 +65,15 @@ async function priceForDraft(body: DraftBody): Promise<{ price_total: number | n
       getDiscountConfig(),
     ]);
     const priced = combinedPrice(carPrices, serviceOption, parking, !!body.interiorAddOn, catalog, discounts, cfg.percentsByLineId, cfg.badgesByLineId);
-    return { price_total: priced?.discountedTotal ?? null, discount_percent: priced?.basePercent ?? null };
+    const addonAmount = priced ? (priced.discountedTotal - priced.discountedBase) || null : null;
+    return {
+      price_total: priced?.discountedTotal ?? null,
+      price_base: priced?.discountedBase ?? null,
+      price_interior_addon: addonAmount,
+      discount_percent: priced?.basePercent ?? null,
+    };
   } catch {
-    return { price_total: null, discount_percent: null };
+    return { price_total: null, price_base: null, price_interior_addon: null, discount_percent: null };
   }
 }
 
