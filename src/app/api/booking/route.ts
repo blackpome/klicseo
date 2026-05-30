@@ -116,6 +116,7 @@ export async function POST(req: NextRequest) {
     shift: String(body.shift ?? "") || null,
     callback_date: String(body.date ?? "") || null,
     callback_time: String(body.time ?? "") || null,
+    client_timezone: String(body.clientTimezone ?? "") || null,
     latitude: typeof body.latitude === "number" ? body.latitude : null,
     longitude: typeof body.longitude === "number" ? body.longitude : null,
     price_total: priced?.discountedTotal ?? null,

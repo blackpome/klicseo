@@ -10,9 +10,42 @@ import { getLead } from "@/lib/leads";
 import { LEAD_STATUS_COLOR } from "@/lib/leads-shared";
 import { getCustomerPayments } from "@/lib/payments";
 import { inr } from "@/lib/pricing";
-import { ArrowLeft, Phone, MapPin, User, Car, Calendar, Sunrise, Sunset, Sparkles, Pencil, Wallet } from "lucide-react";
+import { ArrowLeft, Phone, MapPin, User, Car, Calendar, Sunrise, Sunset, Sparkles, Pencil, Wallet, Globe } from "lucide-react";
 
 const STATUS_COLOR = LEAD_STATUS_COLOR;
+
+/** Convert a user-local callback time to IST for display in the admin panel.
+ *  Returns null when fromTZ is already IST or the inputs are missing/invalid. */
+function callbackLocalToIST(dateStr: string | null, timeStr: string | null, fromTZ: string | null): string | null {
+  if (!dateStr || !fromTZ || fromTZ === "Asia/Kolkata") return null;
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!dm) return null;
+  let wallH = 10, wallM = 0;
+  if (timeStr) {
+    const tm = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i.exec(timeStr.trim());
+    if (tm) {
+      wallH = Number(tm[1]) % 12;
+      wallM = Number(tm[2]);
+      if (tm[3]?.toUpperCase() === "PM") wallH += 12;
+    }
+  }
+  try {
+    // Strategy: guess UTC = wallH:wallM, ask what fromTZ shows, derive the real offset.
+    const guess = new Date(Date.UTC(+dm[1], +dm[2] - 1, +dm[3], wallH, wallM));
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: fromTZ, hour: "2-digit", minute: "2-digit", hour12: false,
+    }).formatToParts(guess);
+    const gotH = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
+    const gotM = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0");
+    const offsetMs = ((gotH - wallH) * 60 + (gotM - wallM)) * 60 * 1000;
+    const utcActual = new Date(guess.getTime() - offsetMs);
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true,
+    }).format(utcActual);
+  } catch {
+    return null;
+  }
+}
 
 function fmt(value: string | number | boolean | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
@@ -104,8 +137,11 @@ export default async function LeadDetailPage({
             </span>
           )}
           <span className="text-white/30">·</span>
-          <span>
-            {new Date(lead.created_at).toLocaleString("en-IN", {
+          <span className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-white/30">
+              {lead.status === "draft" ? "Started" : "Submitted"}
+            </span>
+            {new Date(lead.submitted_at ?? lead.created_at).toLocaleString("en-IN", {
               dateStyle: "medium",
               timeStyle: "short",
               timeZone: "Asia/Kolkata",
@@ -247,7 +283,42 @@ export default async function LeadDetailPage({
             }
           />
           <Field label="Callback date" value={fmt(lead.callback_date)} />
-          <Field label="Callback time" value={fmt(lead.callback_time)} />
+          <Field
+            label="Callback time"
+            value={
+              lead.callback_time ? (
+                <span className="flex flex-col gap-1">
+                  <span>{lead.callback_time}</span>
+                  {lead.client_timezone && lead.client_timezone !== "Asia/Kolkata" && (() => {
+                    const ist = callbackLocalToIST(lead.callback_date, lead.callback_time, lead.client_timezone);
+                    return (
+                      <span className="text-[11px] text-orange-300">
+                        {ist ? `= ${ist} IST` : ""} (user in {lead.client_timezone})
+                      </span>
+                    );
+                  })()}
+                </span>
+              ) : "—"
+            }
+          />
+          {lead.client_timezone && (
+            <Field
+              label="User's timezone"
+              value={
+                <span className="inline-flex items-center gap-2">
+                  <Globe size={12} className={lead.client_timezone !== "Asia/Kolkata" ? "text-orange-400" : "text-emerald-400"} />
+                  <span className={lead.client_timezone !== "Asia/Kolkata" ? "text-orange-300" : ""}>
+                    {lead.client_timezone}
+                    {lead.client_timezone !== "Asia/Kolkata" && (
+                      <span className="ml-2 text-[10px] font-bold uppercase tracking-wide bg-orange-500/20 text-orange-300 border border-orange-500/30 rounded px-1.5 py-0.5">
+                        Outside India
+                      </span>
+                    )}
+                  </span>
+                </span>
+              }
+            />
+          )}
         </Section>
 
         {lead.custom_fields && Object.keys(lead.custom_fields).length > 0 && (

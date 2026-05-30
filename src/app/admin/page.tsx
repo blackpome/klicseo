@@ -151,11 +151,12 @@ export default async function AdminLeadsPage({
             <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left px-3 py-2 font-semibold">#</th>
-                <th className="text-left px-3 py-2 font-semibold">When (IST)</th>
+                <th className="text-left px-3 py-2 font-semibold">Submitted / Started (IST)</th>
                 <th className="text-left px-3 py-2 font-semibold">Name</th>
                 <th className="text-left px-3 py-2 font-semibold">Phone</th>
                 <th className="text-left px-3 py-2 font-semibold">Service</th>
                 <th className="text-left px-3 py-2 font-semibold">Vehicle</th>
+                <th className="text-left px-3 py-2 font-semibold">Callback</th>
                 <th className="text-left px-3 py-2 font-semibold">Shift</th>
                 <th className="text-left px-3 py-2 font-semibold">GPS</th>
                 <th className="text-right px-3 py-2 font-semibold">Price</th>
@@ -167,14 +168,25 @@ export default async function AdminLeadsPage({
               {leads.map((l, i) => (
                 <tr key={l.id} className="border-t border-white/5 hover:bg-white/[0.02]">
                   <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{i + 1}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-white/60 text-xs">
-                    {new Date(l.created_at).toLocaleString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      timeZone: "Asia/Kolkata",
-                    })}
+                  <td className="px-3 py-2 whitespace-nowrap text-xs">
+                    {l.status === "draft" ? (
+                      <div className="text-white/30 text-[10px] uppercase tracking-wide">Started</div>
+                    ) : (
+                      <div className="text-[10px] uppercase tracking-wide text-white/30">Submitted</div>
+                    )}
+                    <div className="text-white/80 font-medium">
+                      {new Date(l.submitted_at ?? l.created_at).toLocaleString("en-IN", {
+                        day: "2-digit", month: "short", year: "numeric",
+                        timeZone: "Asia/Kolkata",
+                      })}
+                    </div>
+                    <div className="text-white/50">
+                      {new Date(l.submitted_at ?? l.created_at).toLocaleString("en-IN", {
+                        hour: "2-digit", minute: "2-digit", hour12: true,
+                        timeZone: "Asia/Kolkata",
+                      })}{" "}
+                      <span className="text-white/30">IST</span>
+                    </div>
                   </td>
                   <td className="px-3 py-2 font-semibold">
                     <Link href={`/admin/${l.id}`} className="hover:text-[#C9A84C] hover:underline">
@@ -196,6 +208,25 @@ export default async function AdminLeadsPage({
                   <td className="px-3 py-2">
                     <div>{[l.car_brand, l.car_model].filter(Boolean).join(" ") || l.vehicle_type || "—"}</div>
                     <div className="text-[11px] text-white/45">{[l.vehicle_type, l.car_number].filter(Boolean).join(" · ")}</div>
+                  </td>
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">
+                    {l.callback_date ? (
+                      <div className="text-white/80 font-medium">{l.callback_date}</div>
+                    ) : null}
+                    {l.callback_time ? (
+                      <div className="text-white/50 text-[11px]">
+                        {l.callback_time}
+                        {l.client_timezone && l.client_timezone !== "Asia/Kolkata" && (
+                          <span
+                            className="ml-1 rounded px-1 py-0.5 text-[9px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30"
+                            title={l.client_timezone}
+                          >
+                            Non-IST
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
+                    {!l.callback_date && !l.callback_time ? <span className="text-white/30">—</span> : null}
                   </td>
                   <td className="px-3 py-2 text-xs">{l.shift ?? "—"}</td>
                   <td className="px-3 py-2 text-xs">

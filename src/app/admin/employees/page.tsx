@@ -104,7 +104,7 @@ export default async function AdminEmployeesPage({
             <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left px-3 py-2 font-semibold">#</th>
-                <th className="text-left px-3 py-2 font-semibold">When (IST)</th>
+                <th className="text-left px-3 py-2 font-semibold">Submitted (IST)</th>
                 <th className="text-left px-3 py-2 font-semibold">Name</th>
                 <th className="text-left px-3 py-2 font-semibold">Phone</th>
                 <th className="text-left px-3 py-2 font-semibold">Role</th>
@@ -118,14 +118,20 @@ export default async function AdminEmployeesPage({
               {employees.map((e, i) => (
                 <tr key={e.id} className="border-t border-white/5 hover:bg-white/[0.02]">
                   <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{i + 1}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-white/60 text-xs">
-                    {new Date(e.created_at).toLocaleString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      timeZone: "Asia/Kolkata",
-                    })}
+                  <td className="px-3 py-2 whitespace-nowrap text-xs">
+                    <div className="text-white/80 font-medium">
+                      {new Date(e.created_at).toLocaleString("en-IN", {
+                        day: "2-digit", month: "short", year: "numeric",
+                        timeZone: "Asia/Kolkata",
+                      })}
+                    </div>
+                    <div className="text-white/50">
+                      {new Date(e.created_at).toLocaleString("en-IN", {
+                        hour: "2-digit", minute: "2-digit", hour12: true,
+                        timeZone: "Asia/Kolkata",
+                      })}{" "}
+                      <span className="text-white/30">IST</span>
+                    </div>
                   </td>
                   <td className="px-3 py-2 font-semibold">
                     <Link href={`/admin/employees/${e.id}`} className="hover:text-[#C9A84C] hover:underline">

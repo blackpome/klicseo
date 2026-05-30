@@ -48,6 +48,8 @@ export interface BookingData {
   longitude: number | null;
   // Answers to admin-defined custom fields, keyed by field id.
   customFields: Record<string, string | boolean>;
+  // IANA timezone of the user's browser, captured once on mount.
+  clientTimezone: string;
   // Server-side id of the draft lead row this wizard session is mirroring.
   // null until the user enters a valid phone in Step 1, at which point we
   // POST /api/booking/draft and store the returned lead id here. Subsequent
@@ -128,6 +130,7 @@ function wizardToDraftPayload(d: BookingData) {
     latitude: d.latitude,
     longitude: d.longitude,
     customFields: d.customFields,
+    clientTimezone: d.clientTimezone,
   };
 }
 
@@ -166,6 +169,7 @@ export default function BookingWizard() {
     latitude: null,
     longitude: null,
     customFields: {},
+    clientTimezone: "Asia/Kolkata",
     draftId: null,
   });
 
@@ -205,6 +209,13 @@ export default function BookingWizard() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Capture the browser's IANA timezone once. The default "Asia/Kolkata" above
+  // is just a safe SSR placeholder; this effect runs only on the client.
+  useEffect(() => {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    setData((d) => ({ ...d, clientTimezone: tz }));
   }, []);
 
   // Persist on every change. Cheap; the form is small.

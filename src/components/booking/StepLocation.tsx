@@ -278,7 +278,7 @@ export default function StepLocation({ data, update, onNext, onBack }: Props) {
         <input
           type="date"
           value={data.date}
-          min={new Date().toISOString().split("T")[0]}
+          min={new Date().toLocaleDateString("fr-CA")}
           onChange={(e) => update({ date: e.target.value })}
           onFocus={(e) => {
             if (!errDate) {

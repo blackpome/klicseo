@@ -48,6 +48,7 @@ interface DraftBody {
   longitude?: number | null;
   customFields?: Record<string, unknown>;
   carPrices?: CarPrices | null;
+  clientTimezone?: string | null;
 }
 
 // Price the in-progress draft exactly like the final submit, so admins see a
@@ -114,6 +115,7 @@ function mapDraft(body: DraftBody) {
     shift: nz(body.shift),
     callback_date: nz(body.date),
     callback_time: nz(body.time),
+    client_timezone: nz(body.clientTimezone),
     latitude: typeof body.latitude === "number" ? body.latitude : null,
     longitude: typeof body.longitude === "number" ? body.longitude : null,
     custom_fields: Object.keys(custom).length ? custom : null,

@@ -53,6 +53,12 @@ export interface LeadRow {
 
   callback_date: string | null;
   callback_time: string | null;
+  /** When the user actually clicked Submit (for wizard leads promoted from draft,
+   *  this differs from created_at which records when they started the form).
+   *  Null for leads created before this column was added. */
+  submitted_at?: string | null;
+  /** IANA timezone captured from the user's browser at booking time. Null for old leads or admin-created ones. */
+  client_timezone?: string | null;
 
   latitude: number | null;
   longitude: number | null;
@@ -65,7 +71,8 @@ export interface LeadRow {
   notes: string | null;
 }
 
-export type NewLead = Omit<LeadRow, "id" | "created_at" | "status" | "price_base" | "price_interior_addon" | "add_on_labels"> & {
+export type NewLead = Omit<LeadRow, "id" | "created_at" | "status" | "price_base" | "price_interior_addon" | "add_on_labels" | "client_timezone"> & {
+  client_timezone?: string | null;
   status?: LeadStatus;
   price_base?: number | null;
   price_interior_addon?: number | null;
@@ -74,6 +81,11 @@ export type NewLead = Omit<LeadRow, "id" | "created_at" | "status" | "price_base
 
 export async function insertLead(lead: NewLead): Promise<LeadRow> {
   const payload: Record<string, unknown> = { ...lead, status: lead.status ?? "new" };
+  // For leads inserted directly (not via draft promotion), submitted_at = now.
+  // Drafts get submitted_at stamped at promotion time instead.
+  if (!payload.submitted_at && (payload.status as string) !== "draft") {
+    payload.submitted_at = new Date().toISOString();
+  }
   // Compute the search hash BEFORE sealing the plaintext phone.
   payload.phone_hash = phoneHash(lead.phone);
   // Auto-derive locality from pincode when the caller didn't set area.
@@ -251,7 +263,7 @@ export async function promoteLeadDraft(id: string, patch: LeadUpdate): Promise<L
   const { data, error } = await supabase().from("leads").select("status").eq("id", id).maybeSingle();
   if (error) throw error;
   if (!data || (data as { status: string }).status !== "draft") return null;
-  await updateLead(id, { ...patch, status: "new" });
+  await updateLead(id, { ...patch, status: "new", submitted_at: new Date().toISOString() });
   return await getLead(id);
 }
 
