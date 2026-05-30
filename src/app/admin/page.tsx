@@ -10,6 +10,21 @@ import Link from "next/link";
 import WhatsAppLink from "@/components/WhatsAppLink";
 import ExportToolbar from "@/components/ExportToolbar";
 
+/** Returns true if the given IANA timezone is currently at UTC+5:30 (IST).
+ *  Handles both "Asia/Kolkata" and the legacy alias "Asia/Calcutta", plus any
+ *  other zone that happens to match IST's offset right now. */
+function isIST(tz: string | null | undefined): boolean {
+  if (!tz) return true;
+  try {
+    const now = new Date();
+    const fmt = (zone: string) =>
+      new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
+    return fmt(tz) === fmt("Asia/Kolkata");
+  } catch {
+    return false;
+  }
+}
+
 const STATUS_TABS: { id: LeadStatus | "all"; label: string }[] = [
   { id: "all", label: "All" },
   ...LEAD_STATUSES.map((s) => ({ id: s, label: LEAD_STATUS_LABEL[s] })),
@@ -216,7 +231,7 @@ export default async function AdminLeadsPage({
                     {l.callback_time ? (
                       <div className="text-white/50 text-[11px]">
                         {l.callback_time}
-                        {l.client_timezone && l.client_timezone !== "Asia/Kolkata" && (
+                        {l.client_timezone && !isIST(l.client_timezone) && (
                           <span
                             className="ml-1 rounded px-1 py-0.5 text-[9px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30"
                             title={l.client_timezone}

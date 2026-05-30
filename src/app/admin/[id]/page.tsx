@@ -14,10 +14,22 @@ import { ArrowLeft, Phone, MapPin, User, Car, Calendar, Sunrise, Sunset, Sparkle
 
 const STATUS_COLOR = LEAD_STATUS_COLOR;
 
+function isIST(tz: string | null | undefined): boolean {
+  if (!tz) return true;
+  try {
+    const now = new Date();
+    const fmt = (zone: string) =>
+      new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
+    return fmt(tz) === fmt("Asia/Kolkata");
+  } catch {
+    return false;
+  }
+}
+
 /** Convert a user-local callback time to IST for display in the admin panel.
  *  Returns null when fromTZ is already IST or the inputs are missing/invalid. */
 function callbackLocalToIST(dateStr: string | null, timeStr: string | null, fromTZ: string | null): string | null {
-  if (!dateStr || !fromTZ || fromTZ === "Asia/Kolkata") return null;
+  if (!dateStr || !fromTZ || isIST(fromTZ)) return null;
   const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
   if (!dm) return null;
   let wallH = 10, wallM = 0;
@@ -289,7 +301,7 @@ export default async function LeadDetailPage({
               lead.callback_time ? (
                 <span className="flex flex-col gap-1">
                   <span>{lead.callback_time}</span>
-                  {lead.client_timezone && lead.client_timezone !== "Asia/Kolkata" && (() => {
+                  {lead.client_timezone && !isIST(lead.client_timezone) && (() => {
                     const ist = callbackLocalToIST(lead.callback_date, lead.callback_time, lead.client_timezone);
                     return (
                       <span className="text-[11px] text-orange-300">
@@ -306,10 +318,10 @@ export default async function LeadDetailPage({
               label="User's timezone"
               value={
                 <span className="inline-flex items-center gap-2">
-                  <Globe size={12} className={lead.client_timezone !== "Asia/Kolkata" ? "text-orange-400" : "text-emerald-400"} />
-                  <span className={lead.client_timezone !== "Asia/Kolkata" ? "text-orange-300" : ""}>
+                  <Globe size={12} className={!isIST(lead.client_timezone) ? "text-orange-400" : "text-emerald-400"} />
+                  <span className={!isIST(lead.client_timezone) ? "text-orange-300" : ""}>
                     {lead.client_timezone}
-                    {lead.client_timezone !== "Asia/Kolkata" && (
+                    {!isIST(lead.client_timezone) && (
                       <span className="ml-2 text-[10px] font-bold uppercase tracking-wide bg-orange-500/20 text-orange-300 border border-orange-500/30 rounded px-1.5 py-0.5">
                         Outside India
                       </span>
