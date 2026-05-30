@@ -254,8 +254,10 @@ export default function BookingWizard() {
           });
         }
       } catch {
-        // Network errors are non-fatal: the localStorage draft still holds
-        // everything; the next change re-tries.
+        // Network errors (including AbortError from the cleanup controller) are
+        // non-fatal: localStorage still holds everything. Reset the POST guard
+        // so the next change can re-try creating the draft.
+        postingRef.current = false;
       }
     }, 800); // debounce so rapid typing doesn't fire dozens of requests
 

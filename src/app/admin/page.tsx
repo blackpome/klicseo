@@ -151,7 +151,7 @@ export default async function AdminLeadsPage({
             <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left px-3 py-2 font-semibold">#</th>
-                <th className="text-left px-3 py-2 font-semibold">When</th>
+                <th className="text-left px-3 py-2 font-semibold">When (IST)</th>
                 <th className="text-left px-3 py-2 font-semibold">Name</th>
                 <th className="text-left px-3 py-2 font-semibold">Phone</th>
                 <th className="text-left px-3 py-2 font-semibold">Service</th>
@@ -173,6 +173,7 @@ export default async function AdminLeadsPage({
                       month: "short",
                       hour: "2-digit",
                       minute: "2-digit",
+                      timeZone: "Asia/Kolkata",
                     })}
                   </td>
                   <td className="px-3 py-2 font-semibold">

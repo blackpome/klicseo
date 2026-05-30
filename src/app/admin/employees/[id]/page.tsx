@@ -144,7 +144,9 @@ export default async function EmployeeDetailPage({
               {new Date(emp.created_at).toLocaleString("en-IN", {
                 dateStyle: "medium",
                 timeStyle: "short",
-              })}
+                timeZone: "Asia/Kolkata",
+              })}{" "}
+              <span className="text-white/30 text-[10px]">IST</span>
             </span>
           </p>
         </div>
@@ -202,7 +204,7 @@ export default async function EmployeeDetailPage({
             label="Terms accepted"
             value={
               emp.terms_accepted_at
-                ? new Date(emp.terms_accepted_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+                ? new Date(emp.terms_accepted_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }) + " IST"
                 : "—"
             }
           />

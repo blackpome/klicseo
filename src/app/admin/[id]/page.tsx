@@ -108,7 +108,9 @@ export default async function LeadDetailPage({
             {new Date(lead.created_at).toLocaleString("en-IN", {
               dateStyle: "medium",
               timeStyle: "short",
-            })}
+              timeZone: "Asia/Kolkata",
+            })}{" "}
+            <span className="text-white/30 text-[10px]">IST</span>
           </span>
           <span className="text-white/30">·</span>
           <span className="uppercase tracking-wider text-[10px] font-bold text-white/40">
