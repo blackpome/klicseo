@@ -6,7 +6,6 @@ import { listEmployeeCallReminders } from "@/lib/employees";
 import type { CallReminder } from "@/lib/leads-shared";
 import Sidebar, { type NavGroup } from "./Sidebar";
 import AuthSessionGuard from "./AuthSessionGuard";
-import TimezoneNotice from "@/components/TimezoneNotice";
 
 // Wraps authed admin pages with the sidebar + real HMAC signature check and the
 // live allowlist lookup. Login/forgot/reset pages deliberately render bare.
@@ -91,7 +90,6 @@ export default async function AdminShell({
         showBell={can(bellPermission)}
       />
       <main className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
-        <TimezoneNotice />
         {denied ? (
           <div className="mx-auto max-w-md text-center py-24">
             <h1 className="text-xl font-bold mb-2" style={{ fontFamily: "var(--font-playfair)" }}>
