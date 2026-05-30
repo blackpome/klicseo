@@ -35,7 +35,7 @@ export const LEAD_STATUS_COLOR: Record<LeadStatus, string> = {
   cancelled: "#EF4444", // red
 };
 
-// A lead surfaced as a "call reminder" in the notification bell.
+// A lead OR employee surfaced as a "call reminder" in the notification bell.
 //   due → a scheduled callback whose date+time has arrived
 //   new → a fresh, uncontacted lead with no scheduled callback
 export type ReminderKind = "due" | "new";
@@ -46,4 +46,6 @@ export interface CallReminder {
   phone: string | null;
   reason: string;
   kind: ReminderKind;
+  /** Detail-page URL — `/admin/<id>` for leads, `/admin/employees/<id>` for employees. */
+  href: string;
 }

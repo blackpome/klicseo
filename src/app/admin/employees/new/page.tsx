@@ -6,7 +6,7 @@ import { listJobs } from "@/lib/jobs";
 export default async function NewEmployeePage() {
   const jobs = await listJobs();
   return (
-    <AdminShell require="employees.manage">
+    <AdminShell require="employees.manage" section="employees">
       <div className="max-w-5xl">
         <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
           Add Employee

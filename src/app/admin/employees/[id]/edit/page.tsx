@@ -19,7 +19,7 @@ export default async function EditEmployeePage({
     employee = await getEmployee(id);
   } catch (err) {
     return (
-      <AdminShell require="employees.manage">
+      <AdminShell require="employees.manage" section="employees">
         <AdminError err={err} />
       </AdminShell>
     );
@@ -29,7 +29,7 @@ export default async function EditEmployeePage({
   const jobs = await listJobs();
 
   return (
-    <AdminShell require="employees.manage">
+    <AdminShell require="employees.manage" section="employees">
       <div className="max-w-5xl">
         <Link
           href={`/admin/employees/${id}`}

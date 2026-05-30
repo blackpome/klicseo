@@ -10,6 +10,9 @@ export interface PaymentRow {
   lead_id: string;
   period: string; // YYYY-MM
   amount: number | null;
+  /** Extra rupees collected on top of `amount` (e.g. cash given "for next month").
+   *  Informational — does not auto-credit future months. */
+  advance_amount: number;
   status: PaymentStatus;
   method: string | null;
   paid_at: string | null;
@@ -20,6 +23,7 @@ export interface PaymentInput {
   lead_id: string;
   period: string;
   amount: number | null;
+  advance_amount: number;
   status: PaymentStatus;
   method: string | null;
   paid_at: string | null;

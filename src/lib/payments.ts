@@ -5,7 +5,7 @@ import type { PaymentInput, PaymentRow } from "./payments-shared";
 
 export * from "./payments-shared";
 
-const COLS = "id,lead_id,period,amount,status,method,paid_at,notes";
+const COLS = "id,lead_id,period,amount,advance_amount,status,method,paid_at,notes";
 
 /** Decrypt the `notes` column on a payment row (encrypted at rest). */
 function unsealRow(row: PaymentRow): PaymentRow {

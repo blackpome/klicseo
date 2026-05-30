@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { currentAdmin } from "@/lib/admin-auth";
 import { type Permission } from "@/lib/admin-users-shared";
-import { listCallReminders, type CallReminder } from "@/lib/leads";
+import { listCallReminders } from "@/lib/leads";
+import { listEmployeeCallReminders } from "@/lib/employees";
+import type { CallReminder } from "@/lib/leads-shared";
 import Sidebar, { type NavGroup } from "./Sidebar";
 import AuthSessionGuard from "./AuthSessionGuard";
 
@@ -13,9 +15,12 @@ import AuthSessionGuard from "./AuthSessionGuard";
 export default async function AdminShell({
   children,
   require,
+  section = "leads",
 }: {
   children: React.ReactNode;
   require?: Permission;
+  /** Which reminder feed powers the bell on this page. Defaults to "leads". */
+  section?: "leads" | "employees";
 }) {
   const me = await currentAdmin();
   if (!me) redirect("/admin/login");
@@ -59,11 +64,14 @@ export default async function AdminShell({
     });
   }
 
-  // Call reminders power the notification bell — only for users who can see leads.
+  // Call reminders power the notification bell. The feed depends on the
+  // current section: employees pages surface employee call reminders, every
+  // other admin page surfaces lead call reminders. Same bell component either way.
+  const bellPermission: Permission = section === "employees" ? "employees.view" : "leads.view";
   let reminders: CallReminder[] = [];
-  if (can("leads.view")) {
+  if (can(bellPermission)) {
     try {
-      reminders = await listCallReminders();
+      reminders = section === "employees" ? await listEmployeeCallReminders() : await listCallReminders();
     } catch {
       reminders = []; // a DB hiccup shouldn't break the whole shell
     }
@@ -79,7 +87,7 @@ export default async function AdminShell({
         email={me.email}
         role={me.role}
         reminders={reminders}
-        showBell={can("leads.view")}
+        showBell={can(bellPermission)}
       />
       <main className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
         {denied ? (

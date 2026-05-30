@@ -24,13 +24,25 @@ export default function PaymentsTable({ period, periodLabel, items }: { period: 
   const totals = useMemo(() => {
     let paidCount = 0;
     let paidSum = 0;
+    let advanceSum = 0;
+    let totalDue = 0;
     for (const it of items) {
-      if (it.payment?.status === "paid") {
+      const isPaid = it.payment?.status === "paid";
+      const arrears = it.dueCount > 0 && it.dueUnit > 0 ? it.dueCount * it.dueUnit : 0;
+      // What this customer still owes: cumulative arrears for monthlies; for
+      // non-monthlies their order price if unpaid, else 0.
+      const outstanding = arrears > 0 ? arrears : (isPaid ? 0 : (it.customer.price_total ?? 0));
+      totalDue += outstanding;
+      // Advance is a field on the payment row regardless of status.
+      advanceSum += it.payment?.advance_amount ?? 0;
+      if (isPaid) {
         paidCount++;
-        paidSum += it.payment.amount ?? 0;
+        paidSum += it.payment?.amount ?? 0;
       }
     }
-    return { paidCount, paidSum, pendingCount: items.length - paidCount };
+    const collected = paidSum + advanceSum;
+    const pending = Math.max(0, totalDue - advanceSum);
+    return { paidCount, paidSum, advanceSum, collected, totalDue, pending, pendingCount: items.length - paidCount };
   }, [items]);
 
   const filtered = useMemo(() => {
@@ -65,7 +77,22 @@ export default function PaymentsTable({ period, periodLabel, items }: { period: 
     <div className="space-y-3">
       {/* Totals */}
       <div className="flex flex-wrap gap-2 text-xs">
-        <span className="px-3 py-1.5 rounded-full bg-emerald-500/15 text-emerald-300">Collected · {inr(totals.paidSum)}</span>
+        <span className="px-3 py-1.5 rounded-full bg-white/10 text-white/75">Total · {inr(totals.totalDue)}</span>
+        <span className="px-3 py-1.5 rounded-full bg-emerald-500/15 text-emerald-300">
+          Collected · {inr(totals.collected)}
+          {totals.advanceSum > 0 && (
+            <span className="ml-1 text-emerald-300/70">(incl. {inr(totals.advanceSum)} advance)</span>
+          )}
+        </span>
+        <span
+          className={`px-3 py-1.5 rounded-full ${
+            totals.pending === 0
+              ? "bg-emerald-500/15 text-emerald-300"
+              : "bg-amber-500/15 text-amber-300"
+          }`}
+        >
+          Pending · {inr(totals.pending)}
+        </span>
         <span className="px-3 py-1.5 rounded-full bg-white/5 text-white/55">{items.length} customers</span>
       </div>
 
@@ -91,16 +118,22 @@ export default function PaymentsTable({ period, periodLabel, items }: { period: 
         </div>
       ) : (
         <div className="space-y-2.5">
-          {filtered.map((it) => (
-            <PaymentRow
-              key={it.customer.id}
-              period={period}
-              periodLabel={periodLabel}
-              customer={it.customer}
-              payment={it.payment}
-              dueCount={it.dueCount}
-              dueUnit={it.dueUnit}
-            />
+          {filtered.map((it, i) => (
+            <div key={it.customer.id} className="flex items-start gap-2.5">
+              <span className="mt-3 w-7 shrink-0 text-right text-[11px] font-semibold tabular-nums text-white/40">
+                {i + 1}.
+              </span>
+              <div className="flex-1 min-w-0">
+                <PaymentRow
+                  period={period}
+                  periodLabel={periodLabel}
+                  customer={it.customer}
+                  payment={it.payment}
+                  dueCount={it.dueCount}
+                  dueUnit={it.dueUnit}
+                />
+              </div>
+            </div>
           ))}
         </div>
       )}

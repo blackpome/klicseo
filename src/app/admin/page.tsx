@@ -150,6 +150,7 @@ export default async function AdminLeadsPage({
           <table className="w-full text-sm">
             <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
               <tr>
+                <th className="text-left px-3 py-2 font-semibold">#</th>
                 <th className="text-left px-3 py-2 font-semibold">When</th>
                 <th className="text-left px-3 py-2 font-semibold">Name</th>
                 <th className="text-left px-3 py-2 font-semibold">Phone</th>
@@ -163,8 +164,9 @@ export default async function AdminLeadsPage({
               </tr>
             </thead>
             <tbody>
-              {leads.map((l) => (
+              {leads.map((l, i) => (
                 <tr key={l.id} className="border-t border-white/5 hover:bg-white/[0.02]">
+                  <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{i + 1}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-white/60 text-xs">
                     {new Date(l.created_at).toLocaleString("en-IN", {
                       day: "2-digit",

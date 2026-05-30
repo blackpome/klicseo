@@ -27,6 +27,9 @@ export interface CatalogOption {
   recurring: Recurring;
   has_outside_variant: boolean;
   has_addon: boolean;
+  /** True when this option IS an interior add-on: rendered as a toggle under a
+   *  sibling base option in the wizard, never as its own card. */
+  is_addon: boolean;
   sort_order: number;
   enabled: boolean;
   legacy_id: string | null;
@@ -49,4 +52,26 @@ export interface ServiceCatalog {
   priceLines: CatalogPriceLine[];
   // Lookup helpers populated by serviceCatalog.ts
   byLegacyLine: Record<string, CatalogPriceLine>;
+}
+
+/**
+ * The enabled interior add-on option for a category (the one flagged is_addon),
+ * or null when none / disabled. Used by the wizard to decide whether to show the
+ * "Add interior…" toggle and where to read its price from.
+ */
+export function interiorAddonOptionFor(
+  catalog: ServiceCatalog,
+  categoryId: string,
+): CatalogOption | null {
+  return (
+    catalog.options.find((o) => o.category_id === categoryId && o.is_addon && o.enabled) ?? null
+  );
+}
+
+/** The base price line owned by an option (its per-tier price), or null. */
+export function baseLineForOption(
+  catalog: ServiceCatalog,
+  optionId: string,
+): CatalogPriceLine | null {
+  return catalog.priceLines.find((l) => l.option_id === optionId && l.kind === "base") ?? null;
 }

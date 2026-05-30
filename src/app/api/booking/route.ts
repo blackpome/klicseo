@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { insertLead, promoteLeadDraft } from "@/lib/leads";
-import { isServiceOptionId, type ServiceOptionId, type ParkingLocation } from "@/lib/pricing";
-import { carPriceFor, carPriceForCatalog, type CarPrices } from "@/lib/carPricing";
+import { type ParkingLocation } from "@/lib/pricing";
+import { combinedPrice, type CarPriceResult, type CarPrices } from "@/lib/carPricing";
 import { getServiceDiscounts, getDiscountConfig } from "@/lib/discounts";
 import { getSiteSettings } from "@/lib/site-settings";
 import { getServiceCatalog } from "@/lib/serviceCatalog";
@@ -31,16 +31,13 @@ export async function POST(req: NextRequest) {
   const parking = ((body.parkingLocation as ParkingLocation) || "") as ParkingLocation;
   const interiorAddOn = Boolean(body.interiorAddOn);
 
-  // Legacy options use the keyed pricing path; admin-created options resolve
-  // via the catalog. Both code paths apply the badge-on/off discount gate.
-  let priced = null as ReturnType<typeof carPriceFor> | null;
-  if (carPrices) {
-    if (isServiceOptionId(serviceOption)) {
-      priced = carPriceFor(carPrices, serviceOption as ServiceOptionId, parking, interiorAddOn, discounts);
-    } else if (serviceOption) {
-      const [catalog, cfg] = await Promise.all([getServiceCatalog(), getDiscountConfig()]);
-      priced = carPriceForCatalog(carPrices, serviceOption, parking, interiorAddOn, catalog, cfg.percentsByLineId, cfg.badgesByLineId);
-    }
+  // Base price (legacy keyed path or catalog path) plus the category's interior
+  // add-on (its own catalog line). Same helper the wizard uses, so the charged
+  // total matches what the customer saw. Both paths apply the discount badge gate.
+  let priced: CarPriceResult | null = null;
+  if (carPrices && serviceOption) {
+    const [catalog, cfg] = await Promise.all([getServiceCatalog(), getDiscountConfig()]);
+    priced = combinedPrice(carPrices, serviceOption, parking, interiorAddOn, catalog, discounts, cfg.percentsByLineId, cfg.badgesByLineId);
   }
 
   const settings = await getSiteSettings();

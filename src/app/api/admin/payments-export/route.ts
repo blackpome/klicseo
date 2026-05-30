@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
         Period: period,
         Status: p?.status ?? "pending",
         Amount: p?.amount ?? c.price_total ?? "",
+        Advance: p?.advance_amount ?? 0,
         Method: p?.method ?? "",
         "Paid Date": p?.paid_at ?? "",
         "Months Unpaid": dueCount,

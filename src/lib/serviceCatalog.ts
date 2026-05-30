@@ -195,6 +195,9 @@ export interface NewOption {
   recurring: "monthly" | "one_time";
   hasOutsideVariant: boolean;
   hasAddon: boolean;
+  /** When true, this option IS the category's interior add-on: it gets a single
+   *  base price line (the per-tier add-on price) and never an outside/addon line. */
+  isAddon?: boolean;
 }
 
 /**
@@ -210,6 +213,7 @@ export interface NewOption {
  */
 export async function createOption(input: NewOption): Promise<string> {
   const sb = supabase();
+  const isAddon = input.isAddon === true;
   const slug = await uniqueSlug("service_options", slugify(input.label));
   const sort = await nextOptionSortOrder(input.categoryId);
   const { data, error } = await sb
@@ -221,8 +225,10 @@ export async function createOption(input: NewOption): Promise<string> {
       short_label: input.shortLabel,
       blurb: input.blurb,
       recurring: input.recurring,
-      has_outside_variant: input.hasOutsideVariant,
-      has_addon: input.hasAddon,
+      // An add-on option carries neither an outside variant nor its own add-on.
+      has_outside_variant: isAddon ? false : input.hasOutsideVariant,
+      has_addon: isAddon ? false : input.hasAddon,
+      is_addon: isAddon,
       sort_order: sort,
       enabled: true,
     })
@@ -231,21 +237,22 @@ export async function createOption(input: NewOption): Promise<string> {
   if (error) throw error;
   const optionId = (data as { id: string }).id;
 
-  // base line — required
+  // base line — required. For an add-on option this single line is its per-tier
+  // add-on price (rendered as the interior price box in the Cars tab).
   const lineRows: Array<{
     category_id: string; option_id: string | null; kind: "base" | "outside" | "addon";
     label: string; sort_order: number;
   }> = [
     { category_id: input.categoryId, option_id: optionId, kind: "base", label: input.label, sort_order: 1 },
   ];
-  if (input.hasOutsideVariant) {
+  if (!isAddon && input.hasOutsideVariant) {
     lineRows.push({ category_id: input.categoryId, option_id: optionId, kind: "outside", label: `Outside ${input.label}`, sort_order: 2 });
   }
   const { error: linesErr } = await sb.from("service_price_lines").insert(lineRows);
   if (linesErr) throw linesErr;
 
   // Category-level addon: only create if the category doesn't already have one.
-  if (input.hasAddon) {
+  if (!isAddon && input.hasAddon) {
     const { data: existing } = await sb
       .from("service_price_lines")
       .select("id")

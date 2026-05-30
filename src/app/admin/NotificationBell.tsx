@@ -57,7 +57,7 @@ export default function NotificationBell({
                   return (
                     <Link
                       key={it.id}
-                      href={`/admin/${it.id}`}
+                      href={it.href}
                       onClick={() => setOpen(false)}
                       className="flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/[0.04]"
                     >

@@ -147,7 +147,8 @@ export async function createOptionAction(
     const recurring = String(formData.get("recurring") ?? "one_time") === "monthly" ? "monthly" : "one_time";
     const hasOutsideVariant = formData.get("has_outside_variant") === "true";
     const hasAddon = formData.get("has_addon") === "true";
-    const id = await createOption({ categoryId, label, shortLabel, blurb, recurring, hasOutsideVariant, hasAddon });
+    const isAddon = formData.get("is_addon") === "true";
+    const id = await createOption({ categoryId, label, shortLabel, blurb, recurring, hasOutsideVariant, hasAddon, isAddon });
     await logAudit("service.option.create", { entity: "booking", entityId: id, summary: `Created sub-category "${label}"` });
     refresh();
     return { ok: "Created." };

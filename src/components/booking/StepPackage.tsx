@@ -12,7 +12,8 @@ import {
   inr,
   CATEGORY_COLORS,
 } from "@/lib/pricing";
-import { carPriceFor, carPriceForCatalog } from "@/lib/carPricing";
+import { carPriceFor, carPriceForCatalog, linePrice, type LinePriceResult, type CarPriceResult } from "@/lib/carPricing";
+import { interiorAddonOptionFor, baseLineForOption } from "@/lib/serviceCatalog-shared";
 import { useServiceDiscounts, useDiscountsByLineId } from "@/components/DiscountContext";
 import { flag } from "@/lib/site-settings-shared";
 import { useSiteSettings } from "@/components/SiteSettingsContext";
@@ -42,6 +43,8 @@ interface OptionRow {
   id: string;
   label: string;
   blurb: string;
+  /** Whether this base option offers the category's interior add-on. */
+  hasAddon: boolean;
 }
 
 /**
@@ -61,6 +64,7 @@ function buildOptionRows(
       id,
       label: SERVICE_OPTIONS[id as keyof typeof SERVICE_OPTIONS].label,
       blurb: SERVICE_OPTIONS[id as keyof typeof SERVICE_OPTIONS].blurb,
+      hasAddon: !!SERVICE_OPTIONS[id as keyof typeof SERVICE_OPTIONS].addOn,
     }));
   }
 
@@ -68,7 +72,8 @@ function buildOptionRows(
   if (!catCat) return [];
 
   return catalog.options
-    .filter((o) => o.category_id === catCat.id && o.enabled)
+    // Add-on options are never cards — they render as the interior toggle below.
+    .filter((o) => o.category_id === catCat.id && o.enabled && !o.is_addon)
     .filter((o) => (o.legacy_id ? allowedLegacy.has(o.legacy_id) : true))
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((o) => {
@@ -77,6 +82,7 @@ function buildOptionRows(
         id: legacy ?? o.slug,
         label: o.label,
         blurb: o.blurb ?? (legacy ? SERVICE_OPTIONS[legacy as keyof typeof SERVICE_OPTIONS]?.blurb ?? "" : ""),
+        hasAddon: o.has_addon,
       };
     });
 }
@@ -104,19 +110,38 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
   const showDiscount = flag(booking, "package", "showDiscount");
   const packageTitle = stepCopy(booking, "package").title;
   const cp = data.carPrices;
-  function optPrice(id: string, withAddOn = false) {
+  // Base price for an option (no add-on). Legacy options use the fast keyed
+  // path; admin-created options resolve through the catalog.
+  function basePrice(id: string): CarPriceResult | null {
     if (!cp) return null;
-    // Legacy options use the fast direct-keyed path. Admin-created options
-    // resolve their lines through the catalog.
     if (isServiceOptionId(id)) {
-      return carPriceFor(cp, id, data.parkingLocation, withAddOn, discounts);
+      return carPriceFor(cp, id, data.parkingLocation, false, discounts);
     }
     if (!settings.catalog) return null;
-    return carPriceForCatalog(cp, id, data.parkingLocation, withAddOn, settings.catalog, percentsByLineId, badgesByLineId);
+    return carPriceForCatalog(cp, id, data.parkingLocation, false, settings.catalog, percentsByLineId, badgesByLineId);
   }
 
+  // The category's interior add-on: an enabled catalog option flagged is_addon,
+  // plus its own base price line. Drives the toggle's visibility AND its price.
+  const catCat = category ? settings.catalog?.categories.find((c) => c.legacy_key === category) ?? null : null;
+  const interiorOpt = settings.catalog && catCat ? interiorAddonOptionFor(settings.catalog, catCat.id) : null;
+  const interiorLine = settings.catalog && interiorOpt ? baseLineForOption(settings.catalog, interiorOpt.id) : null;
+  const interiorPriced: LinePriceResult | null =
+    cp && interiorLine ? linePrice(cp, interiorLine.id, percentsByLineId, badgesByLineId) : null;
+
   const carLabel = [data.carBrand, data.carModel].filter(Boolean).join(" ");
-  const selectedPriced = optPrice(selectedOption, data.interiorAddOn);
+  const selectedRow = optionRows.find((r) => r.id === selectedOption);
+  // Interior toggle shows only when the selected base service offers it and the
+  // category's interior add-on is enabled by the admin.
+  const interiorAvailable = !!selectedRow?.hasAddon && !!interiorOpt && !!interiorLine;
+  const addOnOn = interiorAvailable && data.interiorAddOn;
+  const selectedBase = basePrice(selectedOption);
+  // Combined base + (optional) interior add-on for the estimated-total panel.
+  const addOnNet = addOnOn && interiorPriced ? interiorPriced.net : 0;
+  const addOnStrike = addOnOn && interiorPriced ? interiorPriced.strike : 0;
+  const totalNet = selectedBase ? selectedBase.discountedTotal + addOnNet : 0;
+  const totalStrike = selectedBase ? selectedBase.total + addOnStrike : 0;
+  const totalHasDiscount = !!selectedBase && (selectedBase.hasDiscount || (addOnOn && !!interiorPriced?.hasDiscount));
 
   function handleContinue() {
     if (selectedDef) {
@@ -185,8 +210,7 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
           const baseDef = isServiceOptionId(id) ? SERVICE_OPTIONS[id] : { recurring: "one-time" as const, addOn: undefined };
           const opt = { ...baseDef, label: row.label, blurb: row.blurb };
           const selected = selectedOption === id;
-          const p = optPrice(id, false);
-          const pAdd = optPrice(id, true);
+          const p = basePrice(id);
           // Show the strike + offer chip only when an admin-entered MRP exists
           // (p.hasDiscount = strike > net). The `% OFF` text inside the chip
           // still comes from the discount tab; admin manages the two
@@ -241,9 +265,9 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
                     )}
                   </div>
                   <p className="text-white/40 text-[11px] mb-1">{opt.blurb}</p>
-                  {opt.addOn && pAdd && pAdd.addOn > 0 && (
+                  {row.hasAddon && interiorOpt && interiorPriced && interiorPriced.net > 0 && (
                     <p className="text-[10px] text-white/35">
-                      {opt.addOn.label}: +{inr(pAdd.discountedAddOn)}
+                      {interiorOpt.label}: +{inr(interiorPriced.net)}
                     </p>
                   )}
                 </div>
@@ -281,8 +305,8 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
       {errOption && <p className="text-[11px] text-red-300 mt-2 mb-3">Pick an option to continue.</p>}
       {!errOption && <div className="mb-3" />}
 
-      {/* Interior add-on — Ceramic Sealant / One-Time Manual */}
-      {selectedDef?.addOn && (
+      {/* Interior add-on — one per category, admin-managed (catalog is_addon). */}
+      {interiorAvailable && interiorOpt && (
         <button
           onClick={toggleAddOn}
           className={`w-full flex items-center justify-between gap-3 px-3 py-3 rounded-xl border text-left mb-4 transition-all ${
@@ -306,25 +330,20 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
               {data.interiorAddOn && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
             </div>
             <div>
-              <p className="text-sm font-semibold text-white leading-tight">{selectedDef.addOn.label}</p>
+              <p className="text-sm font-semibold text-white leading-tight">{interiorOpt.label}</p>
               <p className="text-[11px] text-white/45 mt-0.5">
-                {selectedDef.category === "CarDetailing"
-                  ? `Pair full interior detailing with ${selectedDef.shortLabel}`
-                  : "Add interior cleaning to this visit"}
+                {interiorOpt.blurb ?? "Add interior cleaning to this service"}
               </p>
             </div>
           </div>
           <span className="text-sm font-bold whitespace-nowrap" style={{ color: accent }}>
-            {(() => {
-              const pAdd = optPrice(selectedOption, true);
-              return pAdd && pAdd.addOn > 0 ? `+${inr(pAdd.discountedAddOn)}` : "on call";
-            })()}
+            {interiorPriced && interiorPriced.net > 0 ? `+${inr(interiorPriced.net)}` : "on call"}
           </span>
         </button>
       )}
 
       {/* Total preview / call-back fallback */}
-      {selectedDef && selectedPriced && (
+      {selectedDef && selectedBase && (
         <div
           className="flex items-center justify-between px-4 py-3 rounded-xl mb-5"
           style={{
@@ -340,19 +359,19 @@ export default function StepPackage({ data, update, onNext, onBack }: Props) {
             </p>
           </div>
           <span className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: accent }}>
-            {selectedPriced.hasDiscount && showDiscount && (
+            {totalHasDiscount && showDiscount && (
               <span
                 className="inline-block align-middle text-sm font-bold text-white line-through decoration-white/80 decoration-1 px-2 py-0.5 rounded-md shadow-[0_2px_8px_rgba(220,38,38,0.4)] mr-2"
                 style={{ background: "linear-gradient(135deg,#DC2626 0%,#F97316 100%)" }}
               >
-                {inr(selectedPriced.total)}
+                {inr(totalStrike)}
               </span>
             )}
-            {inr(selectedPriced.discountedTotal)}
+            {inr(totalNet)}
           </span>
         </div>
       )}
-      {selectedDef && !selectedPriced && (
+      {selectedDef && !selectedBase && (
         <div
           className="flex items-start gap-2 px-4 py-3 rounded-xl mb-5 text-[12px] leading-snug text-amber-200"
           style={{ background: "rgba(251, 191, 36, 0.08)", border: "1px solid rgba(251, 191, 36, 0.30)" }}

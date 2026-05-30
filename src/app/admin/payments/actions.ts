@@ -27,6 +27,9 @@ export async function savePaymentAction(
     const status: PaymentStatus = formData.get("status") === "paid" ? "paid" : "pending";
     const amountRaw = String(formData.get("amount") ?? "").trim();
     const amount = amountRaw === "" ? null : Math.max(0, Math.round(Number(amountRaw)));
+    const advanceRaw = String(formData.get("advance") ?? "").trim();
+    const advanceParsed = advanceRaw === "" ? 0 : Math.max(0, Math.round(Number(advanceRaw)));
+    const advance_amount = Number.isFinite(advanceParsed) ? advanceParsed : 0;
     const methodRaw = String(formData.get("method") ?? "").trim();
     const method = (PAYMENT_METHODS as readonly string[]).includes(methodRaw) ? methodRaw : null;
     const paidRaw = String(formData.get("paid_at") ?? "").trim();
@@ -37,13 +40,14 @@ export async function savePaymentAction(
     // Look up the existing payment row (if any) for the audit before-snapshot.
     const existing = (await listPeriodPayments(period)).find((p) => p.lead_id === lead_id) ?? null;
     const beforeSnap = existing
-      ? { status: existing.status, amount: existing.amount, method: existing.method, paid_at: existing.paid_at, notes: existing.notes }
+      ? { status: existing.status, amount: existing.amount, advance_amount: existing.advance_amount, method: existing.method, paid_at: existing.paid_at, notes: existing.notes }
       : null;
 
     await upsertPayment({
       lead_id,
       period,
       amount: amount != null && Number.isFinite(amount) ? amount : null,
+      advance_amount,
       status,
       method,
       paid_at,
@@ -53,10 +57,10 @@ export async function savePaymentAction(
     await logAudit("payment.save", {
       entity: "payment",
       entityId: lead_id,
-      summary: `Payment ${period} → ${status}${amount != null ? ` (₹${amount})` : ""}`,
+      summary: `Payment ${period} → ${status}${amount != null ? ` (₹${amount})` : ""}${advance_amount > 0 ? ` + advance ₹${advance_amount}` : ""}`,
       metadata: { period },
       before: beforeSnap,
-      after: { status, amount, method, paid_at, notes },
+      after: { status, amount, advance_amount, method, paid_at, notes },
     });
     revalidatePath("/admin/payments");
     revalidatePath(`/admin/${lead_id}`);

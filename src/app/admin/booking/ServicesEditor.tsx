@@ -198,7 +198,14 @@ function OptionList({
               ) : (
                 <div className="flex items-start justify-between gap-2 flex-wrap pl-9">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold">{opt.label}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold">{opt.label}</p>
+                      {opt.is_addon && (
+                        <span className="inline-flex items-center rounded-md bg-[#10b981]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#10b981] ring-1 ring-[#10b981]/30">
+                          Add-on
+                        </span>
+                      )}
+                    </div>
                     {(opt.short_label || opt.blurb) && (
                       <p className="text-[11px] text-white/40">
                         {opt.short_label && <span>Short: {opt.short_label}</span>}
@@ -207,9 +214,10 @@ function OptionList({
                       </p>
                     )}
                     <p className="text-[10px] text-white/30 mt-0.5">
-                      {opt.recurring === "monthly" ? "Recurring" : "One-time"}
-                      {opt.has_outside_variant && " · outside variant"}
-                      {opt.has_addon && " · has add-on"}
+                      {opt.is_addon ? "Interior add-on" : opt.recurring === "monthly" ? "Recurring" : "One-time"}
+                      {!opt.is_addon && opt.has_outside_variant && " · outside variant"}
+                      {!opt.is_addon && opt.has_addon && " · has add-on"}
+                      {opt.is_addon && " · shows as toggle under a service"}
                       {!opt.enabled && " · hidden"}
                     </p>
                   </div>
@@ -506,6 +514,7 @@ function NewOptionForm({ categoryId, onDone }: { categoryId: string; onDone: () 
   const [recurring, setRecurring] = useState<"monthly" | "one_time">("one_time");
   const [hasOutside, setHasOutside] = useState(false);
   const [hasAddon, setHasAddon] = useState(false);
+  const [isAddon, setIsAddon] = useState(false);
   useEffect(() => { if (state.ok) onDone(); }, [state.ok, onDone]);
 
   const submit = () => {
@@ -517,6 +526,7 @@ function NewOptionForm({ categoryId, onDone }: { categoryId: string; onDone: () 
     fd.set("recurring", recurring);
     fd.set("has_outside_variant", hasOutside ? "true" : "false");
     fd.set("has_addon", hasAddon ? "true" : "false");
+    fd.set("is_addon", isAddon ? "true" : "false");
     startTransition(() => dispatch(fd));
   };
 
@@ -543,27 +553,34 @@ function NewOptionForm({ categoryId, onDone }: { categoryId: string; onDone: () 
         className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#C9A84C]"
       />
       <div className="flex flex-wrap items-center gap-2 text-[11px]">
-        <div className="inline-flex rounded-lg bg-black/30 ring-1 ring-white/10 p-0.5">
-          <button
-            type="button"
-            onClick={() => setRecurring("one_time")}
-            className={`px-2.5 py-1 rounded-md font-semibold ${recurring === "one_time" ? "bg-[#C9A84C] text-[#050E21]" : "text-white/60"}`}
-          >
-            One-time
-          </button>
-          <button
-            type="button"
-            onClick={() => setRecurring("monthly")}
-            className={`px-2.5 py-1 rounded-md font-semibold ${recurring === "monthly" ? "bg-[#C9A84C] text-[#050E21]" : "text-white/60"}`}
-          >
-            Recurring
-          </button>
-        </div>
-        <FlagChip on={hasOutside} onToggle={() => setHasOutside((v) => !v)} label="Outside variant" />
-        <FlagChip on={hasAddon} onToggle={() => setHasAddon((v) => !v)} label="Has add-on" />
+        <FlagChip on={isAddon} onToggle={() => setIsAddon((v) => !v)} label="Is interior add-on" />
+        {!isAddon && (
+          <>
+            <div className="inline-flex rounded-lg bg-black/30 ring-1 ring-white/10 p-0.5">
+              <button
+                type="button"
+                onClick={() => setRecurring("one_time")}
+                className={`px-2.5 py-1 rounded-md font-semibold ${recurring === "one_time" ? "bg-[#C9A84C] text-[#050E21]" : "text-white/60"}`}
+              >
+                One-time
+              </button>
+              <button
+                type="button"
+                onClick={() => setRecurring("monthly")}
+                className={`px-2.5 py-1 rounded-md font-semibold ${recurring === "monthly" ? "bg-[#C9A84C] text-[#050E21]" : "text-white/60"}`}
+              >
+                Recurring
+              </button>
+            </div>
+            <FlagChip on={hasOutside} onToggle={() => setHasOutside((v) => !v)} label="Outside variant" />
+            <FlagChip on={hasAddon} onToggle={() => setHasAddon((v) => !v)} label="Has add-on" />
+          </>
+        )}
       </div>
       <p className="text-[10px] text-white/35">
-        A &ldquo;base&rdquo; price line is always created. Outside variant adds an &ldquo;outside&rdquo; line; has add-on creates a category-level add-on line if one doesn&apos;t exist.
+        {isAddon
+          ? "An add-on shows as a toggle under the services in this category (never its own card). It gets one price line — set its per-tier price in the Cars tab."
+          : "A “base” price line is always created. Outside variant adds an “outside” line; has add-on creates a category-level add-on line if one doesn’t exist."}
       </p>
       <div className="flex items-center gap-2">
         <button

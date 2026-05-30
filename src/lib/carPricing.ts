@@ -10,11 +10,16 @@ import {
   addOnLineFor,
   baseLineFor,
   resolveStrikePrice,
+  isServiceOptionId,
   type ServiceOptionId,
   type ParkingLocation,
   type ServiceDiscounts,
 } from "./pricing";
-import type { ServiceCatalog } from "./serviceCatalog-shared";
+import {
+  interiorAddonOptionFor,
+  baseLineForOption,
+  type ServiceCatalog,
+} from "./serviceCatalog-shared";
 
 // Mirrors the price columns on public.cars (see migration 0004). Null = the
 // sheet had no price for that service on this car.
@@ -191,6 +196,80 @@ export function carPriceFor(
     discountedTotal: netBase + netAddOn,
     hasDiscount,
   };
+}
+
+/**
+ * Full price for a selected service = its base price + (optionally) the
+ * category's interior add-on, which lives on its own catalog price line. This is
+ * the single source of truth shared by the package step, the confirm step, and
+ * the booking-submit API so the displayed and charged totals always agree.
+ *
+ * Base price uses the legacy keyed path for legacy options and the catalog path
+ * for admin-created ones. The interior add-on is always read from the category's
+ * is_addon option's base line. Returns null when the base price is unavailable.
+ */
+export function combinedPrice(
+  prices: CarPrices,
+  serviceOption: string,
+  parking: ParkingLocation,
+  withInterior: boolean,
+  catalog: ServiceCatalog,
+  discounts: ServiceDiscounts,
+  percentsByLineId: Record<string, number>,
+  badgesByLineId: Record<string, boolean>,
+): CarPriceResult | null {
+  const base = isServiceOptionId(serviceOption)
+    ? carPriceFor(prices, serviceOption, parking, false, discounts)
+    : carPriceForCatalog(prices, serviceOption, parking, false, catalog, percentsByLineId, badgesByLineId);
+  if (!base) return null;
+
+  const opt = catalog.options.find((o) => (o.legacy_id ?? o.slug) === serviceOption);
+  const interiorOpt = opt?.has_addon ? interiorAddonOptionFor(catalog, opt.category_id) : null;
+  const interiorLine = interiorOpt ? baseLineForOption(catalog, interiorOpt.id) : null;
+  const addon = withInterior && interiorLine ? linePrice(prices, interiorLine.id, percentsByLineId, badgesByLineId) : null;
+  if (!addon) return base;
+
+  return {
+    base: base.base,
+    addOn: addon.strike,
+    total: base.total + addon.strike,
+    basePercent: base.basePercent,
+    addOnPercent: addon.percent,
+    discountedBase: base.discountedBase,
+    discountedAddOn: addon.net,
+    discountedTotal: base.discountedTotal + addon.net,
+    hasDiscount: base.hasDiscount || addon.hasDiscount,
+  };
+}
+
+export interface LinePriceResult {
+  /** Net price the customer pays. */
+  net: number;
+  /** Strike-through ("was") price: explicit MRP override if greater, else net. */
+  strike: number;
+  percent: number;
+  hasDiscount: boolean;
+}
+
+/**
+ * Price for a single catalog price line (by id), honouring the per-line discount
+ * badge gate and MRP override. Used for catalog-driven interior add-ons whose
+ * price lives on their own base line. Returns null when the car has no amount
+ * for that line (→ caller hides the add-on / shows "on call").
+ */
+export function linePrice(
+  prices: CarPrices,
+  lineId: string,
+  percentsByLineId: Record<string, number>,
+  badgesByLineId: Record<string, boolean>,
+): LinePriceResult | null {
+  const net = (prices.amounts ?? {})[lineId] ?? null;
+  if (net == null) return null;
+  const enabled = badgesByLineId[lineId] !== false;
+  const percent = enabled ? (percentsByLineId[lineId] ?? 0) : 0;
+  const mrpOverride = (prices.mrpAmounts ?? {})[lineId] ?? null;
+  const strike = resolveStrikePrice(net, percent, mrpOverride) ?? net;
+  return { net, strike, percent, hasDiscount: strike > net };
 }
 
 /**

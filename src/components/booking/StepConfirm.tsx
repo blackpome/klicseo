@@ -7,7 +7,8 @@ import { CheckCircle, Car, User, MapPin, Calendar, Sparkles, Home, Sunrise, Suns
 import type { BookingData } from "./BookingWizard";
 import { clearBookingDraft } from "./BookingWizard";
 import { SERVICE_OPTIONS, isServiceOptionId, inr, baseLineFor, CATEGORY_COLORS } from "@/lib/pricing";
-import { carPriceFor, carPriceForCatalog } from "@/lib/carPricing";
+import { combinedPrice } from "@/lib/carPricing";
+import { interiorAddonOptionFor } from "@/lib/serviceCatalog-shared";
 import { useServiceDiscounts, useBadges, useDiscountsByLineId } from "@/components/DiscountContext";
 import { useSiteSettings } from "@/components/SiteSettingsContext";
 import { stepCopy, msg, flag } from "@/lib/site-settings-shared";
@@ -57,20 +58,17 @@ export default function StepConfirm({ data, onBack }: Props) {
       (isServiceOptionId(data.serviceOption) && badges[baseLineFor(data.serviceOption, data.parkingLocation)])
       || (!!data.serviceOption && !isServiceOptionId(data.serviceOption))
     );
-  const priced = (() => {
-    if (!data.carPrices) return null;
-    if (isServiceOptionId(data.serviceOption)) {
-      return carPriceFor(data.carPrices, data.serviceOption, data.parkingLocation, data.interiorAddOn, discounts);
-    }
-    if (data.serviceOption && settings.catalog) {
-      return carPriceForCatalog(
-        data.carPrices, data.serviceOption, data.parkingLocation, data.interiorAddOn,
-        settings.catalog, percentsByLineId, badgesByLineId,
-      );
-    }
-    return null;
-  })();
+  const priced =
+    data.carPrices && data.serviceOption && settings.catalog
+      ? combinedPrice(
+          data.carPrices, data.serviceOption, data.parkingLocation, data.interiorAddOn,
+          settings.catalog, discounts, percentsByLineId, badgesByLineId,
+        )
+      : null;
   const total = priced?.discountedTotal ?? null;
+  // The category's interior add-on option (for the summary label).
+  const catCat = data.service ? settings.catalog?.categories.find((c) => c.legacy_key === data.service) ?? null : null;
+  const interiorOpt = settings.catalog && catCat ? interiorAddonOptionFor(settings.catalog, catCat.id) : null;
   const isMonthly = optionDef?.recurring === "monthly";
   const carLabel = [data.carBrand, data.carModel].filter(Boolean).join(" ");
 
@@ -204,7 +202,7 @@ export default function StepConfirm({ data, onBack }: Props) {
             value={[
               serviceLabel[data.service],
               optionDef?.label,
-              data.interiorAddOn && optionDef?.addOn ? `+ ${optionDef.addOn.label}` : "",
+              data.interiorAddOn && interiorOpt ? `+ ${interiorOpt.label}` : "",
             ].filter(Boolean).join(" · ")}
           />
         )}

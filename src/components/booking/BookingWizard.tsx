@@ -101,9 +101,10 @@ function hasAnyData(d: BookingData): boolean {
   return false;
 }
 
-// Subset of BookingData the /api/booking/draft endpoint expects. Excludes
-// server-derived bits (carPrices, vehicleType-from-search) and the draftId
-// itself, which is carried separately on PUTs.
+// Subset of BookingData the /api/booking/draft endpoint expects. Includes the
+// per-car price snapshot so the draft row gets a price_total once a car +
+// service are chosen (same server-side pricing as the final submit). Excludes
+// the draftId itself, which is carried separately on PUTs.
 function wizardToDraftPayload(d: BookingData) {
   return {
     name: d.name,
@@ -111,6 +112,7 @@ function wizardToDraftPayload(d: BookingData) {
     service: d.service,
     serviceOption: d.serviceOption,
     interiorAddOn: d.interiorAddOn,
+    carPrices: d.carPrices,
     vehicleType: d.vehicleType,
     carBrand: d.carBrand,
     carModel: d.carModel,

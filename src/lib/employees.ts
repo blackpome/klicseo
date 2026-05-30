@@ -1,6 +1,7 @@
 import "server-only";
 import { supabase } from "./supabase";
-import { sealFields, unsealFields, phoneHash, normalizePhone } from "./crypto";
+import { sealFields, unsealFields, unseal, phoneHash, normalizePhone } from "./crypto";
+import type { CallReminder } from "./leads-shared";
 import type {
   EmployeeRow,
   EmployeeStatus,
@@ -128,4 +129,38 @@ export async function updateEmployeeStatus(id: string, status: EmployeeStatus): 
 export async function deleteEmployee(id: string): Promise<void> {
   const { error } = await supabase().from("employees").delete().eq("id", id);
   if (error) throw error;
+}
+
+/**
+ * Employees whose `reminder_call_date` is today or overdue — surfaced in the
+ * notification bell on employee admin pages. Mirrors the lead `due` reminders.
+ * Phone is decrypted via `unseal`. Resigned and rejected employees are skipped.
+ */
+export async function listEmployeeCallReminders(limit = 50): Promise<CallReminder[]> {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const { data, error } = await supabase()
+    .from("employees")
+    .select("id,name,phone,status,reminder_call_date")
+    .not("reminder_call_date", "is", null)
+    .lte("reminder_call_date", today)
+    .order("reminder_call_date", { ascending: true })
+    .limit(limit * 4);
+  if (error) throw error;
+
+  type Row = { id: string; name: string; phone: string | null; status: EmployeeStatus; reminder_call_date: string };
+  const out: CallReminder[] = [];
+  for (const r of (data ?? []) as Row[]) {
+    if (r.status === "resigned" || r.status === "rejected") continue;
+    const overdue = r.reminder_call_date < today;
+    out.push({
+      id: r.id,
+      name: r.name,
+      phone: unseal(r.phone),
+      reason: overdue ? `Overdue · ${r.reminder_call_date}` : "Call today",
+      kind: "due",
+      href: `/admin/employees/${r.id}`,
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
 }

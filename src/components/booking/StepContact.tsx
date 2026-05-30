@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Phone, User, Sparkles, Droplets, Wrench, Check } from "lucide-react";
 import type { BookingData, ServiceCategory } from "./BookingWizard";
 import { OPTIONS_BY_CATEGORY, SERVICE_OPTIONS, isServiceOptionId, CATEGORY_COLORS } from "@/lib/pricing";
+import { interiorAddonOptionFor } from "@/lib/serviceCatalog-shared";
 import { useSiteSettings } from "@/components/SiteSettingsContext";
 import { stepCopy, msg } from "@/lib/site-settings-shared";
 import CustomFields from "./CustomFields";
@@ -72,7 +73,8 @@ function buildOptionsForCategory(
   if (!catCat) return [];
 
   return catalog.options
-    .filter((o) => o.category_id === catCat.id && o.enabled)
+    // Add-on options are never bookable cards — they show as the interior toggle.
+    .filter((o) => o.category_id === catCat.id && o.enabled && !o.is_addon)
     // Legacy-backed options must be in the allow-list so backfill artifacts
     // (e.g. InteriorDetailing-as-addon) don't surface as bookable. Admin-
     // created options have no legacy_id and always pass through.
@@ -164,7 +166,12 @@ export default function StepContact({ data, update, onNext }: Props) {
     [settings.catalog, activeCategory?.id],
   );
   const selectedOptionDef = isServiceOptionId(data.serviceOption) ? SERVICE_OPTIONS[data.serviceOption] : null;
-  const addOn = selectedOptionDef?.addOn;
+  // Interior add-on is catalog-driven: the category's enabled is_addon option,
+  // shown only when the selected base option offers it (has_addon).
+  const addonCatCat = data.service ? settings.catalog?.categories.find((c) => c.legacy_key === data.service) ?? null : null;
+  const interiorOpt = settings.catalog && addonCatCat ? interiorAddonOptionFor(settings.catalog, addonCatCat.id) : null;
+  const selectedCatalogOpt = settings.catalog?.options.find((o) => (o.legacy_id ?? o.slug) === data.serviceOption) ?? null;
+  const interiorAvailable = !!interiorOpt && (selectedCatalogOpt?.has_addon ?? !!selectedOptionDef?.addOn);
 
   function selectServiceCategory(c: (typeof categories)[number]) {
     if (c.id === data.service) return;
@@ -391,7 +398,7 @@ export default function StepContact({ data, update, onNext }: Props) {
                             })}
                           </div>
 
-                          {addOn && (
+                          {interiorAvailable && interiorOpt && (
                             <button
                               type="button"
                               onClick={() => update({ interiorAddOn: !data.interiorAddOn })}
@@ -417,11 +424,9 @@ export default function StepContact({ data, update, onNext }: Props) {
                                   {data.interiorAddOn && <Check size={11} className="text-[#050E21]" strokeWidth={3} />}
                                 </div>
                                 <div>
-                                  <p className="text-sm font-semibold text-white leading-tight">{addOn.label}</p>
+                                  <p className="text-sm font-semibold text-white leading-tight">{interiorOpt.label}</p>
                                   <p className="text-[11px] text-white/45 mt-0.5">
-                                    {selectedOptionDef?.category === "CarDetailing"
-                                      ? `Pair full interior detailing with ${selectedOptionDef.shortLabel}`
-                                      : "Add interior cleaning to this visit"}
+                                    {interiorOpt.blurb ?? "Add interior cleaning to this service"}
                                   </p>
                                 </div>
                               </div>

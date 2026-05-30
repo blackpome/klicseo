@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { insertLeadDraft, updateLeadDraft } from "@/lib/leads";
+import { combinedPrice, type CarPrices } from "@/lib/carPricing";
+import { type ParkingLocation } from "@/lib/pricing";
+import { getServiceCatalog } from "@/lib/serviceCatalog";
+import { getServiceDiscounts, getDiscountConfig } from "@/lib/discounts";
 
 // Wizard partial-save endpoint.
 //
@@ -43,6 +47,28 @@ interface DraftBody {
   latitude?: number | null;
   longitude?: number | null;
   customFields?: Record<string, unknown>;
+  carPrices?: CarPrices | null;
+}
+
+// Price the in-progress draft exactly like the final submit, so admins see a
+// price as soon as a car + service are entered. Resolves to nulls when the car
+// or service isn't chosen yet, or if pricing config can't be loaded.
+async function priceForDraft(body: DraftBody): Promise<{ price_total: number | null; discount_percent: number | null }> {
+  const carPrices = body.carPrices ?? null;
+  const serviceOption = nz(body.serviceOption);
+  if (!carPrices || !serviceOption) return { price_total: null, discount_percent: null };
+  try {
+    const parking = ((body.parkingLocation as ParkingLocation) || "") as ParkingLocation;
+    const [catalog, discounts, cfg] = await Promise.all([
+      getServiceCatalog(),
+      getServiceDiscounts(),
+      getDiscountConfig(),
+    ]);
+    const priced = combinedPrice(carPrices, serviceOption, parking, !!body.interiorAddOn, catalog, discounts, cfg.percentsByLineId, cfg.badgesByLineId);
+    return { price_total: priced?.discountedTotal ?? null, discount_percent: priced?.basePercent ?? null };
+  } catch {
+    return { price_total: null, discount_percent: null };
+  }
 }
 
 // Map the wizard's camelCase payload onto the leads-table snake_case columns.
@@ -112,7 +138,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Empty draft" }, { status: 400 });
   }
   try {
-    const lead = await insertLeadDraft(payload);
+    const price = await priceForDraft(body);
+    const lead = await insertLeadDraft({ ...payload, ...price });
     return NextResponse.json({ id: lead.id });
   } catch (err) {
     console.error("Draft insert failed:", err);
@@ -132,7 +159,8 @@ export async function PUT(req: NextRequest) {
   }
   const payload = mapDraft(body);
   try {
-    const ok = await updateLeadDraft(body.id, payload);
+    const price = await priceForDraft(body);
+    const ok = await updateLeadDraft(body.id, { ...payload, ...price });
     return NextResponse.json({ ok });
   } catch (err) {
     console.error("Draft update failed:", err);

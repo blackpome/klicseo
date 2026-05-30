@@ -75,6 +75,22 @@ export default function PaymentRow({
   const paidAmount = payment?.amount ?? null;
   const defaultAmount = paidAmount ?? dueAmount ?? "";
 
+  // Controlled inputs (just for the form fields — the math chips below are
+  // derived from the SAVED payment so they update on Save, not on every keystroke).
+  const [amountStr, setAmountStr] = useState<string>(String(defaultAmount));
+  const [advanceStr, setAdvanceStr] = useState<string>(payment?.advance_amount ? String(payment.advance_amount) : "");
+
+  // Math chips: server-derived so the user sees Pending visibly drop after Save.
+  const isPaidServer = payment?.status === "paid";
+  const monthlyArrears = dueCount > 0 && dueUnit > 0 ? dueCount * dueUnit : 0;
+  const totalShown = monthlyArrears > 0
+    ? monthlyArrears
+    : (isPaidServer ? 0 : (dueAmount ?? 0));
+  const advanceShown = payment?.advance_amount ?? 0;
+  // Advance counts toward what's been collected against the outstanding total.
+  const pendingAmt = Math.max(0, totalShown - advanceShown);
+  const showMath = totalShown > 0 || advanceShown > 0;
+
   // After a successful save, ask the router to refetch the server data so the
   // page numbers (totals, paid/pending counts) reflect the new state without
   // a manual refresh.
@@ -159,6 +175,27 @@ export default function PaymentRow({
               </>
             )}
           </div>
+
+          {/* Saved math — Total/Advance/Pending update visibly after Save. */}
+          {showMath && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] font-bold tabular-nums">
+              <span className="px-1.5 py-0.5 rounded-md bg-white/5 text-white/70 ring-1 ring-white/10">
+                Total {inr(totalShown)}
+              </span>
+              <span className="px-1.5 py-0.5 rounded-md bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/25">
+                Advance {inr(advanceShown)}
+              </span>
+              <span
+                className={`px-1.5 py-0.5 rounded-md ring-1 ${
+                  pendingAmt === 0
+                    ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/25"
+                    : "bg-amber-500/15 text-amber-300 ring-amber-500/25"
+                }`}
+              >
+                Pending {inr(pendingAmt)}
+              </span>
+            </div>
+          )}
 
           {/* Contact actions */}
           {phone && (
@@ -260,7 +297,34 @@ export default function PaymentRow({
         {/* Amount */}
         <div className="flex items-center rounded-lg border border-white/10 bg-white/5 overflow-hidden">
           <span className="pl-2 text-xs text-white/40">₹</span>
-          <input type="text" inputMode="numeric" name="amount" defaultValue={defaultAmount} placeholder="—" aria-label="Amount" className="w-20 bg-transparent px-1.5 py-1.5 text-sm focus:outline-none" />
+          <input
+            type="text"
+            inputMode="numeric"
+            name="amount"
+            value={amountStr}
+            onChange={(e) => setAmountStr(e.target.value)}
+            placeholder="—"
+            aria-label="Amount"
+            className="w-20 bg-transparent px-1.5 py-1.5 text-sm focus:outline-none"
+          />
+        </div>
+
+        {/* Advance — extra rupees collected on top of this month's amount. */}
+        <div
+          className="flex items-center rounded-lg border border-white/10 bg-white/5 overflow-hidden"
+          title="Advance collected on top of this month's amount"
+        >
+          <span className="pl-2 text-[10px] uppercase tracking-wider text-white/40">Adv ₹</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            name="advance"
+            value={advanceStr}
+            onChange={(e) => setAdvanceStr(e.target.value)}
+            placeholder="0"
+            aria-label="Advance amount"
+            className="w-16 bg-transparent px-1.5 py-1.5 text-sm focus:outline-none"
+          />
         </div>
 
         {/* Method */}

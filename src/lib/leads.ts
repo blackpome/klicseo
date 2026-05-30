@@ -1,6 +1,6 @@
 import "server-only";
 import { supabase } from "./supabase";
-import { sealFields, unsealFields, phoneHash, normalizePhone } from "./crypto";
+import { sealFields, unsealFields, unseal, phoneHash, normalizePhone } from "./crypto";
 import { areaFromPincode } from "./area";
 import type { CallReminder, LeadStatus } from "./leads-shared";
 
@@ -296,6 +296,8 @@ export async function listCallReminders(limit = 50): Promise<CallReminder[]> {
   const fresh: CallReminder[] = [];
 
   for (const r of (data ?? []) as Row[]) {
+    // Phone is encrypted at rest — decrypt so the bell shows the real number.
+    const phone = unseal(r.phone);
     if (r.callback_date && r.callback_date <= today) {
       // Callback scheduled for today (or overdue) — show regardless of status.
       const overdue = r.callback_date < today;
@@ -303,21 +305,22 @@ export async function listCallReminders(limit = 50): Promise<CallReminder[]> {
       due.push({
         id: r.id,
         name: r.name,
-        phone: r.phone,
+        phone,
         reason: overdue ? `Overdue · ${when}` : `Call today${r.callback_time ? ` · ${r.callback_time}` : ""}`,
         kind: "due",
+        href: `/admin/${r.id}`,
         at: scheduledMs(r.callback_date, r.callback_time) ?? 0,
       });
     } else if (r.status === "new") {
       // New lead with no callback due today — still a call to make.
-      fresh.push({ id: r.id, name: r.name, phone: r.phone, reason: "New lead — to call", kind: "new" });
+      fresh.push({ id: r.id, name: r.name, phone, reason: "New lead — to call", kind: "new", href: `/admin/${r.id}` });
     }
   }
 
   // Today's scheduled calls first (earliest/overdue on top), then new leads.
   due.sort((a, b) => a.at - b.at);
   const dueClean: CallReminder[] = due.map((r) => ({
-    id: r.id, name: r.name, phone: r.phone, reason: r.reason, kind: r.kind,
+    id: r.id, name: r.name, phone: r.phone, reason: r.reason, kind: r.kind, href: r.href,
   }));
   return [...dueClean, ...fresh].slice(0, limit);
 }

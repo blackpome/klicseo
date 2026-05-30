@@ -41,7 +41,7 @@ export default async function AdminEmployeesPage({
     roleLabel = await jobTitleMap();
   } catch (err) {
     return (
-      <AdminShell require="employees.view">
+      <AdminShell require="employees.view" section="employees">
         <div className="max-w-3xl space-y-4">
           <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
             Employees
@@ -53,7 +53,7 @@ export default async function AdminEmployeesPage({
   }
 
   return (
-    <AdminShell require="employees.view">
+    <AdminShell require="employees.view" section="employees">
       <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
@@ -103,6 +103,7 @@ export default async function AdminEmployeesPage({
           <table className="w-full text-sm">
             <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
               <tr>
+                <th className="text-left px-3 py-2 font-semibold">#</th>
                 <th className="text-left px-3 py-2 font-semibold">When</th>
                 <th className="text-left px-3 py-2 font-semibold">Name</th>
                 <th className="text-left px-3 py-2 font-semibold">Phone</th>
@@ -114,8 +115,9 @@ export default async function AdminEmployeesPage({
               </tr>
             </thead>
             <tbody>
-              {employees.map((e) => (
+              {employees.map((e, i) => (
                 <tr key={e.id} className="border-t border-white/5 hover:bg-white/[0.02]">
+                  <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{i + 1}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-white/60 text-xs">
                     {new Date(e.created_at).toLocaleString("en-IN", {
                       day: "2-digit",

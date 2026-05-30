@@ -285,11 +285,14 @@ function PriceGrid({
   amounts: LineAmounts;
   mrpAmounts: LineMrpAmounts;
 }) {
+  // Lines owned by a disabled option are hidden — a turned-off interior add-on
+  // (or any disabled sub-category) shouldn't leave an editable zombie box.
+  const disabledOptionIds = new Set(catalog.options.filter((o) => !o.enabled).map((o) => o.id));
   return (
     <div className="space-y-2">
       {catalog.categories.map((cat) => {
         const lines = catalog.priceLines
-          .filter((l) => l.category_id === cat.id)
+          .filter((l) => l.category_id === cat.id && !(l.option_id && disabledOptionIds.has(l.option_id)))
           .sort((a, b) => a.sort_order - b.sort_order);
         if (lines.length === 0) return null;
         return (
