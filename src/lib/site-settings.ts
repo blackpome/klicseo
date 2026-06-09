@@ -119,7 +119,7 @@ const MEDIA_BUCKET = "site-media";
 function parseCardPrices(raw: string): CardPrices {
   const out: CardPrices = { ...CARD_DEFAULTS };
   try {
-    const obj = JSON.parse(raw) as Record<string, { price?: number; mrp?: number | null; enabled?: boolean }>;
+    const obj = JSON.parse(raw) as Record<string, { price?: number; mrp?: number | null; enabled?: boolean; suffix?: string }>;
     for (const d of CARD_DEFS) {
       const v = obj[d.id];
       if (v && isCardId(d.id)) {
@@ -130,6 +130,7 @@ function parseCardPrices(raw: string): CardPrices {
           price: Number.isFinite(price) && price >= 0 ? Math.round(price) : d.default,
           mrp: mrpNum != null && Number.isFinite(mrpNum) && mrpNum > 0 ? Math.round(mrpNum) : null,
           enabled: !!v.enabled,
+          suffix: typeof v.suffix === "string" ? v.suffix : null,
         };
       }
     }
