@@ -41,6 +41,7 @@ export * from "./site-settings-shared";
 
 export const SITE_DEFAULTS: SiteSettings = {
   startPrice: 19,
+  startPriceSuffix: "/day",
   phone: businessPhone,
   whatsapp: SUPPORT_PHONE,
   cardPrices: CARD_DEFAULTS,
