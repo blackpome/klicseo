@@ -55,6 +55,7 @@ export const SITE_DEFAULTS: SiteSettings = {
 
 const KEYS = {
   startPrice: "start_price",
+  startPriceSuffix: "start_price_suffix",
   phone: "phone",
   whatsapp: "whatsapp",
   cardPrices: "card_prices",
@@ -239,6 +240,8 @@ export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
       if (row.key === KEYS.startPrice) {
         const n = Number(row.value);
         if (Number.isFinite(n) && n >= 0) out.startPrice = Math.round(n);
+      } else if (row.key === KEYS.startPriceSuffix && row.value) {
+        out.startPriceSuffix = row.value;
       } else if (row.key === KEYS.phone && row.value) {
         out.phone = row.value;
       } else if (row.key === KEYS.whatsapp && row.value) {
@@ -268,10 +271,11 @@ export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
 
 // Save the text settings + social links (media is managed via upload/reset).
 export async function setSiteSettings(
-  s: Pick<SiteSettings, "startPrice" | "phone" | "whatsapp" | "cardPrices" | "social" | "footerLocation">,
+  s: Pick<SiteSettings, "startPrice" | "startPriceSuffix" | "phone" | "whatsapp" | "cardPrices" | "social" | "footerLocation">,
 ): Promise<void> {
   const rows = [
     { key: KEYS.startPrice, value: String(Math.max(0, Math.round(s.startPrice))) },
+    { key: "start_price_suffix", value: s.startPriceSuffix.trim() },
     { key: KEYS.phone, value: s.phone.trim() },
     { key: KEYS.whatsapp, value: s.whatsapp.trim() },
     { key: KEYS.cardPrices, value: JSON.stringify(s.cardPrices) },
