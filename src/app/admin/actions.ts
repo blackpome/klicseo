@@ -86,7 +86,7 @@ function readLeadFromForm(formData: FormData, discounts: ServiceDiscounts) {
     shift: String(formData.get("shift") ?? "") || null,
     callback_date: String(formData.get("callback_date") ?? "") || null,
     callback_time: String(formData.get("callback_time") ?? "") || null,
-    price_total: (override != null && Number.isFinite(override) ? override : null) ?? priced?.discountedTotal,
+    price_total: (override != null && Number.isFinite(override) ? override : null) ?? priced?.discountedTotal ?? null,
     discount_percent: priced?.basePercent ?? null,
     notes: String(formData.get("notes") ?? "") || null,
   };
