@@ -211,7 +211,7 @@ export default async function LeadDetailPage({
                         </span>
                       </span>
                     )}
-                    <span className="font-bold text-[#C9A84C]">₹{lead.price_total.toLocaleString("en-IN")} <span className="text-[11px] font-normal text-white/40">total</span></span>
+                    <span className="font-bold text-[#C9A84C]">₹{lead.price_total.toLocaleString("en-IN")} <span className="text-[11px] font-normal text-white/40">total price</span></span>
                   </span>
                 ) : (
                   `₹${lead.price_total.toLocaleString("en-IN")}`
