@@ -202,7 +202,7 @@ export default async function LeadDetailPage({
               lead.price_total != null ? (
                 lead.price_base != null ? (
                   <span className="flex flex-col gap-0.5">
-                    <span>₹{lead.price_base.toLocaleString("en-IN")} <span className="text-white/40 text-[11px]">base</span></span>
+                    <span>₹{lead.price_base.toLocaleString("en-IN")} <span className="text-white/40 text-[11px]">website price</span></span>
                     {lead.price_interior_addon != null && lead.price_interior_addon > 0 && (
                       <span>
                         ₹{lead.price_interior_addon.toLocaleString("en-IN")}{" "}
