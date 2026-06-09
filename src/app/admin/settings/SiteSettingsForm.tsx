@@ -26,16 +26,22 @@ export default function SiteSettingsForm({ current }: { current: SiteSettings })
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-4">
         <label className="block">
           <span className="text-[11px] uppercase tracking-wider text-white/45">Starting price (Hero & sticky CTA)</span>
-          <div className="mt-1 flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-[#C9A84C] overflow-hidden max-w-[160px]">
+          <div className="mt-1 flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-[#C9A84C] overflow-hidden max-w-[240px]">
             <span className="pl-3 text-sm text-white/40">₹</span>
             <input
               type="text"
               inputMode="numeric"
               name="startPrice"
               defaultValue={current.startPrice}
-              className="w-full bg-transparent px-2 py-2 text-sm focus:outline-none"
+              className="w-20 bg-transparent px-2 py-2 text-sm focus:outline-none"
             />
-            <span className="pr-3 text-sm text-white/40">/day</span>
+            <input
+              type="text"
+              name="startPriceSuffix"
+              defaultValue={current.startPriceSuffix}
+              placeholder="/day"
+              className="flex-1 bg-transparent px-2 py-2 text-xs text-white/40 focus:outline-none focus:text-white"
+            />
           </div>
           <span className="text-[11px] text-white/30">Shown as “Book Now · Starts @ ₹X/day”.</span>
         </label>
@@ -102,7 +108,13 @@ export default function SiteSettingsForm({ current }: { current: SiteSettings })
                   defaultValue={cur.price}
                   className="w-24 bg-transparent px-2 py-2 text-sm focus:outline-none"
                 />
-                <span className="pr-3 text-xs text-white/35">{d.suffix}</span>
+                <input
+                  type="text"
+                  name={`card_${d.id}_suffix`}
+                  defaultValue={cur.suffix ?? ""}
+                  placeholder={d.suffix}
+                  className="w-20 bg-transparent px-2 py-2 text-xs text-white/40 focus:outline-none focus:text-white"
+                />
               </div>
 
               {/* MRP override — independent of the "Use custom" toggle. Blank

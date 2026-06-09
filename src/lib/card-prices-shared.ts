@@ -8,6 +8,7 @@ export interface CardPrice {
   price: number;         // the net "Starts @" value — what the customer pays
   mrp: number | null;    // optional strike-through MRP. Null = no strike.
   enabled: boolean;      // use this custom price? (false = fall back to the default)
+  suffix: string | null; // custom suffix (e.g. "/month"). Null = use default.
 }
 
 export type CardPrices = Record<CardId, CardPrice>;

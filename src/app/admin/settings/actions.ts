@@ -22,6 +22,7 @@ export async function saveSiteSettingsAction(
     const priceRaw = String(formData.get("startPrice") ?? "").trim();
     const startPrice = Number(priceRaw);
     if (!Number.isFinite(startPrice) || startPrice < 0) return { error: "Enter a valid starting price." };
+    const startPriceSuffix = String(formData.get("startPriceSuffix") ?? "").trim() || "/day";
 
     const phone = String(formData.get("phone") ?? "").trim();
     const whatsapp = String(formData.get("whatsapp") ?? "").trim();
@@ -33,10 +34,12 @@ export async function saveSiteSettingsAction(
       const p = Number(String(formData.get(`card_${d.id}_price`) ?? "").trim());
       const mrpRaw = String(formData.get(`card_${d.id}_mrp`) ?? "").trim();
       const mrpNum = mrpRaw === "" ? null : Number(mrpRaw);
+      const suffix = String(formData.get(`card_${d.id}_suffix`) ?? "").trim() || null;
       cardPrices[d.id] = {
         price: Number.isFinite(p) && p >= 0 ? Math.round(p) : d.default,
         mrp: mrpNum != null && Number.isFinite(mrpNum) && mrpNum > 0 ? Math.round(mrpNum) : null,
         enabled: formData.get(`card_${d.id}_on`) === "on",
+        suffix,
       };
     }
 
@@ -56,18 +59,19 @@ export async function saveSiteSettingsAction(
     const beforeSettings = await getSiteSettings();
     const before = {
       startPrice: beforeSettings.startPrice,
+      startPriceSuffix: beforeSettings.startPriceSuffix,
       phone: beforeSettings.phone,
       whatsapp: beforeSettings.whatsapp,
       cardPrices: beforeSettings.cardPrices,
       social: beforeSettings.social,
       footerLocation: beforeSettings.footerLocation,
     };
-    await setSiteSettings({ startPrice, phone, whatsapp, cardPrices, social, footerLocation });
+    await setSiteSettings({ startPrice, startPriceSuffix, phone, whatsapp, cardPrices, social, footerLocation });
     await logAudit("settings.save", {
       entity: "settings",
       summary: "Updated site settings",
       before: before as unknown as Record<string, unknown>,
-      after: { startPrice, phone, whatsapp, cardPrices, social, footerLocation } as unknown as Record<string, unknown>,
+      after: { startPrice, startPriceSuffix, phone, whatsapp, cardPrices, social, footerLocation } as unknown as Record<string, unknown>,
     });
     revalidatePath("/", "layout");
     revalidatePath("/admin/settings");

@@ -37,7 +37,7 @@ function smoothAnchorClick(e: React.MouseEvent<HTMLAnchorElement>) {
 // Hero background plays these in sequence, looping back to the first when the
 // last finishes. Files live in /public.
 export default function Hero() {
-  const { startPrice, media } = useSiteSettings();
+  const { startPrice, startPriceSuffix, media } = useSiteSettings();
   const hero = resolveMedia(media, "heroVideo");
   const heroSrc = hero.url;
   // For the bundled defaults we ship a same-name JPG poster so the LCP frame
@@ -342,7 +342,7 @@ export default function Hero() {
                   >
                     ₹{startPrice}
                   </motion.span>
-                  <span className="leading-none text-white/85">/day</span>
+                  <span className="leading-none text-white/85">{startPriceSuffix}</span>
                 </span>
               </motion.a>
             </div>

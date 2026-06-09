@@ -333,7 +333,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
             >
               ₹{basePrice.toLocaleString("en-IN")}
             </span>
-            <span className="text-white/50 text-sm">/ {plan.billing}</span>
+            <span className="text-white/50 text-sm">/ {cp?.suffix ?? plan.billing}</span>
           </div>
         </div>
 

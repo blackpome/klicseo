@@ -365,6 +365,7 @@ export const FOOTER_LOCATION_DEFAULTS: FooterLocation = { text: "", enabled: tru
 
 export interface SiteSettings {
   startPrice: number;
+  startPriceSuffix: string;
   phone: string;
   whatsapp: string;
   cardPrices: CardPrices;
@@ -382,6 +383,7 @@ export interface SiteSettings {
 // Defaults used by the client context before the server value arrives.
 export const SITE_SETTINGS_FALLBACK: SiteSettings = {
   startPrice: 19,
+  startPriceSuffix: "/day",
   phone: "+91 79043 32212",
   whatsapp: "+917904332212",
   cardPrices: CARD_DEFAULTS,

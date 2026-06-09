@@ -12,7 +12,7 @@ import { useSiteSettings } from "./SiteSettingsContext";
 // on #hero to know when to slide ourselves out of the way; when the user
 // scrolls past the hero, the sticky CTA returns.
 export default function StickyMobileCTA() {
-  const { startPrice } = useSiteSettings();
+  const { startPrice, startPriceSuffix } = useSiteSettings();
   const [inHero, setInHero] = useState(true);
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function StickyMobileCTA() {
               Doorstep Car Wash
             </span>
             <span className="block text-base font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
-              Book Now · Starts @ ₹{startPrice}/day
+              Book Now · Starts @ ₹{startPrice}{startPriceSuffix}
             </span>
           </span>
 
