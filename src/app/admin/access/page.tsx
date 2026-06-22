@@ -5,6 +5,8 @@ import AdminError from "../AdminError";
 import UserTable from "./UserTable";
 import { currentAdmin } from "@/lib/admin-auth";
 import { listAdminUsers, type AdminUserRow } from "@/lib/admin-users";
+import { listEmployees } from "@/lib/employees";
+import type { EmployeeRow } from "@/lib/employees-shared";
 
 // Always render fresh — admin actions on this page (invite/revoke/force-logout)
 // mutate the allowlist and the UI needs to reflect the new state instantly.
@@ -25,8 +27,13 @@ export default async function AccessPage() {
   }
 
   let users: AdminUserRow[];
+  let employees: EmployeeRow[];
   try {
-    users = await listAdminUsers();
+    [users, employees] = await Promise.all([listAdminUsers(), listEmployees()]);
+    // Only surface employees who are linked from the admin allowlist
+    // (i.e. those who were invited via the admin panel and have creds).
+    const linkedIds = new Set(users.map((u) => u.employee_id).filter(Boolean) as string[]);
+    employees = employees.filter((e) => linkedIds.has(e.id));
   } catch (err) {
     return (
       <AdminShell>
@@ -45,6 +52,7 @@ export default async function AccessPage() {
           meRole={me.role}
           meEmail={me.email}
           canMakeAdmin={me.role === "super_admin"}
+          employees={employees}
         />
       </div>
     </AdminShell>

@@ -18,6 +18,7 @@ import ForceLogoutButton from "./ForceLogoutButton";
 import LogoutAllButton from "./LogoutAllButton";
 import BlockButton from "./BlockButton";
 import DemoteButton from "./DemoteButton";
+import EmployeeLinkForm from "./EmployeeLinkForm";
 
 const ROLE_STYLE: Record<AdminRole, { color: string; Icon: typeof Crown }> = {
   super_admin: { color: "#C9A84C", Icon: Crown },
@@ -55,11 +56,13 @@ export default function UserTable({
   meRole,
   meEmail,
   canMakeAdmin,
+  employees,
 }: {
   users: AdminUserRow[];
   meRole: AdminRole;
   meEmail: string;
   canMakeAdmin: boolean;
+  employees: { id: string; name: string }[];
 }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -114,6 +117,11 @@ export default function UserTable({
                         <div className="min-w-0">
                           <div className="font-medium truncate">{u.email}</div>
                           {isSelf && <div className="text-[10px] text-white/35">you</div>}
+                          {u.role === "staff" && (
+                            <div className="text-[10px] text-white/35">
+                              {u.employees?.name ? `Employee: ${u.employees.name}` : "No employee link"}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -180,6 +188,7 @@ export default function UserTable({
                     <tr className="bg-white/[0.015]">
                       <td colSpan={4} className="px-4 pb-4">
                         <PermissionsEditor email={u.email} permissions={u.permissions} />
+                        <EmployeeLinkForm email={u.email} employeeId={u.employee_id} employees={employees} />
                       </td>
                     </tr>
                   )}
@@ -211,7 +220,7 @@ export default function UserTable({
                 <X size={16} />
               </button>
             </div>
-            <GrantForm canMakeAdmin={canMakeAdmin} bare />
+            <GrantForm canMakeAdmin={canMakeAdmin} employees={employees} bare />
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentAdmin } from "@/lib/admin-auth";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 import { listLeads } from "@/lib/leads";
 import { listPeriodPayments, listPaymentsForLeads, currentPeriod, isValidPeriod, periodFromIso, periodsBetween } from "@/lib/payments";
 import { isServiceOptionId, SERVICE_OPTIONS } from "@/lib/pricing";
@@ -24,9 +24,13 @@ export async function GET(req: NextRequest) {
   const monthParam = req.nextUrl.searchParams.get("month") ?? "";
   const period = monthParam && isValidPeriod(monthParam) ? monthParam : currentPeriod();
 
+  // Scope: non-super-admins only get their assigned booked leads.
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+  const assignedAdminUserId = scope.kind === "assigned" ? scope.adminUserId : undefined;
+
   try {
     const [customers, payments] = await Promise.all([
-      listLeads({ status: "booked", limit: 5000 }),
+      listLeads({ status: "booked", limit: 5000, assignedAdminUserId }),
       listPeriodPayments(period),
     ]);
     const payByLead = new Map(payments.map((p) => [p.lead_id, p]));

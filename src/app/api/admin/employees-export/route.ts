@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentAdmin } from "@/lib/admin-auth";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 import { listEmployees } from "@/lib/employees";
 
 // Employees export — full or date-range. Mirrors leads-export. The PDF format
@@ -66,7 +66,7 @@ const PDF_SECTIONS: { label: string; fields: { key: string; label: string }[] }[
 export async function GET(req: NextRequest) {
   const me = await currentAdmin();
   if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const allowed = me.role === "super_admin" || me.role === "admin" || me.permissions.includes("employees.view");
+  const allowed = me.role === "super_admin" || me.permissions.includes("employees.view");
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const params = req.nextUrl.searchParams;
@@ -77,7 +77,11 @@ export async function GET(req: NextRequest) {
   const fromIso = ISO_DAY.test(from) ? `${from}T00:00:00+05:30` : undefined;
   const toIso = ISO_DAY.test(to) ? `${to}T23:59:59+05:30` : undefined;
 
-  const employees = await listEmployees({ limit: 50000, fromIso, toIso });
+  // Scope: non-super-admins only get their assigned employees in the export.
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+  const assignedAdminUserId = scope.kind === "assigned" ? scope.adminUserId : undefined;
+
+  const employees = await listEmployees({ limit: 50000, fromIso, toIso, assignedAdminUserId });
   const stamp = `${from || "all"}_to_${to || "all"}`;
 
   if (format === "pdf") {

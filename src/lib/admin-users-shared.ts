@@ -59,6 +59,8 @@ export interface AdminUserRow {
   status: "active" | "revoked";
   permissions: Permission[];
   invited_by: string | null;
+  employee_id: string | null;
+  employees?: { name: string | null } | null;
   /** When set, any session cookie issued before this moment is treated as
    *  expired — forcing the user to log in again on their next request. */
   signed_out_after: string | null;

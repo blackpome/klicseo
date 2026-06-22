@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Wallet, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
-import { currentAdmin } from "@/lib/admin-auth";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 import { listLeads } from "@/lib/leads";
 import { listPeriodPayments, listPaymentsForLeads, currentPeriod, isValidPeriod, periodFromIso, periodsBetween } from "@/lib/payments";
 import { isServiceOptionId, SERVICE_OPTIONS } from "@/lib/pricing";
@@ -47,10 +47,14 @@ export default async function PaymentsPage({
   const { month } = await searchParams;
   const period = month && isValidPeriod(month) ? month : currentPeriod();
 
+  // Scope: super_admin sees all booked leads; others see only their assigned.
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+  const assignedAdminUserId = scope.kind === "assigned" ? scope.adminUserId : undefined;
+
   let customers, payments, settings;
   try {
     [customers, payments, settings] = await Promise.all([
-      listLeads({ status: "booked", limit: 500 }),
+      listLeads({ status: "booked", limit: 500, assignedAdminUserId }),
       listPeriodPayments(period),
       getSiteSettings(),
     ]);
@@ -136,8 +140,8 @@ export default async function PaymentsPage({
           </a>
         </div>
 
-        {/* Admins can rephrase the WhatsApp messages sent from each row. */}
-        {(me.role === "super_admin" || me.role === "admin") && (
+        {/* Only super_admin can rephrase the WhatsApp messages sent from each row. */}
+        {me.role === "super_admin" && (
           <MessageTemplatesEditor initial={settings.messageTemplates} />
         )}
 

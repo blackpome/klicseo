@@ -1,10 +1,16 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
 import EmployeeStatusControl from "./EmployeeStatusControl";
 import WhatsAppLink from "@/components/WhatsAppLink";
+import { Pencil } from "lucide-react";
+import DeleteEmployeeButton from "./[id]/DeleteEmployeeButton";
 import ExportToolbar from "@/components/ExportToolbar";
-import { listEmployees, type EmployeeStatus } from "@/lib/employees";
+import EmployeeBulkTable from "@/app/admin/EmployeeBulkTable";
+import { listAssignableAdminUsers, getAdminUser } from "@/lib/admin-users";
+import { listEmployees, type EmployeeStatus, listJobCounts } from "@/lib/employees";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 import { jobTitleMap } from "@/lib/jobs";
 
 const STATUS_TABS: { id: EmployeeStatus | "all"; label: string }[] = [
@@ -26,19 +32,49 @@ const STATUS_COLOR: Record<EmployeeStatus, string> = {
   rejected: "#EF4444",
 };
 
+function buildEmployeesHref(args: { status?: EmployeeStatus | "all"; q?: string | undefined; role?: string | undefined }): string {
+  const params = new URLSearchParams();
+  if (args.status && args.status !== "all") params.set("status", args.status);
+  if (args.q) params.set("q", args.q);
+  if (args.role) params.set("role", args.role);
+  const s = params.toString();
+  return `/admin/employees${s ? `?${s}` : ""}`;
+}
+
 export default async function AdminEmployeesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; role?: string }>;
 }) {
-  const { status, q } = await searchParams;
+  const me = await currentAdmin();
+  if (!me) return redirect("/admin/login");
+
+  const canCreate = me.permissions.includes("employees.manage");
+  const { status, q, role } = await searchParams;
   const filter = (STATUS_TABS.find((t) => t.id === status)?.id ?? "all") as EmployeeStatus | "all";
+  const roleFilter = role && role !== "all" ? role : undefined;
+
+  // Resolve scope: super_admin sees all; everyone else sees only their assigned rows.
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+  const isSuperAdmin = me.role === "super_admin";
+  const assignedAdminUserId = scope.kind === "assigned" ? scope.adminUserId : undefined;
 
   let employees;
   let roleLabel: Record<string, string> = {};
+  let adminUsers: Array<{ id: string; email: string; name: string }> = [];
+  let jobCounts: Array<{ job_role: string; count: number }> = [];
   try {
-    employees = await listEmployees({ status: filter, search: q });
-    roleLabel = await jobTitleMap();
+    const canManage = Boolean(me?.permissions.includes("employees.manage"));
+    [employees, roleLabel, adminUsers] = await Promise.all([
+      listEmployees({ status: filter, search: q, assignedAdminUserId }),
+      jobTitleMap(),
+      canManage ? listAssignableAdminUsers() : Promise.resolve([]),
+    ]);
+    // If a role filter is provided, apply it client-side by filtering the fetched rows.
+    if (roleFilter) employees = employees.filter((e) => e.job_role === roleFilter);
+
+    // Job counts for the pill bar — scoped to the caller's visible employees.
+    jobCounts = await listJobCounts({ assignedAdminUserId });
   } catch (err) {
     return (
       <AdminShell require="employees.view" section="employees">
@@ -57,29 +93,37 @@ export default async function AdminEmployeesPage({
       <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
-            Employees
+            {isSuperAdmin ? "Employees" : "My Employees"}
           </h1>
           <p className="text-white/45 text-sm">{employees.length} shown</p>
         </div>
-        <form className="flex gap-2 items-center">
-          {filter !== "all" && <input type="hidden" name="status" value={filter} />}
-          <input
-            type="search"
-            name="q"
-            defaultValue={q ?? ""}
-            placeholder="Search name, phone, location, role…"
-            className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C]"
-          />
-          <button className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15">Search</button>
-        </form>
+        <div className="flex items-center gap-2 flex-wrap">
+          {canCreate ? (
+            <Link
+              href="/admin/employees/new"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-[#C9A84C] text-[#050E21] hover:bg-[#B0903C]"
+            >
+              Add Employee
+            </Link>
+          ) : null}
+          <form className="flex gap-2 items-center">
+            {filter !== "all" && <input type="hidden" name="status" value={filter} />}
+            <input
+              type="search"
+              name="q"
+              defaultValue={q ?? ""}
+              placeholder="Search name, phone, location, role…"
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C]"
+            />
+            <button className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15">Search</button>
+          </form>
+        </div>
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {STATUS_TABS.map((t) => {
           const active = filter === t.id;
-          const href = `/admin/employees${t.id === "all" ? "" : `?status=${t.id}`}${
-            q ? `${t.id === "all" ? "?" : "&"}q=${encodeURIComponent(q)}` : ""
-          }`;
+          const href = buildEmployeesHref({ status: t.id, q, role: roleFilter });
           return (
             <Link
               key={t.id}
@@ -94,70 +138,54 @@ export default async function AdminEmployeesPage({
         })}
       </div>
 
+      {jobCounts && jobCounts.length > 0 && (
+        <div className="flex gap-2 mb-4 flex-wrap items-center">
+          <span className="text-[10px] uppercase tracking-wider text-white/35 mr-1">Role</span>
+          <Link href={buildEmployeesHref({ status: filter, q })} className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${!roleFilter ? "bg-white/15 text-white" : "bg-white/[0.04] text-white/55 hover:bg-white/10"}`}>
+            All <span className="text-white/35">·</span> {jobCounts.reduce((n, a) => n + a.count, 0)}
+          </Link>
+          {jobCounts.slice(0, 20).map((a) => {
+            const active = roleFilter === a.job_role;
+            const href = buildEmployeesHref({ status: filter, q, role: a.job_role });
+            return (
+              <Link
+                key={a.job_role}
+                href={href}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                  active ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+                }`}
+              >
+                {roleLabel[a.job_role] ?? a.job_role} <span className={active ? "text-[#050E21]/60" : "text-white/35"}>{a.count}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
       <ExportToolbar endpoint="/api/admin/employees-export" label="employees" />
 
       {employees.length === 0 ? (
-        <div className="text-center py-16 text-white/40 text-sm">No employees match this filter yet.</div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full text-sm">
-            <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
-              <tr>
-                <th className="text-left px-3 py-2 font-semibold">#</th>
-                <th className="text-left px-3 py-2 font-semibold">Submitted (IST)</th>
-                <th className="text-left px-3 py-2 font-semibold">Name</th>
-                <th className="text-left px-3 py-2 font-semibold">Phone</th>
-                <th className="text-left px-3 py-2 font-semibold">Role</th>
-                <th className="text-left px-3 py-2 font-semibold">Location</th>
-                <th className="text-right px-3 py-2 font-semibold">Salary</th>
-                <th className="text-left px-3 py-2 font-semibold">Joining</th>
-                <th className="text-left px-3 py-2 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {employees.map((e, i) => (
-                <tr key={e.id} className="border-t border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{i + 1}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs">
-                    <div className="text-white/80 font-medium">
-                      {new Date(e.created_at).toLocaleString("en-IN", {
-                        day: "2-digit", month: "short", year: "numeric",
-                        timeZone: "Asia/Kolkata",
-                      })}
-                    </div>
-                    <div className="text-white/50">
-                      {new Date(e.created_at).toLocaleString("en-IN", {
-                        hour: "2-digit", minute: "2-digit", hour12: true,
-                        timeZone: "Asia/Kolkata",
-                      })}{" "}
-                      <span className="text-white/30">IST</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 font-semibold">
-                    <Link href={`/admin/employees/${e.id}`} className="hover:text-[#C9A84C] hover:underline">
-                      {e.name}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className="inline-flex items-center gap-1.5">
-                      <a href={`tel:${e.phone}`} className="text-[#C9A84C] hover:underline">{e.phone}</a>
-                      <WhatsAppLink phone={e.phone} label={`WhatsApp ${e.name ?? e.phone ?? ""}`.trim()} />
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-xs">{roleLabel[e.job_role] ?? e.job_role}</td>
-                  <td className="px-3 py-2 text-xs text-white/70">{e.location ?? "—"}</td>
-                  <td className="px-3 py-2 text-right font-semibold">
-                    {e.salary != null ? `₹${e.salary.toLocaleString("en-IN")}` : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-xs">{e.joining_date ?? "—"}</td>
-                  <td className="px-3 py-2">
-                    <EmployeeStatusControl id={e.id} status={e.status} color={STATUS_COLOR[e.status]} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="text-center py-16 text-white/40 text-sm space-y-2">
+          {isSuperAdmin ? (
+            <>
+              <div>No employees match this filter yet.</div>
+              {canCreate ? (
+                <div>
+                  <Link href="/admin/employees/new" className="text-[#C9A84C] hover:underline">
+                    Add your first employee
+                  </Link>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <div>No employees are assigned to you yet.</div>
+              <div className="text-xs">Ask a super-admin to assign employees to you.</div>
+            </>
+          )}
         </div>
+      ) : (
+        <EmployeeBulkTable employees={employees} adminUsers={adminUsers} canManageEmployees={Boolean(me.permissions.includes("employees.manage"))} />
       )}
     </AdminShell>
   );

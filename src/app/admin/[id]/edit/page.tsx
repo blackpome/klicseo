@@ -5,8 +5,9 @@ import AdminShell from "../../AdminShell";
 import AdminError from "../../AdminError";
 import LeadForm from "../../LeadForm";
 import { updateLeadAction } from "../../actions";
-import { getLead } from "@/lib/leads";
+import { getLead, assertLeadInScope } from "@/lib/leads";
 import { listKnownAreas } from "@/lib/area";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 
 export default async function EditLeadPage({
   params,
@@ -14,6 +15,8 @@ export default async function EditLeadPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const me = await currentAdmin();
+
   let lead;
   try {
     lead = await getLead(id);
@@ -25,6 +28,12 @@ export default async function EditLeadPage({
     );
   }
   if (!lead) notFound();
+
+  // Scope guard: non-super-admins may only edit leads in their assigned lists.
+  if (me) {
+    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+    if (!(await assertLeadInScope(id, scope))) notFound();
+  }
   const knownAreas = await listKnownAreas();
 
   // useActionState passes (prevState, formData) — bind the id so the action

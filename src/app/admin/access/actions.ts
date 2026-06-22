@@ -12,6 +12,7 @@ import {
   normalizeEmail,
   resendInvite,
   updatePermissions,
+  updateAccessEmployee,
   forceSignOut,
   forceSignOutAll,
   setUserStatus,
@@ -48,13 +49,14 @@ export async function grantAccessAction(
   }
 
   const permissions = role === "staff" ? readPermissions(formData) : [];
+  const employeeId = String(formData.get("employee_id") ?? "").trim() || null;
   if (role === "staff" && permissions.length === 0) {
     return { error: "Select at least one permission for staff." };
   }
 
   let result: { emailSent: boolean; emailError?: string };
   try {
-    result = await grantAccess({ email, role, permissions, invitedBy: me.email });
+    result = await grantAccess({ email, role, permissions, invitedBy: me.email, employeeId });
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not grant access." };
   }
@@ -69,6 +71,27 @@ export async function grantAccessAction(
     };
   }
   return { ok: `Invite sent to ${email}.` };
+}
+
+export async function updateAccessEmployeeAction(
+  _prev: { error?: string; ok?: string },
+  formData: FormData,
+): Promise<{ error?: string; ok?: string }> {
+  const email = normalizeEmail(String(formData.get("email") ?? ""));
+  const employeeId = String(formData.get("employee_id") ?? "").trim() || null;
+  try {
+    await loadManageable(email);
+    await updateAccessEmployee(email, employeeId);
+    await logAudit("access.employee_link", {
+      entity: "access",
+      entityId: email,
+      summary: employeeId ? `Linked ${email} to employee ${employeeId}` : `Cleared employee link for ${email}`,
+    });
+    revalidatePath("/admin/access");
+    return { ok: "Employee link saved." };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not save employee link." };
+  }
 }
 
 // Shared guard for status / permission edits on an existing row.

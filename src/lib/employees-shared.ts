@@ -27,6 +27,9 @@ export interface EmployeeRow {
   signature_path: string | null;
   terms_accepted_at: string | null;
 
+  assigned_admin_user_id?: string | null;
+  assigned_admin_user?: { email: string | null; name?: string | null } | null;
+
   salary: number | null;
   reminder_call_date: string | null;
   joining_date: string | null;

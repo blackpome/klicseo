@@ -1,29 +1,16 @@
 import { redirect } from "next/navigation";
 import AdminShell from "./AdminShell";
 import AdminError from "./AdminError";
-import { listLeads } from "@/lib/leads";
+import { listLeads, mapLeadIdsToLists } from "@/lib/leads";
 import { listAreasWithCounts } from "@/lib/area";
 import { LEAD_STATUSES, LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type LeadStatus } from "@/lib/leads-shared";
+import { listLeadLists } from "@/lib/leadLists";
+import type { LeadListRow } from "@/lib/leadLists-shared";
 import { currentAdmin } from "@/lib/admin-auth";
-import LeadStatusControl from "./LeadStatusControl";
+import { getAdminUser } from "@/lib/admin-users";
 import Link from "next/link";
-import WhatsAppLink from "@/components/WhatsAppLink";
 import ExportToolbar from "@/components/ExportToolbar";
-
-/** Returns true if the given IANA timezone is currently at UTC+5:30 (IST).
- *  Handles both "Asia/Kolkata" and the legacy alias "Asia/Calcutta", plus any
- *  other zone that happens to match IST's offset right now. */
-function isIST(tz: string | null | undefined): boolean {
-  if (!tz) return true;
-  try {
-    const now = new Date();
-    const fmt = (zone: string) =>
-      new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
-    return fmt(tz) === fmt("Asia/Kolkata");
-  } catch {
-    return false;
-  }
-}
+import LeadBulkListTable from "./LeadBulkListTable";
 
 const STATUS_TABS: { id: LeadStatus | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -58,10 +45,25 @@ export default async function AdminLeadsPage({
   const filter = (STATUS_TABS.find((t) => t.id === status)?.id ?? "all") as LeadStatus | "all";
   const areaFilter = area && area !== "all" ? area : undefined;
 
+  // Lead visibility scoping:
+  //   - super_admin sees everything.
+  //   - admin + staff see only leads that appear in at least one list assigned
+  //     to them. This matches the lead-lists feature's telecaller workflow and
+  //     is enforced server-side via the lib (so a stale client can't bypass).
+  const isSuperAdmin = me?.role === "super_admin";
+  const assignedAdminUserId = isSuperAdmin
+    ? undefined
+    : me
+      ? (await getAdminUser(me.email))?.id ?? undefined
+      : undefined;
+
   let leads;
+  let leadLists: LeadListRow[] = [];
   let areaCounts: { area: string; count: number }[] = [];
+  let leadListNames: Map<string, string[]> = new Map();
   try {
-    [leads, areaCounts] = await Promise.all([
+    const canManageLists = Boolean(me?.permissions.includes("leads.manage"));
+    [leads, areaCounts, leadLists] = await Promise.all([
       // Drafts are wizard partial-saves; surface them only behind the Draft
       // tab so they don't drown out actionable leads.
       listLeads({
@@ -69,9 +71,15 @@ export default async function AdminLeadsPage({
         search: q,
         area: areaFilter,
         excludeStatuses: filter === "all" ? ["draft"] : undefined,
+        assignedAdminUserId,
       }),
       listAreasWithCounts(),
+      canManageLists ? listLeadLists({ assignedAdminUserId }) : Promise.resolve([]),
     ]);
+    // For super_admin, fetch which lists each lead belongs to (shown in table).
+    if (isSuperAdmin && leads.length > 0) {
+      leadListNames = await mapLeadIdsToLists(leads.map((l) => l.id));
+    }
   } catch (err) {
     return (
       <AdminShell require="leads.view">
@@ -90,9 +98,19 @@ export default async function AdminLeadsPage({
       <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
-            Leads
+            {isSuperAdmin ? "Leads" : "My Leads"}
           </h1>
-          <p className="text-white/45 text-sm">{leads.length} shown</p>
+          <p className="text-white/45 text-sm">
+            {leads.length} shown
+            {!isSuperAdmin && leadLists.length > 0 && (
+              <>
+                {" · "}
+                <Link href="/admin/my-lists" className="text-[#C9A84C] hover:underline">
+                  view my lists
+                </Link>
+              </>
+            )}
+          </p>
         </div>
         <form className="flex gap-2 items-center">
           {filter !== "all" && <input type="hidden" name="status" value={filter} />}
@@ -159,124 +177,31 @@ export default async function AdminLeadsPage({
       <ExportToolbar endpoint="/api/admin/leads-export" label="leads" />
 
       {leads.length === 0 ? (
-        <div className="text-center py-16 text-white/40 text-sm">No leads match this filter yet.</div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full text-sm">
-            <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
-              <tr>
-                <th className="text-left px-3 py-2 font-semibold">#</th>
-                <th className="text-left px-3 py-2 font-semibold">Submitted / Started (IST)</th>
-                <th className="text-left px-3 py-2 font-semibold">Name</th>
-                <th className="text-left px-3 py-2 font-semibold">Phone</th>
-                <th className="text-left px-3 py-2 font-semibold">Service</th>
-                <th className="text-left px-3 py-2 font-semibold">Vehicle</th>
-                <th className="text-left px-3 py-2 font-semibold">Callback</th>
-                <th className="text-left px-3 py-2 font-semibold">Shift</th>
-                <th className="text-left px-3 py-2 font-semibold">GPS</th>
-                <th className="text-right px-3 py-2 font-semibold">Price</th>
-                <th className="text-left px-3 py-2 font-semibold">Source</th>
-                <th className="text-left px-3 py-2 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map((l, i) => (
-                <tr key={l.id} className="border-t border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{i + 1}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs">
-                    {l.status === "draft" ? (
-                      <div className="text-white/30 text-[10px] uppercase tracking-wide">Started</div>
-                    ) : (
-                      <div className="text-[10px] uppercase tracking-wide text-white/30">Submitted</div>
-                    )}
-                    <div className="text-white/80 font-medium">
-                      {new Date(l.submitted_at ?? l.created_at).toLocaleString("en-IN", {
-                        day: "2-digit", month: "short", year: "numeric",
-                        timeZone: "Asia/Kolkata",
-                      })}
-                    </div>
-                    <div className="text-white/50">
-                      {new Date(l.submitted_at ?? l.created_at).toLocaleString("en-IN", {
-                        hour: "2-digit", minute: "2-digit", hour12: true,
-                        timeZone: "Asia/Kolkata",
-                      })}{" "}
-                      <span className="text-white/30">IST</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 font-semibold">
-                    <Link href={`/admin/${l.id}`} className="hover:text-[#C9A84C] hover:underline">
-                      {l.name ?? "(unnamed)"}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className="inline-flex items-center gap-1.5">
-                      <a href={`tel:${l.phone}`} className="text-[#C9A84C] hover:underline">{l.phone}</a>
-                      <WhatsAppLink phone={l.phone} label={`WhatsApp ${l.name ?? l.phone ?? ""}`.trim()} />
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div>{l.service ?? "—"}</div>
-                    <div className="text-[11px] text-white/45">
-                      {[l.service_option, ...(l.add_on_labels ?? []).map((lbl) => `+ ${lbl}`)].filter(Boolean).join(" · ")}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div>{[l.car_brand, l.car_model].filter(Boolean).join(" ") || l.vehicle_type || "—"}</div>
-                    <div className="text-[11px] text-white/45">{[l.vehicle_type, l.car_number].filter(Boolean).join(" · ")}</div>
-                  </td>
-                  <td className="px-3 py-2 text-xs whitespace-nowrap">
-                    {l.callback_date ? (
-                      <div className="text-white/80 font-medium">{l.callback_date}</div>
-                    ) : null}
-                    {l.callback_time ? (
-                      <div className="text-white/50 text-[11px]">
-                        {l.callback_time}
-                        {l.client_timezone && !isIST(l.client_timezone) && (
-                          <span
-                            className="ml-1 rounded px-1 py-0.5 text-[9px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30"
-                            title={l.client_timezone}
-                          >
-                            Non-IST
-                          </span>
-                        )}
-                      </div>
-                    ) : null}
-                    {!l.callback_date && !l.callback_time ? <span className="text-white/30">—</span> : null}
-                  </td>
-                  <td className="px-3 py-2 text-xs">{l.shift ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs">
-                    {l.map_link ? (
-                      <a
-                        href={l.map_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#3B82F6] hover:underline"
-                      >
-                        Map ↗
-                      </a>
-                    ) : l.latitude != null && l.longitude != null ? (
-                      <a
-                        href={`https://www.google.com/maps?q=${l.latitude},${l.longitude}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#3B82F6] hover:underline"
-                      >
-                        Map ↗
-                      </a>
-                    ) : (
-                      <span className="text-white/30">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold">{l.price_total != null ? `₹${l.price_total.toLocaleString("en-IN")}` : "—"}</td>
-                  <td className="px-3 py-2 text-[11px] text-white/50">{l.source}</td>
-                  <td className="px-3 py-2">
-                    <LeadStatusControl id={l.id} status={l.status} color={STATUS_COLOR[l.status]} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="text-center py-16 text-white/40 text-sm space-y-2">
+          {isSuperAdmin ? (
+            <div>No leads match this filter yet.</div>
+          ) : (
+            <>
+              <div>No leads in your assigned lists match this filter.</div>
+              {leadLists.length === 0 && (
+                <div className="text-xs">
+                  You don&apos;t have any lists assigned yet.{" "}
+                  <Link href="/admin/my-lists" className="text-[#C9A84C] hover:underline">
+                    See your lists
+                  </Link>
+                </div>
+              )}
+            </>
+          )}
         </div>
+      ) : (
+        <LeadBulkListTable
+          leads={leads}
+          lists={leadLists}
+          statusColor={STATUS_COLOR}
+          canManageLists={Boolean(me?.permissions.includes("leads.manage"))}
+          leadListNames={leadListNames}
+        />
       )}
     </AdminShell>
   );

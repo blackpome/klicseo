@@ -2,6 +2,7 @@ import "server-only";
 import { supabase } from "./supabase";
 import { sealFields, unsealFields, unseal, phoneHash, normalizePhone } from "./crypto";
 import type { CallReminder } from "./leads-shared";
+import type { EmployeeScope } from "./admin-auth";
 import type {
   EmployeeRow,
   EmployeeStatus,
@@ -80,14 +81,20 @@ export async function listEmployees(
     status?: EmployeeStatus | "all";
     search?: string;
     limit?: number;
+    /** Only include employees assigned to this admin user id */
+    assignedAdminUserId?: string;
     /** Inclusive lower bound on created_at, full ISO timestamp w/ TZ. */
     fromIso?: string;
     /** Inclusive upper bound on created_at, full ISO timestamp w/ TZ. */
     toIso?: string;
   } = {},
 ): Promise<EmployeeRow[]> {
-  let q = supabase().from("employees").select("*").order("created_at", { ascending: false });
+  let q = supabase()
+    .from("employees")
+    .select("*, assigned_admin_user:assigned_admin_user_id (email, employees:employee_id (name))")
+    .order("created_at", { ascending: false });
   if (opts.status && opts.status !== "all") q = q.eq("status", opts.status);
+  if (opts.assignedAdminUserId) q = q.eq("assigned_admin_user_id", opts.assignedAdminUserId);
   if (opts.fromIso) q = q.gte("created_at", opts.fromIso);
   if (opts.toIso) q = q.lte("created_at", opts.toIso);
   if (opts.search) {
@@ -104,13 +111,28 @@ export async function listEmployees(
   q = q.limit(opts.limit ?? 200);
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []).map((r) => unsealFields(r as EmployeeRow, ENCRYPTED_EMPLOYEE_FIELDS)!) as EmployeeRow[];
+  return (data ?? []).map((r) => {
+    const row = unsealFields(r as EmployeeRow, ENCRYPTED_EMPLOYEE_FIELDS)!;
+    const assignedAdminUser = Array.isArray(row.assigned_admin_user)
+      ? row.assigned_admin_user[0] ?? null
+      : row.assigned_admin_user ?? null;
+    return { ...row, assigned_admin_user: assignedAdminUser };
+  }) as EmployeeRow[];
 }
 
 export async function getEmployee(id: string): Promise<EmployeeRow | null> {
-  const { data, error } = await supabase().from("employees").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await supabase()
+    .from("employees")
+    .select("*, assigned_admin_user:assigned_admin_user_id (email, employees:employee_id (name))")
+    .eq("id", id)
+    .maybeSingle();
   if (error) throw error;
-  return unsealFields(data as EmployeeRow | null, ENCRYPTED_EMPLOYEE_FIELDS);
+  if (!data) return null;
+  const row = unsealFields(data as EmployeeRow, ENCRYPTED_EMPLOYEE_FIELDS)!;
+  const assignedAdminUser = Array.isArray(row.assigned_admin_user)
+    ? row.assigned_admin_user[0] ?? null
+    : row.assigned_admin_user ?? null;
+  return { ...row, assigned_admin_user: assignedAdminUser };
 }
 
 export async function updateEmployee(id: string, patch: EmployeeUpdate): Promise<void> {
@@ -131,6 +153,21 @@ export async function deleteEmployee(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// --- scope guards -----------------------------------------------------------
+
+/** Return true if `employeeId` is visible within `scope`. */
+export async function assertEmployeeInScope(employeeId: string, scope: EmployeeScope): Promise<boolean> {
+  if (scope.kind === "all") return true;
+  const { data, error } = await supabase()
+    .from("employees")
+    .select("id")
+    .eq("id", employeeId)
+    .eq("assigned_admin_user_id", scope.adminUserId)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
 /**
  * Employee call reminders + new applicant notifications — surfaced in the
  * notification bell on employee admin pages.
@@ -140,25 +177,29 @@ export async function deleteEmployee(id: string): Promise<void> {
  *  2. "applied" — status="applied" employees not yet moved to screening/beyond.
  *                 Sorted newest first so the freshest applicants surface on top.
  */
-export async function listEmployeeCallReminders(limit = 50): Promise<CallReminder[]> {
+export async function listEmployeeCallReminders(opts: { limit?: number; assignedAdminUserId?: string } = {}): Promise<CallReminder[]> {
+  const { limit = 50, assignedAdminUserId } = opts;
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const sb = supabase();
 
-  const [dueRes, appliedRes] = await Promise.all([
-    sb
-      .from("employees")
-      .select("id,name,phone,status,reminder_call_date,created_at")
-      .not("reminder_call_date", "is", null)
-      .lte("reminder_call_date", today)
-      .order("reminder_call_date", { ascending: true })
-      .limit(limit * 2),
-    sb
-      .from("employees")
-      .select("id,name,phone,job_role,created_at")
-      .eq("status", "applied")
-      .order("created_at", { ascending: false })
-      .limit(limit),
-  ]);
+  let dueQuery = sb
+    .from("employees")
+    .select("id,name,phone,status,reminder_call_date,created_at")
+    .not("reminder_call_date", "is", null)
+    .lte("reminder_call_date", today)
+    .order("reminder_call_date", { ascending: true })
+    .limit(limit * 2);
+  let appliedQuery = sb
+    .from("employees")
+    .select("id,name,phone,job_role,created_at")
+    .eq("status", "applied")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (assignedAdminUserId) {
+    dueQuery = dueQuery.eq("assigned_admin_user_id", assignedAdminUserId);
+    appliedQuery = appliedQuery.eq("assigned_admin_user_id", assignedAdminUserId);
+  }
+  const [dueRes, appliedRes] = await Promise.all([dueQuery, appliedQuery]);
   if (dueRes.error) throw dueRes.error;
   if (appliedRes.error) throw appliedRes.error;
 
@@ -201,4 +242,20 @@ export async function listEmployeeCallReminders(limit = 50): Promise<CallReminde
   }
 
   return out.slice(0, limit);
+}
+
+/** Distinct job_role values + counts for the employee filter pill bar. */
+export async function listJobCounts(opts: { assignedAdminUserId?: string } = {}): Promise<Array<{ job_role: string; count: number }>> {
+  let q = supabase().from("employees").select("job_role");
+  if (opts.assignedAdminUserId) q = q.eq("assigned_admin_user_id", opts.assignedAdminUserId);
+  const { data, error } = await q;
+  if (error) throw error;
+  const counts = new Map<string, number>();
+  for (const r of (data ?? []) as { job_role: string | null }[]) {
+    if (!r.job_role) continue;
+    counts.set(r.job_role, (counts.get(r.job_role) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([job_role, count]) => ({ job_role, count }))
+    .sort((a, b) => b.count - a.count || a.job_role.localeCompare(b.job_role));
 }

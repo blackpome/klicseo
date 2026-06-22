@@ -5,8 +5,10 @@ import AdminShell from "../../../AdminShell";
 import AdminError from "../../../AdminError";
 import EmployeeForm from "../../EmployeeForm";
 import { updateEmployeeAction } from "../../actions";
-import { getEmployee } from "@/lib/employees";
+import { getEmployee, assertEmployeeInScope } from "@/lib/employees";
 import { listJobs } from "@/lib/jobs";
+import { listAssignableAdminUsers } from "@/lib/admin-users";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 
 export default async function EditEmployeePage({
   params,
@@ -14,6 +16,8 @@ export default async function EditEmployeePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const me = await currentAdmin();
+
   let employee;
   try {
     employee = await getEmployee(id);
@@ -26,7 +30,13 @@ export default async function EditEmployeePage({
   }
   if (!employee) notFound();
 
-  const jobs = await listJobs();
+  // Scope guard: non-super-admins may only edit employees assigned to them.
+  if (me) {
+    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+    if (!(await assertEmployeeInScope(id, scope))) notFound();
+  }
+
+  const [jobs, adminUsers] = await Promise.all([listJobs(), listAssignableAdminUsers()]);
 
   return (
     <AdminShell require="employees.manage" section="employees">
@@ -48,6 +58,7 @@ export default async function EditEmployeePage({
           submitLabel="Save changes"
           pendingLabel="Saving…"
           jobs={jobs}
+          adminUsers={adminUsers}
         />
       </div>
     </AdminShell>

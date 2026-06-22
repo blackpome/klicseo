@@ -1,0 +1,446 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRef, useEffect } from "react";
+import Link from "next/link";
+import { ArrowLeft, Check, Edit, Plus, Trash2 } from "lucide-react";
+import LeadStatusControl from "../../LeadStatusControl";
+import DeleteLeadListButton from "../DeleteLeadListButton";
+import WhatsAppLink from "@/components/WhatsAppLink";
+import { LEAD_STATUS_COLOR, type LeadStatus } from "@/lib/leads-shared";
+import type { LeadListRow } from "@/lib/leadLists-shared";
+import {
+  addLeadsToListAction,
+  removeLeadFromListAction,
+  searchLeadsForListAction,
+} from "../actions";
+
+type LeadForList = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  service: string | null;
+  service_option: string | null;
+  add_on_labels: string[] | null;
+  vehicle_type: string | null;
+  car_brand: string | null;
+  car_model: string | null;
+  car_number: string | null;
+  status: LeadStatus;
+};
+
+export default function LeadListDetailClient({
+  list,
+  initialLeads,
+  isSuperAdmin,
+}: {
+  list: LeadListRow;
+  initialLeads: LeadForList[];
+  isSuperAdmin: boolean;
+}) {
+  const [leads, setLeads] = useState<LeadForList[]>(initialLeads);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<LeadForList[]>([]);
+  const [selectedLeadsToAdd, setSelectedLeadsToAdd] = useState<Set<string>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false); // when true, taps add/remove instead of single-select
+  const selectingRef = useRef(false);
+  const startIndexRef = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [ariaLiveMessage, setAriaLiveMessage] = useState("");
+  const prevSelectedCountRef = useRef<number>(0);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    // Announce selection mode changes
+    setAriaLiveMessage(selectionMode ? "Multi-select mode enabled" : "Multi-select mode disabled");
+  }, [selectionMode]);
+
+  useEffect(() => {
+    // Vibrate and announce when selection count changes
+    const prev = prevSelectedCountRef.current;
+    const current = selectedLeadsToAdd.size;
+    if (current !== prev) {
+      try {
+        // small vibration feedback on supported devices
+        (navigator as any).vibrate?.(10);
+      } catch {}
+      setAriaLiveMessage(`${current} lead${current === 1 ? "" : "s"} selected`);
+      prevSelectedCountRef.current = current;
+    }
+  }, [selectedLeadsToAdd]);
+
+  function handleSearch() {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults([]);
+      setLastSelectedIndex(null);
+      return;
+    }
+
+    setError(null);
+    setLastSelectedIndex(null);
+    startTransition(async () => {
+      const results = await searchLeadsForListAction(query);
+      setSearchResults(results);
+    });
+  }
+
+  // helper to set a contiguous range selection between indices (inclusive)
+  function setSelectionRange(from: number, to: number) {
+    setSelectedLeadsToAdd((prev) => {
+      const next = new Set(prev);
+      const start = Math.min(from, to);
+      const end = Math.max(from, to);
+      for (let i = start; i <= end; i++) {
+        const id = searchResults[i]?.id;
+        if (id && !leads.some((l) => l.id === id)) next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function handlePointerDown(e: any, index: number) {
+    // begin pointer-based selection (touch or pen)
+    selectingRef.current = true;
+    startIndexRef.current = index;
+    // capture pointer so we receive move/up events even if finger drifts
+    try {
+      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    } catch {}
+
+    const id = searchResults[index]?.id;
+    if (!id || leads.some((l) => l.id === id)) return;
+
+    if (selectionMode) {
+      // toggle in selection mode
+      setSelectedLeadsToAdd((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    } else {
+      // single select (clear others)
+      setSelectedLeadsToAdd(new Set([id]));
+    }
+    setLastSelectedIndex(index);
+  }
+
+  function handlePointerMove(e: any) {
+    if (!selectingRef.current) return;
+    const x = e.clientX;
+    const y = e.clientY;
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    if (!el) return;
+    const row = el.closest("button[data-index]") as HTMLElement | null;
+    if (!row) return;
+    const idx = Number(row.getAttribute("data-index"));
+    if (Number.isFinite(idx) && startIndexRef.current !== null) {
+      setSelectionRange(startIndexRef.current, idx);
+      setLastSelectedIndex(idx);
+    }
+  }
+
+  function handlePointerUp(e: any) {
+    selectingRef.current = false;
+    startIndexRef.current = null;
+    try {
+      (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+    } catch {}
+  }
+
+  function handleLeadSelection(leadId: string, index: number, event: React.MouseEvent) {
+    const isShiftClick = event.shiftKey;
+    const isCtrlOrCmdClick = event.ctrlKey || event.metaKey;
+
+    setSelectedLeadsToAdd((prev) => {
+      const next = new Set(prev);
+      const alreadyInList = leads.some((item) => item.id === leadId);
+
+      if (alreadyInList) {
+        return prev; // Can't select leads already in list
+      }
+
+      if (isShiftClick && lastSelectedIndex !== null) {
+        // Range select: select all items from last selected to current
+        const start = Math.min(lastSelectedIndex, index);
+        const end = Math.max(lastSelectedIndex, index);
+        for (let i = start; i <= end; i++) {
+          const item = searchResults[i];
+          if (!leads.some((l) => l.id === item.id)) {
+            next.add(item.id);
+          }
+        }
+      } else if (isCtrlOrCmdClick) {
+        // Toggle individual item
+        if (next.has(leadId)) {
+          next.delete(leadId);
+        } else {
+          next.add(leadId);
+        }
+      } else {
+        // Single select: clear and select only this item
+        next.clear();
+        next.add(leadId);
+      }
+
+      return next;
+    });
+
+    setLastSelectedIndex(index);
+  }
+
+  function handleRemoveLead(leadId: string) {
+    if (!confirm("Remove this lead from the list?")) return;
+
+    const previous = leads;
+    setLeads((current) => current.filter((lead) => lead.id !== leadId));
+    setError(null);
+
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.append("listId", list.id);
+      formData.append("leadId", leadId);
+      const result = await removeLeadFromListAction(formData);
+      if (result.error) {
+        setLeads(previous);
+        setError(result.error);
+      }
+    });
+  }
+
+  function handleAddSelectedLeads() {
+    const selectedIds = Array.from(selectedLeadsToAdd);
+    if (selectedIds.length === 0) return;
+
+    setError(null);
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.append("listId", list.id);
+      selectedIds.forEach((leadId) => formData.append("leadIds", leadId));
+
+      const result = await addLeadsToListAction(formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      const byId = new Map(leads.map((lead) => [lead.id, lead]));
+      searchResults
+        .filter((lead) => selectedLeadsToAdd.has(lead.id))
+        .forEach((lead) => byId.set(lead.id, lead));
+      setLeads(Array.from(byId.values()));
+      setSelectedLeadsToAdd(new Set());
+      setSearchResults([]);
+      setSearchQuery("");
+      setLastSelectedIndex(null);
+    });
+  }
+
+  return (
+    <>
+      <Link href={isSuperAdmin ? "/admin/lists" : "/admin/my-lists"} className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4">
+        <ArrowLeft size={13} /> {isSuperAdmin ? "Back to all lists" : "Back to my lists"}
+      </Link>
+
+      <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
+            {list.name}
+          </h1>
+          <p className="text-white/45 text-sm">
+            {leads.length} leads | Assigned to: {list.assigned_admin_user?.name || "-"}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {isSuperAdmin && (
+            <Link
+              href={`/admin/lists/${list.id}/edit`}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 text-white/80 hover:text-white hover:border-white/30"
+            >
+              <Edit size={12} /> Edit
+            </Link>
+          )}
+          {isSuperAdmin && <DeleteLeadListButton id={list.id} name={list.name} />}
+        </div>
+      </div>
+
+      {error && <p className="mb-4 text-[12px] text-red-300">{error}</p>}
+
+      <div className="mb-6">
+        <h2 className="text-[11px] font-bold text-[#C9A84C] uppercase tracking-widest mb-2">
+          Add Leads to This List
+        </h2>
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSearch();
+              }}
+              placeholder="Search leads by name, phone, or service..."
+              className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C9A84C]"
+            />
+            <button
+              type="button"
+              onClick={handleSearch}
+              disabled={pending}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-[#C9A84C] text-[#050E21] hover:bg-[#B0903C] disabled:opacity-60"
+            >
+              <Plus size={14} /> {pending ? "Searching..." : "Search"}
+            </button>
+          </div>
+
+          {searchResults.length > 0 && (
+            <div className="border border-white/10 rounded-lg">
+              <div className="px-3 py-2 text-[10px] font-semibold text-white/40 uppercase tracking-widest border-b border-white/5 flex items-center justify-between">
+                <div>
+                  Search Results ({searchResults.length} found) — <span className="text-white/30 font-normal">Click to select • Shift+Click for range • Ctrl+Click to toggle</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-pressed={selectionMode}
+                    onClick={() => setSelectionMode((s) => !s)}
+                    className="inline-flex items-center gap-2 px-2 py-1 rounded text-[11px] font-semibold bg-white/5 hover:bg-white/7"
+                  >
+                    {selectionMode ? "Multi-select: On" : "Multi-select: Off"}
+                  </button>
+                </div>
+                <div aria-live="polite" className="sr-only">
+                  {ariaLiveMessage}
+                </div>
+              </div>
+              <div className="max-h-48 overflow-y-auto">
+                {searchResults.map((lead, index) => {
+                  const isSelected = selectedLeadsToAdd.has(lead.id);
+                  const alreadyInList = leads.some((item) => item.id === lead.id);
+                  return (
+                    <button
+                      type="button"
+                      key={lead.id}
+                      data-index={index}
+                      disabled={alreadyInList}
+                      className={`w-full flex items-center px-3 py-2 border-t border-white/5 text-left ${
+                        isSelected ? "bg-white/[0.05]" : ""
+                      } ${alreadyInList ? "opacity-45 cursor-not-allowed" : "hover:bg-white/[0.03] cursor-pointer"}`}
+                      onPointerDown={(e) => handlePointerDown(e, index)}
+                      onPointerMove={handlePointerMove}
+                      onPointerUp={handlePointerUp}
+                      onClick={(e) => handleLeadSelection(lead.id, index, e)}
+                    >
+                      <span className="h-4 w-4 inline-flex items-center justify-center rounded border border-white/20 text-[#C9A84C]">
+                        {alreadyInList || isSelected ? <Check size={12} /> : null}
+                      </span>
+                      <span className="flex-1 ml-3">
+                        <span className="block text-white/80 font-medium">{lead.name ?? "(unnamed)"}</span>
+                        <span className="block text-white/50 text-[10px]">
+                          {lead.phone ?? "-"} | {lead.service ?? "-"} | {lead.vehicle_type ?? "-"}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {selectedLeadsToAdd.size > 0 && (
+            <div className="mt-3">
+              <p className="text-white/45 text-[10px]">
+                {selectedLeadsToAdd.size} lead{selectedLeadsToAdd.size === 1 ? "" : "s"} selected
+              </p>
+              <button
+                type="button"
+                onClick={handleAddSelectedLeads}
+                disabled={pending}
+                className="w-full py-3.5 rounded-xl font-bold text-sm text-[#050E21] disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
+              >
+                {pending ? "Adding..." : "Add Selected Leads to List"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {leads.length === 0 ? (
+        <div className="text-center py-12 text-white/40">
+          No leads in this list yet. Add leads using the search above.
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-white/10">
+          <table className="w-full text-sm">
+            <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
+              <tr>
+                <th className="px-3 py-2 text-left font-semibold">#</th>
+                <th className="px-3 py-2 text-left font-semibold">Name</th>
+                <th className="px-3 py-2 text-left font-semibold">Phone</th>
+                <th className="px-3 py-2 text-left font-semibold">Service</th>
+                <th className="px-3 py-2 text-left font-semibold">Vehicle</th>
+                <th className="px-3 py-2 text-left font-semibold">Status</th>
+                <th className="px-3 py-2 text-center font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leads.map((lead, index) => (
+                <tr key={lead.id} className="border-t border-white/5 hover:bg-white/[0.02]">
+                  <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{index + 1}</td>
+                  <td className="px-3 py-2">
+                    <Link href={`/admin/${lead.id}`} className="hover:text-[#C9A84C] hover:underline">
+                      {lead.name ?? "(unnamed)"}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-2">
+                    {lead.phone ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline">
+                          {lead.phone}
+                        </a>
+                        <WhatsAppLink phone={lead.phone} label={`WhatsApp ${lead.name ?? lead.phone}`} />
+                      </span>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div>{lead.service ?? "-"}</div>
+                    <div className="text-[11px] text-white/45">
+                      {[lead.service_option, ...(lead.add_on_labels ?? []).map((label) => `+ ${label}`)]
+                        .filter(Boolean)
+                        .join(" | ")}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div>{[lead.car_brand, lead.car_model].filter(Boolean).join(" ") || lead.vehicle_type || "-"}</div>
+                    <div className="text-[11px] text-white/45">
+                      {[lead.vehicle_type, lead.car_number].filter(Boolean).join(" | ")}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <LeadStatusControl id={lead.id} status={lead.status} color={LEAD_STATUS_COLOR[lead.status]} />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveLead(lead.id)}
+                      disabled={pending}
+                      className="text-xs px-2 py-1 rounded bg-white/10 text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                      title="Remove from list"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}

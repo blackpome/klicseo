@@ -12,9 +12,11 @@ import { PERMISSION_ICON } from "./permission-ui";
 // can sit inside a modal that provides its own chrome.
 export default function GrantForm({
   canMakeAdmin,
+  employees,
   bare = false,
 }: {
   canMakeAdmin: boolean;
+  employees: { id: string; name: string }[];
   bare?: boolean;
 }) {
   const [state, action, pending] = useActionState(grantAccessAction, {} as { error?: string; ok?: string });
@@ -69,30 +71,47 @@ export default function GrantForm({
       </div>
 
       {role === "staff" && (
-        <fieldset className="space-y-2">
-          <legend className="text-[11px] uppercase tracking-wider text-white/45 mb-1">Permissions</legend>
-          <div className="grid sm:grid-cols-2 gap-2">
-            {ALL_PERMISSIONS.map((p) => {
-              const Icon = PERMISSION_ICON[p.id];
-              return (
-                <label
-                  key={p.id}
-                  className="flex items-start gap-2.5 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 cursor-pointer hover:bg-white/[0.04] has-[:checked]:border-[#C9A84C]/40 has-[:checked]:bg-[#C9A84C]/10"
-                >
-                  <input type="checkbox" name="permissions" value={p.id} className="peer sr-only" />
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white/5 text-white/40 peer-checked:bg-[#C9A84C]/20 peer-checked:text-[#C9A84C]">
-                    <Icon size={15} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="text-sm font-medium block">{p.label}</span>
-                    <span className="text-[11px] text-white/40">{p.blurb}</span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-          <p className="text-[11px] text-white/35">“Manage” automatically includes “view”.</p>
-        </fieldset>
+        <>
+          <label className="block">
+            <span className="text-[11px] uppercase tracking-wider text-white/45">Employee record</span>
+            <select
+              name="employee_id"
+              className="mt-1 w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#C9A84C]"
+            >
+              <option value="">- Not linked -</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <fieldset className="space-y-2">
+            <legend className="text-[11px] uppercase tracking-wider text-white/45 mb-1">Permissions</legend>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {ALL_PERMISSIONS.map((p) => {
+                const Icon = PERMISSION_ICON[p.id];
+                return (
+                  <label
+                    key={p.id}
+                    className="flex items-start gap-2.5 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 cursor-pointer hover:bg-white/[0.04] has-[:checked]:border-[#C9A84C]/40 has-[:checked]:bg-[#C9A84C]/10"
+                  >
+                    <input type="checkbox" name="permissions" value={p.id} className="peer sr-only" />
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white/5 text-white/40 peer-checked:bg-[#C9A84C]/20 peer-checked:text-[#C9A84C]">
+                      <Icon size={15} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="text-sm font-medium block">{p.label}</span>
+                      <span className="text-[11px] text-white/40">{p.blurb}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-white/35">“Manage” automatically includes “view”.</p>
+          </fieldset>
+        </>
       )}
 
       {state.error && <p className="text-[12px] text-red-300">{state.error}</p>}

@@ -11,6 +11,7 @@ import {
   FileText,
   Pencil,
   ImageIcon,
+  ClipboardList,
 } from "lucide-react";
 import AdminShell from "../../AdminShell";
 import AdminError from "../../AdminError";
@@ -20,9 +21,12 @@ import WhatsAppLink from "@/components/WhatsAppLink";
 import { getJobBySlug } from "@/lib/jobs";
 import {
   getEmployee,
+  assertEmployeeInScope,
   signedUrlFor,
   type EmployeeStatus,
 } from "@/lib/employees";
+import { listLeadLists } from "@/lib/leadLists";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 
 const STATUS_COLOR: Record<EmployeeStatus, string> = {
   applied: "#3B82F6",
@@ -73,6 +77,7 @@ export default async function EmployeeDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const me = await currentAdmin();
 
   let emp;
   try {
@@ -86,19 +91,28 @@ export default async function EmployeeDetailPage({
   }
   if (!emp) notFound();
 
+  // Scope guard: non-super-admins may only open employees assigned to them.
+  if (me) {
+    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+    if (!(await assertEmployeeInScope(id, scope))) notFound();
+  }
+
   const [aadhaarUrl, profileUrl, signatureUrl] = await Promise.all([
     signedUrlFor(emp.aadhaar_photo_path).catch(() => null),
     signedUrlFor(emp.profile_photo_path).catch(() => null),
     signedUrlFor(emp.signature_path).catch(() => null),
   ]);
 
-  const job = await getJobBySlug(emp.job_role);
+  const [job, assignedLists] = await Promise.all([
+    getJobBySlug(emp.job_role),
+    listLeadLists({ assignedAdminUserId: emp.assigned_admin_user_id ?? undefined }).catch(() => []),
+  ]);
 
   return (
     <AdminShell require="employees.view" section="employees">
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <Link href="/admin/employees" className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white">
-          <ArrowLeft size={13} /> All employees
+          <ArrowLeft size={13} /> {me?.role === "super_admin" ? "All employees" : "My employees"}
         </Link>
         <div className="flex items-center gap-3">
           <EmployeeStatusControl id={emp.id} status={emp.status} color={STATUS_COLOR[emp.status]} />
@@ -138,6 +152,8 @@ export default async function EmployeeDetailPage({
             </span>
             <span className="text-white/30">·</span>
             <span>{job?.title ?? emp.job_role}</span>
+            <span className="text-white/30">·</span>
+            <span>{emp.assigned_admin_user ? `Assigned to ${emp.assigned_admin_user.name || emp.assigned_admin_user.email}` : "Unassigned"}</span>
             <span className="text-white/30">·</span>
             <span>
               Applied{" "}
@@ -222,6 +238,27 @@ export default async function EmployeeDetailPage({
           <Field label="Joining date" value={fmt(emp.joining_date)} />
           <Field label="Resignation date" value={fmt(emp.resignation_date)} />
         </Section>
+
+        <div className="lg:col-span-2">
+          <Section title="Assigned lead lists" icon={ClipboardList}>
+            {assignedLists.length === 0 ? (
+              <div className="text-sm text-white/40 py-1">No lead lists assigned.</div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {assignedLists.map((list) => (
+                  <Link
+                    key={list.id}
+                    href={`/admin/lists/${list.id}`}
+                    className="flex items-center justify-between gap-3 py-2 text-sm hover:text-[#C9A84C]"
+                  >
+                    <span>{list.name}</span>
+                    <span className="text-xs text-white/40">{list.lead_count ?? 0} leads</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Section>
+        </div>
 
         <div className="lg:col-span-2">
           <Section title="Internal notes" icon={FileText}>

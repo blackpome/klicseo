@@ -53,6 +53,7 @@ export default function EmployeeForm({
   pendingLabel,
   hiddenId,
   jobs,
+  adminUsers,
 }: {
   action: Action;
   initial?: Partial<EmployeeRow> | null;
@@ -60,6 +61,7 @@ export default function EmployeeForm({
   pendingLabel: string;
   hiddenId?: string;
   jobs: JobOption[];
+  adminUsers?: Array<{ id: string; email: string; name: string }>;
 }) {
   const [state, formAction, pending] = useActionState<State, FormData>(action, {});
   const [compressing, setCompressing] = useState<Record<string, boolean>>({});
@@ -104,6 +106,21 @@ export default function EmployeeForm({
             {initial?.job_role && !jobs.some((j) => j.slug === initial.job_role) && (
               <option value={initial.job_role as string}>{initial.job_role as string}</option>
             )}
+          </select>
+        </Field>
+
+        <Field label="Assign to team member">
+          <select
+            name="assigned_admin_user_id"
+            defaultValue={(initial?.assigned_admin_user_id as string) ?? ""}
+            className={fieldCls}
+          >
+            <option value="">— Unassigned —</option>
+            {adminUsers?.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name || user.email}
+              </option>
+            ))}
           </select>
         </Field>
       </Section>

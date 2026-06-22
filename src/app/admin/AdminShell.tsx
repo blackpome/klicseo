@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { currentAdmin } from "@/lib/admin-auth";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 import { type Permission } from "@/lib/admin-users-shared";
 import { listCallReminders } from "@/lib/leads";
 import { listEmployeeCallReminders } from "@/lib/employees";
@@ -27,20 +27,28 @@ export default async function AdminShell({
 
   const can = (p: Permission) => me.permissions.includes(p);
   const canManageAccess = me.role === "super_admin" || me.role === "admin";
+  const isSuperAdmin = me.role === "super_admin";
   const denied = require != null && !can(require);
+
+  // Resolve scope once for the whole shell (used by bell + available to pages).
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+  const assignedAdminUserId = scope.kind === "assigned" ? scope.adminUserId : undefined;
 
   // Build nav groups, hiding anything the user can't reach.
   const groups: NavGroup[] = [];
 
   const leadsItems = [
-    can("leads.view") && { href: "/admin", label: "All Leads", icon: "Inbox" as const, exact: true },
+    can("leads.view") && { href: "/admin", label: isSuperAdmin ? "All Leads" : "My Leads", icon: "Inbox" as const, exact: true },
+    isSuperAdmin && can("leads.view") && { href: "/admin/lists", label: "Lead Lists", icon: "ClipboardList" as const },
+    !isSuperAdmin && can("leads.view") && { href: "/admin/my-lists", label: "My Lists", icon: "ClipboardList" as const },
     can("leads.manage") && { href: "/admin/new", label: "Add Lead", icon: "PlusCircle" as const },
     (can("payments.view") || can("leads.view")) && { href: "/admin/payments", label: "Payments", icon: "Wallet" as const },
   ].filter(Boolean) as NavGroup["items"];
   if (leadsItems.length) groups.push({ title: "Leads", items: leadsItems });
 
   const employeeItems = [
-    can("employees.view") && { href: "/admin/employees", label: "All Employees", icon: "Users" as const },
+    isSuperAdmin && can("employees.view") && { href: "/admin/employees", label: "All Employees", icon: "Users" as const },
+    can("employees.view") && { href: "/admin/my-employees", label: "My Employees", icon: "Users" as const },
     can("employees.manage") && { href: "/admin/employees/new", label: "Add Employee", icon: "UserPlus" as const },
   ].filter(Boolean) as NavGroup["items"];
   if (employeeItems.length) groups.push({ title: "Employees", items: employeeItems });
@@ -66,12 +74,14 @@ export default async function AdminShell({
 
   // Call reminders power the notification bell. The feed depends on the
   // current section: employees pages surface employee call reminders, every
-  // other admin page surfaces lead call reminders. Same bell component either way.
+  // other admin page surfaces lead call reminders. Scoped to the admin's scope.
   const bellPermission: Permission = section === "employees" ? "employees.view" : "leads.view";
   let reminders: CallReminder[] = [];
   if (can(bellPermission)) {
     try {
-      reminders = section === "employees" ? await listEmployeeCallReminders() : await listCallReminders();
+      reminders = section === "employees"
+        ? await listEmployeeCallReminders({ assignedAdminUserId })
+        : await listCallReminders({ assignedAdminUserId });
     } catch {
       reminders = []; // a DB hiccup shouldn't break the whole shell
     }

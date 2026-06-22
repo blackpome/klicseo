@@ -3,6 +3,7 @@ import { supabase } from "./supabase";
 import { sealFields, unsealFields, unseal, phoneHash, normalizePhone } from "./crypto";
 import { areaFromPincode } from "./area";
 import type { CallReminder, LeadStatus } from "./leads-shared";
+import type { LeadScope } from "./admin-auth";
 
 export * from "./leads-shared";
 
@@ -134,6 +135,9 @@ export async function listLeads(opts: {
   /** Statuses to exclude (only honoured when `status` is "all" or unset).
    *  Used by the admin list to hide drafts from the default view. */
   excludeStatuses?: LeadStatus[];
+  /** Restrict to leads that appear in at least one lead_list assigned to this
+   *  admin user. Used to give non-super-admin staff a "my leads" view. */
+  assignedAdminUserId?: string;
 } = {}): Promise<LeadRow[]> {
   let q = supabase().from("leads").select("*").order("created_at", { ascending: false });
   if (opts.status && opts.status !== "all") {
@@ -158,10 +162,47 @@ export async function listLeads(opts: {
       q = q.or(orParts.join(","));
     }
   }
+
+  // "My leads" scope: restrict to leads appearing in a list assigned to the
+  // given admin user. Resolved in two steps — fetch the qualifying lead ids,
+  // then filter. PostgREST can't express this as a single .in() on the joined
+  // tables without writing a view, and this keeps the existing query plan.
+  if (opts.assignedAdminUserId) {
+    const { data: assignedLeadIds, error: listErr } = await supabase()
+      .from("lead_list_items")
+      .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
+      .eq("lead_lists.assigned_admin_user_id", opts.assignedAdminUserId);
+    if (listErr) throw listErr;
+    const ids = Array.from(
+      new Set((assignedLeadIds ?? []).map((r: { lead_id: string }) => r.lead_id)),
+    );
+    if (ids.length === 0) return [];
+    q = q.in("id", ids);
+  }
+
   q = q.limit(opts.limit ?? 200);
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []).map((r) => unsealFields(r as LeadRow, ENCRYPTED_LEAD_FIELDS)!) as LeadRow[];
+}
+
+/** For a set of lead ids, return a Map from lead_id → list of list names they
+ *  appear in. Used by the admin table to show a "List" column for super_admin. */
+export async function mapLeadIdsToLists(leadIds: string[]): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (leadIds.length === 0) return map;
+  const { data, error } = await supabase()
+    .from("lead_list_items")
+    .select("lead_id, lead_lists(name)")
+    .in("lead_id", leadIds);
+  if (error) throw error;
+  for (const row of (data ?? []) as { lead_id: string; lead_lists: { name: string } | { name: string }[] }[]) {
+    const lists = Array.isArray(row.lead_lists) ? row.lead_lists : (row.lead_lists ? [row.lead_lists] : []);
+    const names = lists.map((l) => l.name);
+    const existing = map.get(row.lead_id) ?? [];
+    map.set(row.lead_id, [...existing, ...names]);
+  }
+  return map;
 }
 
 export async function getLead(id: string): Promise<LeadRow | null> {
@@ -267,6 +308,24 @@ export async function promoteLeadDraft(id: string, patch: LeadUpdate): Promise<L
   return await getLead(id);
 }
 
+// --- scope guards -----------------------------------------------------------
+// Used by detail pages to enforce that a non-super-admin can only open rows
+// that fall within their assigned scope.
+
+/** Return true if `leadId` is visible within `scope`. */
+export async function assertLeadInScope(leadId: string, scope: LeadScope): Promise<boolean> {
+  if (scope.kind === "all") return true;
+  const { data, error } = await supabase()
+    .from("lead_list_items")
+    .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
+    .eq("lead_id", leadId)
+    .eq("lead_lists.assigned_admin_user_id", scope.adminUserId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
 // Chennai is IST (UTC+5:30). Callback date/time are entered for IST, so we
 // interpret them in IST and compare against the current instant.
 const IST_OFFSET_MS = 330 * 60 * 1000;
@@ -299,12 +358,29 @@ function todayIST(): string {
 //   • due — a callback scheduled for TODAY (or overdue from a past date)
 //   • new — a fresh lead with status 'new'
 // A callback scheduled for a future date stays hidden until that day.
-export async function listCallReminders(limit = 50): Promise<CallReminder[]> {
-  const { data, error } = await supabase()
+export async function listCallReminders(opts: { limit?: number; assignedAdminUserId?: string } = {}): Promise<CallReminder[]> {
+  const { limit = 50, assignedAdminUserId } = opts;
+
+  // When scoped, first resolve the lead ids the admin is allowed to see, then
+  // fetch only those leads' reminders.
+  let allowedLeadIds: Set<string> | null = null;
+  if (assignedAdminUserId) {
+    const { data: items, error: itemsErr } = await supabase()
+      .from("lead_list_items")
+      .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
+      .eq("lead_lists.assigned_admin_user_id", assignedAdminUserId);
+    if (itemsErr) throw itemsErr;
+    allowedLeadIds = new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id));
+    if (allowedLeadIds.size === 0) return [];
+  }
+
+  let q = supabase()
     .from("leads")
     .select("id,name,phone,status,callback_date,callback_time,created_at")
     .order("created_at", { ascending: false })
     .limit(300);
+  if (allowedLeadIds) q = q.in("id", Array.from(allowedLeadIds));
+  const { data, error } = await q;
   if (error) throw error;
 
   const today = todayIST();

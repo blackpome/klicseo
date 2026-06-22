@@ -6,10 +6,11 @@ import LeadStatusControl from "../LeadStatusControl";
 import LeadNotesEditor from "./LeadNotesEditor";
 import DeleteLeadButton from "./DeleteLeadButton";
 import WhatsAppLink from "@/components/WhatsAppLink";
-import { getLead } from "@/lib/leads";
+import { getLead, assertLeadInScope } from "@/lib/leads";
 import { LEAD_STATUS_COLOR } from "@/lib/leads-shared";
 import { getCustomerPayments } from "@/lib/payments";
 import { inr } from "@/lib/pricing";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 import { ArrowLeft, Phone, MapPin, User, Car, Calendar, Sunrise, Sunset, Sparkles, Pencil, Wallet, Globe } from "lucide-react";
 
 const STATUS_COLOR = LEAD_STATUS_COLOR;
@@ -95,6 +96,8 @@ export default async function LeadDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const me = await currentAdmin();
+
   let lead;
   try {
     lead = await getLead(id);
@@ -106,6 +109,12 @@ export default async function LeadDetailPage({
     );
   }
   if (!lead) notFound();
+
+  // Scope guard: non-super-admins may only open leads in their assigned lists.
+  if (me) {
+    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+    if (!(await assertLeadInScope(id, scope))) notFound();
+  }
 
   const paymentHistory = await getCustomerPayments(id).catch(() => []);
 
@@ -121,7 +130,7 @@ export default async function LeadDetailPage({
     <AdminShell require="leads.view">
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <Link href="/admin" className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white">
-          <ArrowLeft size={13} /> All leads
+          <ArrowLeft size={13} /> {me?.role === "super_admin" ? "All leads" : "My leads"}
         </Link>
         <div className="flex items-center gap-3">
           <LeadStatusControl id={lead.id} status={lead.status} color={STATUS_COLOR[lead.status]} />

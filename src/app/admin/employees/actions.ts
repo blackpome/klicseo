@@ -51,6 +51,7 @@ function readCommonFields(formData: FormData) {
     phone: String(formData.get("phone") ?? "").trim(),
     location: String(formData.get("location") ?? "").trim() || null,
     aadhaar_number: String(formData.get("aadhaar_number") ?? "").trim() || null,
+    assigned_admin_user_id: String(formData.get("assigned_admin_user_id") ?? "").trim() || null,
     salary: salary != null && Number.isFinite(salary) ? salary : null,
     reminder_call_date: String(formData.get("reminder_call_date") ?? "") || null,
     joining_date: String(formData.get("joining_date") ?? "") || null,
@@ -152,4 +153,25 @@ export async function updateEmployeeAction(_prev: { error?: string }, formData: 
   revalidatePath("/admin/employees");
   revalidatePath(`/admin/employees/${id}`);
   redirect(`/admin/employees/${id}`);
+}
+
+export async function assignEmployeesAction(formData: FormData): Promise<{ error?: string }> {
+  await requirePermission("employees.manage");
+  const adminUserId = String(formData.get("adminUserId") ?? "").trim() || null;
+  const ids = formData.getAll("employeeIds").map((v) => String(v));
+  if (!adminUserId) return { error: "Choose a team member to assign to." };
+  if (!ids || ids.length === 0) return { error: "Select at least one employee." };
+
+  // Bulk update via supabase helper
+  const { error } = await supabase()
+    .from("employees")
+    .update({ assigned_admin_user_id: adminUserId })
+    .in("id", ids as string[]);
+  if (error) return { error: error.message };
+
+  for (const id of ids) {
+    await logAudit("employee.assign", { entity: "employee", entityId: id, summary: `Assigned employee to admin ${adminUserId}` });
+  }
+  revalidatePath("/admin/employees");
+  return { error: undefined };
 }

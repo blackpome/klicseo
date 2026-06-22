@@ -177,4 +177,26 @@ export function verifyTokenString(token: string | undefined): boolean {
   return /^\d{10,}\.[A-Za-z0-9_-]+\.[0-9a-f]{64}$/.test(token);
 }
 
+// --- scope resolution -------------------------------------------------------
+// Every read path uses this to decide whether the caller sees everything or only
+// rows explicitly assigned to them.
+
+export type LeadScope =
+  | { kind: "all" }
+  | { kind: "assigned"; adminUserId: string };
+
+export type EmployeeScope = LeadScope;
+
+/** Resolve the visibility scope for the current admin principal.
+ *  super_admin → { kind: "all" }
+ *  everyone else → { kind: "assigned", adminUserId: <admin_users.id> }
+ *  Returns null if the principal has no admin_users row (defensive). */
+export async function resolveScope(me: AdminPrincipal): Promise<LeadScope | null> {
+  if (me.role === "super_admin") return { kind: "all" };
+  const { getAdminUser } = await import("./admin-users");
+  const row = await getAdminUser(me.email);
+  if (!row?.id) return null;
+  return { kind: "assigned", adminUserId: row.id };
+}
+
 export const ADMIN_COOKIE_NAME = COOKIE_NAME;

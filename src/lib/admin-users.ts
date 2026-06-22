@@ -35,7 +35,7 @@ function rowToRow(data: Record<string, unknown>): AdminUserRow {
 export async function getAdminUser(email: string): Promise<AdminUserRow | null> {
   const { data, error } = await supabase()
     .from(TABLE)
-    .select("*")
+    .select("*, employees:employee_id (name)")
     .eq("email", normalizeEmail(email))
     .maybeSingle();
   if (error) throw error;
@@ -45,10 +45,25 @@ export async function getAdminUser(email: string): Promise<AdminUserRow | null> 
 export async function listAdminUsers(): Promise<AdminUserRow[]> {
   const { data, error } = await supabase()
     .from(TABLE)
-    .select("*")
+    .select("*, employees:employee_id (name)")
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []).map(rowToRow);
+}
+
+export async function listAssignableAdminUsers(): Promise<Array<{ id: string; employee_id?: string | null; email: string; name: string }>> {
+  const users = await listAdminUsers();
+  return users
+    .filter((u) => u.status === "active")
+    .map((u) => {
+      const name = Array.isArray(u.employees) ? u.employees[0]?.name ?? u.email : u.employees?.name ?? u.email;
+      return {
+        id: u.id,
+        employee_id: u.employee_id ?? null,
+        email: u.email,
+        name,
+      };
+    });
 }
 
 // Resolve the allowlist row into a principal, applying the env super-admin
@@ -79,6 +94,7 @@ export interface GrantInput {
   role: AdminRole;
   permissions: Permission[];
   invitedBy: string;
+  employeeId?: string | null;
 }
 
 // Create (or re-activate) an allowlist row AND send a Supabase invite email so
@@ -102,6 +118,7 @@ export async function grantAccess(
         status: "active",
         permissions,
         invited_by: normalizeEmail(input.invitedBy),
+        employee_id: input.role === "staff" ? input.employeeId || null : null,
       },
       { onConflict: "email" },
     );
@@ -113,6 +130,15 @@ export async function grantAccess(
   } catch (e) {
     return { emailSent: false, emailError: e instanceof Error ? e.message : "Email send failed." };
   }
+}
+
+export async function updateAccessEmployee(email: string, employeeId: string | null): Promise<void> {
+  const { error } = await supabase()
+    .from(TABLE)
+    .update({ employee_id: employeeId })
+    .eq("email", normalizeEmail(email))
+    .eq("role", "staff");
+  if (error) throw error;
 }
 
 export async function updatePermissions(email: string, permissions: Permission[]): Promise<void> {
