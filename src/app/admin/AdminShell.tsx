@@ -18,7 +18,8 @@ export default async function AdminShell({
   section = "leads",
 }: {
   children: React.ReactNode;
-  require?: Permission;
+  /** Permission(s) required to view this page. The user needs at least one. */
+  require?: Permission | Permission[];
   /** Which reminder feed powers the bell on this page. Defaults to "leads". */
   section?: "leads" | "employees";
 }) {
@@ -28,7 +29,7 @@ export default async function AdminShell({
   const can = (p: Permission) => me.permissions.includes(p);
   const canManageAccess = me.role === "super_admin" || me.role === "admin";
   const isSuperAdmin = me.role === "super_admin";
-  const denied = require != null && !can(require);
+  const denied = require != null && (Array.isArray(require) ? !require.some(can) : !can(require));
 
   // Resolve scope once for the whole shell (used by bell + available to pages).
   const scope = (await resolveScope(me)) ?? { kind: "all" as const };
@@ -42,7 +43,7 @@ export default async function AdminShell({
     isSuperAdmin && can("leads.view") && { href: "/admin/lists", label: "Lead Lists", icon: "ClipboardList" as const },
     !isSuperAdmin && can("leads.view") && { href: "/admin/my-lists", label: "My Lists", icon: "ClipboardList" as const },
     can("leads.manage") && { href: "/admin/new", label: "Add Lead", icon: "PlusCircle" as const },
-    (can("payments.view") || can("leads.view")) && { href: "/admin/payments", label: "Payments", icon: "Wallet" as const },
+    can("payments.view") && { href: "/admin/payments", label: "Payments", icon: "Wallet" as const },
   ].filter(Boolean) as NavGroup["items"];
   if (leadsItems.length) groups.push({ title: "Leads", items: leadsItems });
 

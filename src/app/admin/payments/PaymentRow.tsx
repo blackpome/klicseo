@@ -54,6 +54,7 @@ export default function PaymentRow({
   payment,
   dueCount,
   dueUnit,
+  canManage,
 }: {
   period: string;
   periodLabel: string;
@@ -63,6 +64,8 @@ export default function PaymentRow({
   dueCount: number;
   /** Per-month due amount (the customer's price_total). */
   dueUnit: number;
+  /** Whether the current user can edit payments. */
+  canManage: boolean;
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(savePaymentAction, {} as { error?: string; ok?: string });
@@ -283,16 +286,24 @@ export default function PaymentRow({
         </div>
 
         {/* Paid/Pending toggle */}
-        <button
-          type="button"
-          onClick={toggle}
-          aria-pressed={paid}
-          className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${
-            paid ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
-          }`}
-        >
-          {paid ? "● Paid" : "○ Pending"}
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-pressed={paid}
+            className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${
+              paid ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+            }`}
+          >
+            {paid ? "● Paid" : "○ Pending"}
+          </button>
+        ) : (
+          <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${
+            paid ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/15 text-amber-300"
+          }`}>
+            {paid ? "● Paid" : "○ Pending"}
+          </span>
+        )}
 
         {/* Amount */}
         <div className="flex items-center rounded-lg border border-white/10 bg-white/5 overflow-hidden">
@@ -305,7 +316,8 @@ export default function PaymentRow({
             onChange={(e) => setAmountStr(e.target.value)}
             placeholder="—"
             aria-label="Amount"
-            className="w-20 bg-transparent px-1.5 py-1.5 text-sm focus:outline-none"
+            disabled={!canManage}
+            className="w-20 bg-transparent px-1.5 py-1.5 text-sm focus:Outline-none disabled:opacity-60"
           />
         </div>
 
@@ -323,29 +335,34 @@ export default function PaymentRow({
             onChange={(e) => setAdvanceStr(e.target.value)}
             placeholder="0"
             aria-label="Advance amount"
-            className="w-16 bg-transparent px-1.5 py-1.5 text-sm focus:outline-none"
+            disabled={!canManage}
+            className="w-16 bg-transparent px-1.5 py-1.5 text-sm focus:outline-none disabled:opacity-60"
           />
         </div>
 
         {/* Method */}
-        <select name="method" defaultValue={payment?.method ?? ""} aria-label="Payment method" className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#C9A84C]">
+        <select name="method" defaultValue={payment?.method ?? ""} aria-label="Payment method" disabled={!canManage} className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#C9A84C] disabled:opacity-60">
           <option value="">Method…</option>
           {PAYMENT_METHODS.map((m) => <option key={m} value={m} className="bg-[#050E21]">{m.toUpperCase()}</option>)}
         </select>
 
         {/* Paid date */}
-        <input type="date" name="paid_at" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Paid date" className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white/70 focus:outline-none focus:border-[#C9A84C]" />
+        <input type="date" name="paid_at" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Paid date" disabled={!canManage} className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white/70 focus:outline-none focus:border-[#C9A84C] disabled:opacity-60" />
 
-        <button type="submit" disabled={pending} className="text-xs px-3.5 py-1.5 rounded-lg font-semibold bg-[#C9A84C] text-[#050E21] hover:brightness-110 disabled:opacity-60">
-          {pending ? "Saving…" : "Save"}
-        </button>
+        {canManage && (
+          <button type="submit" disabled={pending} className="text-xs px-3.5 py-1.5 rounded-lg font-semibold bg-[#C9A84C] text-[#050E21] hover:brightness-110 disabled:opacity-60">
+            {pending ? "Saving…" : "Save"}
+          </button>
+        )}
       </div>
 
-      <div className="flex items-center gap-3 mt-2">
-        <input name="notes" defaultValue={payment?.notes ?? ""} placeholder="Notes (optional)" className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#C9A84C]" />
-        {state.ok && <span className="inline-flex items-center gap-1 text-[11px] text-emerald-300"><Check size={12} /> {state.ok}</span>}
-        {state.error && <span className="inline-flex items-center gap-1 text-[11px] text-red-300"><AlertCircle size={12} /> {state.error}</span>}
-      </div>
+      {canManage && (
+        <div className="flex items-center gap-3 mt-2">
+          <input name="notes" defaultValue={payment?.notes ?? ""} placeholder="Notes (optional)" className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#C9A84C]" />
+          {state.ok && <span className="inline-flex items-center gap-1 text-[11px] text-emerald-300"><Check size={12} /> {state.ok}</span>}
+          {state.error && <span className="inline-flex items-center gap-1 text-[11px] text-red-300"><AlertCircle size={12} /> {state.error}</span>}
+        </div>
+      )}
     </form>
   );
 }

@@ -17,7 +17,7 @@ export interface PaymentItem {
 
 type Filter = "all" | "paid" | "pending";
 
-export default function PaymentsTable({ period, periodLabel, items }: { period: string; periodLabel: string; items: PaymentItem[] }) {
+export default function PaymentsTable({ period, periodLabel, items, canManage }: { period: string; periodLabel: string; items: PaymentItem[]; canManage: boolean }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
 
@@ -131,6 +131,7 @@ export default function PaymentsTable({ period, periodLabel, items }: { period: 
                   payment={it.payment}
                   dueCount={it.dueCount}
                   dueUnit={it.dueUnit}
+                  canManage={canManage}
                 />
               </div>
             </div>

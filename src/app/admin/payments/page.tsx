@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Wallet, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
-import { currentAdmin, resolveScope } from "@/lib/admin-auth";
+import { currentAdmin } from "@/lib/admin-auth";
 import { listLeads } from "@/lib/leads";
 import { listPeriodPayments, listPaymentsForLeads, currentPeriod, isValidPeriod, periodFromIso, periodsBetween } from "@/lib/payments";
 import { isServiceOptionId, SERVICE_OPTIONS } from "@/lib/pricing";
@@ -33,28 +33,14 @@ export default async function PaymentsPage({
 }) {
   const me = await currentAdmin();
   if (!me) redirect("/admin/login");
-  if (!me.permissions.includes("payments.view") && !me.permissions.includes("leads.view")) {
-    return (
-      <AdminShell>
-        <div className="mx-auto max-w-md text-center py-24">
-          <h1 className="text-xl font-bold mb-2" style={{ fontFamily: "var(--font-playfair)" }}>No access</h1>
-          <p className="text-white/45 text-sm">You don’t have permission to view payments.</p>
-        </div>
-      </AdminShell>
-    );
-  }
 
   const { month } = await searchParams;
   const period = month && isValidPeriod(month) ? month : currentPeriod();
 
-  // Scope: super_admin sees all booked leads; others see only their assigned.
-  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
-  const assignedAdminUserId = scope.kind === "assigned" ? scope.adminUserId : undefined;
-
   let customers, payments, settings;
   try {
     [customers, payments, settings] = await Promise.all([
-      listLeads({ status: "booked", limit: 500, assignedAdminUserId }),
+      listLeads({ status: "booked", limit: 500 }),
       listPeriodPayments(period),
       getSiteSettings(),
     ]);
@@ -107,7 +93,7 @@ export default async function PaymentsPage({
   const navBtn = "grid h-9 w-9 place-items-center rounded-lg bg-white/5 text-white/60 hover:bg-white/10";
 
   return (
-    <AdminShell>
+    <AdminShell require="payments.view">
       <div className="space-y-5 max-w-4xl">
         <div className="flex items-start gap-3">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#C9A84C]/15 ring-1 ring-[#C9A84C]/25">
@@ -140,12 +126,12 @@ export default async function PaymentsPage({
           </a>
         </div>
 
-        {/* Only super_admin can rephrase the WhatsApp messages sent from each row. */}
-        {me.role === "super_admin" && (
+        {/* super_admin and admin can rephrase the WhatsApp messages sent from each row. */}
+        {(me.role === "super_admin" || me.role === "admin") && (
           <MessageTemplatesEditor initial={settings.messageTemplates} />
         )}
 
-        <PaymentsTable period={period} periodLabel={monthLabel(period)} items={items} />
+        <PaymentsTable period={period} periodLabel={monthLabel(period)} items={items} canManage={me.permissions.includes("payments.manage") || me.permissions.includes("leads.manage")} />
       </div>
     </AdminShell>
   );

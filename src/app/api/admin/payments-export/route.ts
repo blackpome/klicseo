@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const me = await currentAdmin();
   if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!me.permissions.includes("leads.view")) {
+  if (!me.permissions.includes("payments.view")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
