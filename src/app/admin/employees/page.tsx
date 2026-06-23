@@ -66,12 +66,10 @@ export default async function AdminEmployeesPage({
   try {
     const canManage = Boolean(me?.permissions.includes("employees.manage"));
     [employees, roleLabel, adminUsers] = await Promise.all([
-      listEmployees({ status: filter, search: q, assignedAdminUserId }),
+      listEmployees({ status: filter, search: q, assignedAdminUserId, jobRole: roleFilter }),
       jobTitleMap(),
       canManage ? listAssignableAdminUsers() : Promise.resolve([]),
     ]);
-    // If a role filter is provided, apply it client-side by filtering the fetched rows.
-    if (roleFilter) employees = employees.filter((e) => e.job_role === roleFilter);
 
     // Job counts for the pill bar — scoped to the caller's visible employees.
     jobCounts = await listJobCounts({ assignedAdminUserId });
@@ -108,6 +106,7 @@ export default async function AdminEmployeesPage({
           ) : null}
           <form className="flex gap-2 items-center">
             {filter !== "all" && <input type="hidden" name="status" value={filter} />}
+            {roleFilter && <input type="hidden" name="role" value={roleFilter} />}
             <input
               type="search"
               name="q"

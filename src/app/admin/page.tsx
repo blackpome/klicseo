@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import AdminShell from "./AdminShell";
 import AdminError from "./AdminError";
-import { listLeads, mapLeadIdsToLists } from "@/lib/leads";
+import { listLeads, mapLeadIdsToLists, listServiceCounts } from "@/lib/leads";
 import { listAreasWithCounts } from "@/lib/area";
 import { LEAD_STATUSES, LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type LeadStatus } from "@/lib/leads-shared";
 import { listLeadLists } from "@/lib/leadLists";
@@ -19,11 +19,12 @@ const STATUS_TABS: { id: LeadStatus | "all"; label: string }[] = [
 
 const STATUS_COLOR = LEAD_STATUS_COLOR;
 
-function buildLeadsHref(args: { status: LeadStatus | "all"; q?: string; area?: string }): string {
+function buildLeadsHref(args: { status: LeadStatus | "all"; q?: string; area?: string; service?: string }): string {
   const params = new URLSearchParams();
   if (args.status !== "all") params.set("status", args.status);
   if (args.q) params.set("q", args.q);
   if (args.area) params.set("area", args.area);
+  if (args.service) params.set("service", args.service);
   const s = params.toString();
   return `/admin${s ? `?${s}` : ""}`;
 }
@@ -31,7 +32,7 @@ function buildLeadsHref(args: { status: LeadStatus | "all"; q?: string; area?: s
 export default async function AdminLeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; area?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; area?: string; service?: string }>;
 }) {
   // Leads is the default landing page. Route users who can't see leads to a
   // section they can, so they don't hit a dead "no access" screen on sign-in.
@@ -41,9 +42,10 @@ export default async function AdminLeadsPage({
     if (me.role === "super_admin" || me.role === "admin") redirect("/admin/access");
   }
 
-  const { status, q, area } = await searchParams;
+  const { status, q, area, service } = await searchParams;
   const filter = (STATUS_TABS.find((t) => t.id === status)?.id ?? "all") as LeadStatus | "all";
   const areaFilter = area && area !== "all" ? area : undefined;
+  const serviceFilter = service && service !== "all" ? service : undefined;
 
   // Lead visibility scoping:
   //   - super_admin sees everything.
@@ -60,21 +62,24 @@ export default async function AdminLeadsPage({
   let leads;
   let leadLists: LeadListRow[] = [];
   let areaCounts: { area: string; count: number }[] = [];
+  let serviceCounts: { service: string; count: number }[] = [];
   let leadListNames: Map<string, string[]> = new Map();
   try {
     const canManageLists = Boolean(me?.permissions.includes("leads.manage"));
-    [leads, areaCounts, leadLists] = await Promise.all([
+    [leads, areaCounts, leadLists, serviceCounts] = await Promise.all([
       // Drafts are wizard partial-saves; surface them only behind the Draft
       // tab so they don't drown out actionable leads.
       listLeads({
         status: filter,
         search: q,
         area: areaFilter,
+        service: serviceFilter,
         excludeStatuses: filter === "all" ? ["draft"] : undefined,
         assignedAdminUserId,
       }),
       listAreasWithCounts(),
       canManageLists ? listLeadLists({ assignedAdminUserId }) : Promise.resolve([]),
+      listServiceCounts(assignedAdminUserId),
     ]);
     // For super_admin, fetch which lists each lead belongs to (shown in table).
     if (isSuperAdmin && leads.length > 0) {
@@ -115,6 +120,7 @@ export default async function AdminLeadsPage({
         <form className="flex gap-2 items-center">
           {filter !== "all" && <input type="hidden" name="status" value={filter} />}
           {areaFilter && <input type="hidden" name="area" value={areaFilter} />}
+          {serviceFilter && <input type="hidden" name="service" value={serviceFilter} />}
           <input
             type="search"
             name="q"
@@ -168,6 +174,34 @@ export default async function AdminLeadsPage({
                 }`}
               >
                 {a.area} <span className={active ? "text-[#050E21]/60" : "text-white/35"}>{a.count}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
+      {serviceCounts.length > 0 && (
+        <div className="flex gap-2 mb-4 flex-wrap items-center">
+          <span className="text-[10px] uppercase tracking-wider text-white/35 mr-1">Service</span>
+          <Link
+            href={buildLeadsHref({ status: filter, q, area: areaFilter, service: undefined })}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+              !serviceFilter ? "bg-white/15 text-white" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+            }`}
+          >
+            All <span className="text-white/35">·</span> {serviceCounts.reduce((n, a) => n + a.count, 0)}
+          </Link>
+          {serviceCounts.map((a) => {
+            const active = serviceFilter === a.service;
+            return (
+              <Link
+                key={a.service}
+                href={buildLeadsHref({ status: filter, q, area: areaFilter, service: a.service })}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                  active ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+                }`}
+              >
+                {a.service} <span className={active ? "text-[#050E21]/60" : "text-white/35"}>{a.count}</span>
               </Link>
             );
           })}

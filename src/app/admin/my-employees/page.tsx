@@ -4,10 +4,34 @@ import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
 import { currentAdmin } from "@/lib/admin-auth";
 import { getAdminUser } from "@/lib/admin-users";
-import { listEmployees } from "@/lib/employees";
+import { listEmployees, listJobCounts } from "@/lib/employees";
 import type { EmployeeRow } from "@/lib/employees-shared";
+import { jobTitleMap } from "@/lib/jobs";
+import type { EmployeeStatus } from "@/lib/employees-shared";
 
-export default async function MyEmployeesPage() {
+const STATUS_TABS: { id: EmployeeStatus | "all"; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "applied", label: "Applied" },
+  { id: "screening", label: "Screening" },
+  { id: "hired", label: "Hired" },
+  { id: "active", label: "Active" },
+  { id: "resigned", label: "Resigned" },
+  { id: "rejected", label: "Rejected" },
+];
+
+function buildMyEmployeesHref(args: { status?: EmployeeStatus | "all"; role?: string | undefined }): string {
+  const params = new URLSearchParams();
+  if (args.status && args.status !== "all") params.set("status", args.status);
+  if (args.role) params.set("role", args.role);
+  const s = params.toString();
+  return `/admin/my-employees${s ? `?${s}` : ""}`;
+}
+
+export default async function MyEmployeesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; role?: string }>;
+}) {
   const me = await currentAdmin();
   const user = me ? await getAdminUser(me.email) : null;
 
@@ -27,15 +51,32 @@ export default async function MyEmployeesPage() {
     );
   }
 
+  const { status, role } = await searchParams;
+  const statusFilter = (STATUS_TABS.find((t) => t.id === status)?.id ?? "all") as EmployeeStatus | "all";
+  const roleFilter = role && role !== "all" ? role : undefined;
+
   let employees: EmployeeRow[] = [];
+  let roleLabel: Record<string, string> = {};
+  let jobCounts: Array<{ job_role: string; count: number }> = [];
   try {
-    employees = await listEmployees({ assignedAdminUserId: user.id });
+    [employees, roleLabel, jobCounts] = await Promise.all([
+      listEmployees({ assignedAdminUserId: user.id, status: statusFilter, jobRole: roleFilter }),
+      jobTitleMap(),
+      listJobCounts({ assignedAdminUserId: user.id }),
+    ]);
   } catch (err) {
     return (
       <AdminShell require="employees.view" section="employees">
         <AdminError err={err} />
       </AdminShell>
     );
+  }
+
+  // Build status counts from jobCounts data (already scoped)
+  const statusCounts = new Map<EmployeeStatus | "all", number>();
+  statusCounts.set("all", employees.length);
+  for (const e of employees) {
+    statusCounts.set(e.status, (statusCounts.get(e.status) ?? 0) + 1);
   }
 
   return (
@@ -49,8 +90,49 @@ export default async function MyEmployeesPage() {
         </div>
       </div>
 
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {STATUS_TABS.map((t) => {
+          const active = statusFilter === t.id;
+          const count = t.id === "all" ? employees.length : (statusCounts.get(t.id as EmployeeStatus) ?? 0);
+          return (
+            <Link
+              key={t.id}
+              href={buildMyEmployeesHref({ status: t.id, role: roleFilter })}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                active ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/5 text-white/60 hover:bg-white/10"
+              }`}
+            >
+              {t.label} <span className={active ? "text-[#050E21]/60" : "text-white/35"}>{count}</span>
+            </Link>
+          );
+        })}
+      </div>
+
+      {jobCounts && jobCounts.length > 0 && (
+        <div className="flex gap-2 mb-4 flex-wrap items-center">
+          <span className="text-[10px] uppercase tracking-wider text-white/35 mr-1">Role</span>
+          <Link href={buildMyEmployeesHref({ status: statusFilter })} className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${!roleFilter ? "bg-white/15 text-white" : "bg-white/[0.04] text-white/55 hover:bg-white/10"}`}>
+            All <span className="text-white/35">·</span> {jobCounts.reduce((n, a) => n + a.count, 0)}
+          </Link>
+          {jobCounts.slice(0, 20).map((a) => {
+            const active = roleFilter === a.job_role;
+            return (
+              <Link
+                key={a.job_role}
+                href={buildMyEmployeesHref({ status: statusFilter, role: a.job_role })}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                  active ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+                }`}
+              >
+                {roleLabel[a.job_role] ?? a.job_role} <span className={active ? "text-[#050E21]/60" : "text-white/35"}>{a.count}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
       {employees.length === 0 ? (
-        <div className="text-center py-16 text-white/40 text-sm">No employees are assigned to you yet.</div>
+        <div className="text-center py-16 text-white/40 text-sm">No employees match this filter.</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-white/10">
           <table className="w-full text-sm">

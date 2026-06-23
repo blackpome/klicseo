@@ -87,6 +87,8 @@ export async function listEmployees(
     fromIso?: string;
     /** Inclusive upper bound on created_at, full ISO timestamp w/ TZ. */
     toIso?: string;
+    /** Filter by job role */
+    jobRole?: string;
   } = {},
 ): Promise<EmployeeRow[]> {
   let q = supabase()
@@ -95,6 +97,7 @@ export async function listEmployees(
     .order("created_at", { ascending: false });
   if (opts.status && opts.status !== "all") q = q.eq("status", opts.status);
   if (opts.assignedAdminUserId) q = q.eq("assigned_admin_user_id", opts.assignedAdminUserId);
+  if (opts.jobRole && opts.jobRole !== "all") q = q.eq("job_role", opts.jobRole);
   if (opts.fromIso) q = q.gte("created_at", opts.fromIso);
   if (opts.toIso) q = q.lte("created_at", opts.toIso);
   if (opts.search) {

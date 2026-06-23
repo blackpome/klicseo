@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { useRef, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Edit, Plus, Trash2 } from "lucide-react";
 import LeadStatusControl from "../../LeadStatusControl";
 import DeleteLeadListButton from "../DeleteLeadListButton";
 import WhatsAppLink from "@/components/WhatsAppLink";
-import { LEAD_STATUS_COLOR, type LeadStatus } from "@/lib/leads-shared";
+import { LEAD_STATUS_COLOR, LEAD_STATUSES, LEAD_STATUS_LABEL, type LeadStatus } from "@/lib/leads-shared";
 import type { LeadListRow } from "@/lib/leadLists-shared";
 import {
   addLeadsToListAction,
@@ -51,6 +51,46 @@ export default function LeadListDetailClient({
   const prevSelectedCountRef = useRef<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
+  const [serviceFilter, setServiceFilter] = useState<string>("all");
+
+  // Derive unique services from the leads in this list
+  const services = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of leads) {
+      if (l.service) set.add(l.service);
+    }
+    return Array.from(set).sort();
+  }, [leads]);
+
+  // Filter leads by status + service
+  const filteredLeads = useMemo(() => {
+    return leads.filter((l) => {
+      if (statusFilter !== "all" && l.status !== statusFilter) return false;
+      if (serviceFilter !== "all" && l.service !== serviceFilter) return false;
+      return true;
+    });
+  }, [leads, statusFilter, serviceFilter]);
+
+  // Counts per status
+  const statusCounts = useMemo(() => {
+    const counts = new Map<LeadStatus | "all", number>();
+    counts.set("all", leads.length);
+    for (const l of leads) {
+      counts.set(l.status, (counts.get(l.status) ?? 0) + 1);
+    }
+    return counts;
+  }, [leads]);
+
+  // Counts per service
+  const serviceCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    counts.set("all", leads.length);
+    for (const l of leads) {
+      if (l.service) counts.set(l.service, (counts.get(l.service) ?? 0) + 1);
+    }
+    return counts;
+  }, [leads]);
 
   useEffect(() => {
     // Announce selection mode changes
@@ -251,7 +291,10 @@ export default function LeadListDetailClient({
             {list.name}
           </h1>
           <p className="text-white/45 text-sm">
-            {leads.length} leads | Assigned to: {list.assigned_admin_user?.name || "-"}
+            {filteredLeads.length === leads.length
+              ? `${leads.length} leads`
+              : `${filteredLeads.length} of ${leads.length} leads`}
+            {" | Assigned to: "}{list.assigned_admin_user?.name || "-"}
           </p>
         </div>
         <div className="flex gap-2">
@@ -265,6 +308,65 @@ export default function LeadListDetailClient({
           )}
           {isSuperAdmin && <DeleteLeadListButton id={list.id} name={list.name} />}
         </div>
+      </div>
+
+      {/* Filter pills */}
+      <div className="space-y-3 mb-5">
+        <div className="flex gap-2 flex-wrap items-center">
+          <span className="text-[10px] uppercase tracking-wider text-white/35 mr-1">Status</span>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("all")}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+              statusFilter === "all" ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+            }`}
+          >
+            All <span className={statusFilter === "all" ? "text-[#050E21]/60" : "text-white/35"}>{statusCounts.get("all") ?? 0}</span>
+          </button>
+          {LEAD_STATUSES.map((s) => {
+            const count = statusCounts.get(s) ?? 0;
+            if (count === 0) return null;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatusFilter(s)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                  statusFilter === s ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+                }`}
+              >
+                {LEAD_STATUS_LABEL[s]} <span className={statusFilter === s ? "text-[#050E21]/60" : "text-white/35"}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {services.length > 1 && (
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="text-[10px] uppercase tracking-wider text-white/35 mr-1">Service</span>
+            <button
+              type="button"
+              onClick={() => setServiceFilter("all")}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                serviceFilter === "all" ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+              }`}
+            >
+              All <span className={serviceFilter === "all" ? "text-[#050E21]/60" : "text-white/35"}>{serviceCounts.get("all") ?? 0}</span>
+            </button>
+            {services.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setServiceFilter(s)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                  serviceFilter === s ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+                }`}
+              >
+                {s} <span className={serviceFilter === s ? "text-[#050E21]/60" : "text-white/35"}>{serviceCounts.get(s) ?? 0}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && <p className="mb-4 text-[12px] text-red-300">{error}</p>}
@@ -368,9 +470,9 @@ export default function LeadListDetailClient({
         </div>
       </div>
 
-      {leads.length === 0 ? (
+      {filteredLeads.length === 0 ? (
         <div className="text-center py-12 text-white/40">
-          No leads in this list yet. Add leads using the search above.
+          {leads.length === 0 ? "No leads in this list yet. Add leads using the search above." : "No leads match the current filters."}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-white/10">
@@ -387,7 +489,7 @@ export default function LeadListDetailClient({
               </tr>
             </thead>
             <tbody>
-              {leads.map((lead, index) => (
+              {filteredLeads.map((lead, index) => (
                 <tr key={lead.id} className="border-t border-white/5 hover:bg-white/[0.02]">
                   <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{index + 1}</td>
                   <td className="px-3 py-2">

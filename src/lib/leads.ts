@@ -123,6 +123,37 @@ function sanitizeSearch(raw: string): string {
   return raw.replace(/[,()"'\\*]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/** Distinct service values + counts for the lead filter pill bar. */
+export async function listServiceCounts(assignedAdminUserId?: string): Promise<Array<{ service: string; count: number }>> {
+  // If scoped, first resolve the lead ids the admin can see.
+  let allowedLeadIds: string[] | null = null;
+  if (assignedAdminUserId) {
+    const { data: items, error: itemsErr } = await supabase()
+      .from("lead_list_items")
+      .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
+      .eq("lead_lists.assigned_admin_user_id", assignedAdminUserId);
+    if (itemsErr) throw itemsErr;
+    allowedLeadIds = Array.from(
+      new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id)),
+    );
+    if (allowedLeadIds.length === 0) return [];
+  }
+
+  let q = supabase().from("leads").select("service");
+  if (allowedLeadIds) q = q.in("id", allowedLeadIds);
+  const { data, error } = await q.limit(10000);
+  if (error) throw error;
+
+  const counts = new Map<string, number>();
+  for (const r of (data ?? []) as { service: string | null }[]) {
+    if (!r.service) continue;
+    counts.set(r.service, (counts.get(r.service) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([service, count]) => ({ service, count }))
+    .sort((a, b) => b.count - a.count || a.service.localeCompare(b.service));
+}
+
 export async function listLeads(opts: {
   status?: LeadStatus | "all";
   search?: string;
@@ -138,6 +169,10 @@ export async function listLeads(opts: {
   /** Restrict to leads that appear in at least one lead_list assigned to this
    *  admin user. Used to give non-super-admin staff a "my leads" view. */
   assignedAdminUserId?: string;
+  /** Filter by service category (e.g. "CarWash", "CarDetailing", "OneTimeCarWash"). */
+  service?: string;
+  /** Filter by specific service option id (e.g. "Monthly", "OneTimeManual"). */
+  serviceOption?: string;
 } = {}): Promise<LeadRow[]> {
   let q = supabase().from("leads").select("*").order("created_at", { ascending: false });
   if (opts.status && opts.status !== "all") {
@@ -146,6 +181,8 @@ export async function listLeads(opts: {
     q = q.not("status", "in", `(${opts.excludeStatuses.join(",")})`);
   }
   if (opts.area && opts.area !== "all") q = q.eq("area", opts.area);
+  if (opts.service && opts.service !== "all") q = q.eq("service", opts.service);
+  if (opts.serviceOption && opts.serviceOption !== "all") q = q.eq("service_option", opts.serviceOption);
   if (opts.fromIso) q = q.gte("created_at", opts.fromIso);
   if (opts.toIso) q = q.lte("created_at", opts.toIso);
   if (opts.search) {
@@ -326,13 +363,17 @@ export async function assertLeadInScope(leadId: string, scope: LeadScope): Promi
   return !!data;
 }
 
-// Chennai is IST (UTC+5:30). Callback date/time are entered for IST, so we
-// interpret them in IST and compare against the current instant.
-const IST_OFFSET_MS = 330 * 60 * 1000;
+// Today's date as an IST wall-clock YYYY-MM-DD.
+// Uses Intl.DateTimeFormat instead of a hardcoded offset so it handles any
+// edge cases with the Asia/Kolkata timezone correctly.
+function todayIST(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+}
 
 // Combine an ISO date (YYYY-MM-DD) + a "10:00 AM" style time into an epoch ms,
-// treating the values as IST wall-clock. Missing/garbage time → start of day.
-function scheduledMs(date: string | null, time: string | null): number | null {
+// treating the values as wall-clock in the given IANA timezone (defaults to IST).
+// Missing/garbage time → start of day.
+function scheduledMs(date: string | null, time: string | null, tz = "Asia/Kolkata"): number | null {
   const d = date && /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!d) return null;
   let h = 0;
@@ -343,14 +384,32 @@ function scheduledMs(date: string | null, time: string | null): number | null {
     min = Number(t[2]);
     if (t[3]?.toUpperCase() === "PM") h += 12;
   }
-  // Date.UTC gives the instant for that wall-clock as if UTC; subtract the IST
-  // offset to get the real UTC instant for an IST wall-clock time.
-  return Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3]), h, min) - IST_OFFSET_MS;
-}
-
-// Today's date as an IST wall-clock YYYY-MM-DD.
-function todayIST(): string {
-  return new Date(Date.now() + IST_OFFSET_MS).toISOString().slice(0, 10);
+  // Build a date string in the target timezone and get its UTC instant.
+  // Using Intl.DateTimeFormat to parse the wall-clock time in the given tz.
+  const year = Number(d[1]);
+  const month = Number(d[2]) - 1;
+  const day = Number(d[3]);
+  // Create a UTC date for the wall-clock time, then find the offset for that
+  // moment in the target timezone.
+  const utcGuess = Date.UTC(year, month, day, h, min);
+  // Get the timezone offset at that moment by formatting in the target tz vs UTC.
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  });
+  const parts = fmt.formatToParts(new Date(utcGuess));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const tzYear = get("year");
+  const tzMonth = get("month") - 1;
+  const tzDay = get("day");
+  const tzHour = get("hour");
+  const tzMin = get("minute");
+  const tzSec = get("second");
+  // The offset is the difference between UTC and the target tz at this moment.
+  const tzInstant = Date.UTC(tzYear, tzMonth, tzDay, tzHour, tzMin, tzSec);
+  const offsetMs = utcGuess - tzInstant;
+  return utcGuess - offsetMs;
 }
 
 // Leads that need a phone call, for the admin notification bell. Two triggers,
@@ -376,7 +435,7 @@ export async function listCallReminders(opts: { limit?: number; assignedAdminUse
 
   let q = supabase()
     .from("leads")
-    .select("id,name,phone,status,callback_date,callback_time,created_at")
+    .select("id,name,phone,status,callback_date,callback_time,client_timezone,created_at")
     .order("created_at", { ascending: false })
     .limit(300);
   if (allowedLeadIds) q = q.in("id", Array.from(allowedLeadIds));
@@ -387,6 +446,7 @@ export async function listCallReminders(opts: { limit?: number; assignedAdminUse
   type Row = {
     id: string; name: string | null; phone: string | null;
     status: LeadStatus; callback_date: string | null; callback_time: string | null;
+    client_timezone: string | null;
   };
 
   const due: (CallReminder & { at: number })[] = [];
@@ -395,9 +455,13 @@ export async function listCallReminders(opts: { limit?: number; assignedAdminUse
   for (const r of (data ?? []) as Row[]) {
     // Phone is encrypted at rest — decrypt so the bell shows the real number.
     const phone = unseal(r.phone);
-    if (r.callback_date && r.callback_date <= today) {
+    // Use the lead's client_timezone if available, otherwise default to IST.
+    const leadTz = r.client_timezone ?? "Asia/Kolkata";
+    // Compare callback_date against today in the lead's timezone.
+    const callbackToday = new Intl.DateTimeFormat("en-CA", { timeZone: leadTz }).format(new Date());
+    if (r.callback_date && r.callback_date <= callbackToday) {
       // Callback scheduled for today (or overdue) — show regardless of status.
-      const overdue = r.callback_date < today;
+      const overdue = r.callback_date < callbackToday;
       const when = r.callback_time ? `${r.callback_date} · ${r.callback_time}` : r.callback_date;
       due.push({
         id: r.id,
@@ -406,7 +470,7 @@ export async function listCallReminders(opts: { limit?: number; assignedAdminUse
         reason: overdue ? `Overdue · ${when}` : `Call today${r.callback_time ? ` · ${r.callback_time}` : ""}`,
         kind: "due",
         href: `/admin/${r.id}`,
-        at: scheduledMs(r.callback_date, r.callback_time) ?? 0,
+        at: scheduledMs(r.callback_date, r.callback_time, leadTz) ?? 0,
       });
     } else if (r.status === "new") {
       // New lead with no callback due today — still a call to make.
