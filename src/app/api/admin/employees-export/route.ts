@@ -168,7 +168,7 @@ function formatValueForPdf(key: string, v: unknown): string {
   if (key === "created_at" || key.endsWith("_at")) {
     const d = new Date(String(v));
     if (!isNaN(d.getTime())) {
-      return d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+      return d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
     }
   }
   if (typeof v === "object") return JSON.stringify(v);
@@ -261,7 +261,7 @@ function renderDetailedPrintHtml({
     <button onclick="window.print()">Print / Save as PDF</button>
   </div>
   <h1>${htmlEscape(title)}</h1>
-  <div class="meta">${htmlEscape(subtitle)} · ${count} record${count === 1 ? "" : "s"} · generated ${htmlEscape(new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }))}</div>
+  <div class="meta">${htmlEscape(subtitle)} · ${count} record${count === 1 ? "" : "s"} · generated ${htmlEscape(new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }))}</div>
   ${cards}
   <script>
     window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });

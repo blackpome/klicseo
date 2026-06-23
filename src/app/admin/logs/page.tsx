@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 const ENTITY_TABS = ["all", ...AUDIT_ENTITIES] as const;
 
 function todayIso(): string {
-  return new Date(Date.now() + 330 * 60 * 1000).toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 }
 
 const MONEY_FIELDS = new Set([
@@ -36,7 +36,7 @@ function fmtValue(field: string, v: unknown): string {
     if (ISO_TIMESTAMP.test(v)) {
       const d = new Date(v);
       return Number.isFinite(d.getTime())
-        ? d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+        ? d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })
         : v;
     }
     if (ISO_DATE.test(v)) {
@@ -180,7 +180,7 @@ export default async function LogsPage({
                   return (
                     <tr key={l.id} className="border-t border-white/5 hover:bg-white/[0.02] align-top">
                       <td className="px-3 py-2 whitespace-nowrap text-white/55 text-xs">
-                        {new Date(l.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        {new Date(l.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}
                       </td>
                       <td className="px-3 py-2 text-xs">
                         <div className="text-white/80">{l.actor_email ?? "—"}</div>

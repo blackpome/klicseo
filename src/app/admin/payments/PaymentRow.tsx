@@ -19,7 +19,7 @@ export interface PaymentCustomer {
   price_total: number | null;
 }
 
-const todayISO = () => new Date(Date.now() + 330 * 60 * 1000).toISOString().slice(0, 10);
+const todayISO = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 
 // --- WhatsApp + tel helpers ----------------------------------------------
 
