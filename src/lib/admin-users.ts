@@ -156,6 +156,17 @@ export async function updatePermissions(email: string, permissions: Permission[]
 export async function deleteAccess(email: string): Promise<void> {
   const e = normalizeEmail(email);
 
+  // Unlink any employees assigned to this admin user before deleting the row,
+  // so the FK constraint on employees.assigned_admin_user_id doesn't block us.
+  const { data: targetRow } = await supabase().from(TABLE).select("id").eq("email", e).maybeSingle();
+  if (targetRow) {
+    const { error: unlinkErr } = await supabase()
+      .from("employees")
+      .update({ assigned_admin_user_id: null })
+      .eq("assigned_admin_user_id", targetRow.id);
+    if (unlinkErr) throw unlinkErr;
+  }
+
   const { error } = await supabase().from(TABLE).delete().eq("email", e);
   if (error) throw error;
 
