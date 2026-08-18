@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { User, Sparkles, Car, MapPin, Calendar, StickyNote } from "lucide-react";
+import { User, Sparkles, Car, MapPin, Calendar, StickyNote, ClipboardList } from "lucide-react";
 import {
   OPTIONS_BY_CATEGORY,
   SERVICE_OPTIONS,
@@ -9,6 +9,7 @@ import {
   type ServiceOptionId,
 } from "@/lib/pricing";
 import type { LeadRow } from "@/lib/leads";
+import type { LeadListRow } from "@/lib/leadLists-shared";
 
 const SERVICES: { id: ServiceCategory; label: string }[] = [
   { id: "CarWash", label: "Car Wash" },
@@ -61,6 +62,7 @@ export default function LeadForm({
   submitLabel,
   pendingLabel,
   knownAreas,
+  leadLists,
 }: {
   action: LeadAction;
   initial?: Partial<LeadRow> | null;
@@ -68,6 +70,7 @@ export default function LeadForm({
   pendingLabel: string;
   /** Locality suggestions for the Area datalist (seeded from pincode_areas). */
   knownAreas?: string[];
+  leadLists?: LeadListRow[];
 }) {
   const [state, formAction, pending] = useActionState<LeadFormState, FormData>(action, {});
   const initialService = (initial?.service as ServiceCategory | undefined) ?? "";
@@ -239,6 +242,23 @@ export default function LeadForm({
           <textarea name="notes" rows={3} defaultValue={v("notes") as string} className={`${fieldCls} resize-none`} />
         </Field>
       </Section>
+
+      {leadLists && leadLists.length > 0 && (
+        <div className="lg:col-span-2">
+          <Section title="Campaign List Assignment" icon={ClipboardList}>
+            <Field label="Assign to Campaign List">
+              <select name="list_id" className={fieldCls} defaultValue="">
+                <option value="">— Auto-assign to my active lead list —</option>
+                {leadLists.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name} {l.assigned_admin_user?.name ? `(${l.assigned_admin_user.name})` : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </Section>
+        </div>
+      )}
 
       <div className="lg:col-span-2 space-y-3">
         {state.error && <p className="text-[12px] text-red-300">{state.error}</p>}

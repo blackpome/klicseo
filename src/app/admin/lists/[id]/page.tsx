@@ -5,6 +5,7 @@ import { getLeadList, getLeadsInList } from "@/lib/leadLists";
 import type { LeadListRow } from "@/lib/leadLists-shared";
 import LeadListDetailClient from "./LeadListDetailClient";
 import { currentAdmin, resolveScope } from "@/lib/admin-auth";
+import { listAssignableAdminUsers } from "@/lib/admin-users";
 
 export default async function LeadListPage({
   params,
@@ -16,6 +17,7 @@ export default async function LeadListPage({
 
   let list: LeadListRow | null = null;
   let leads: Awaited<ReturnType<typeof getLeadsInList>> = [];
+  let adminUsers: { id: string; email: string; name: string }[] = [];
   let notFoundError = false;
 
   try {
@@ -35,7 +37,12 @@ export default async function LeadListPage({
     }
 
     if (!notFoundError) {
-      leads = await getLeadsInList(id, { limit: 100 });
+      const [fetchedLeads, assignableUsers] = await Promise.all([
+        getLeadsInList(id, { limit: 100 }),
+        listAssignableAdminUsers().catch(() => []),
+      ]);
+      leads = fetchedLeads;
+      adminUsers = assignableUsers.map((u) => ({ id: u.id, email: u.email, name: u.name }));
     }
   } catch (err) {
     return (
@@ -50,7 +57,13 @@ export default async function LeadListPage({
 
   return (
     <AdminShell require="leads.view">
-      <LeadListDetailClient list={list} initialLeads={leads} isSuperAdmin={me?.role === "super_admin"} />
+      <LeadListDetailClient
+        list={list}
+        initialLeads={leads}
+        adminUsers={adminUsers}
+        isSuperAdmin={me?.role === "super_admin"}
+      />
     </AdminShell>
   );
 }
+

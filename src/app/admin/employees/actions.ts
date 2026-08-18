@@ -14,6 +14,7 @@ import {
   getEmployee,
   type EmployeeStatus,
   type EmployeeUpdate,
+  type NewEmployee,
 } from "@/lib/employees";
 import { logAudit } from "@/lib/audit";
 
@@ -174,4 +175,106 @@ export async function assignEmployeesAction(formData: FormData): Promise<{ error
   }
   revalidatePath("/admin/employees");
   return { error: undefined };
+}
+
+export interface BulkImportEmployeesPayload {
+  employees: {
+    name: string;
+    phone: string;
+    job_role?: string;
+    status?: EmployeeStatus;
+    location?: string | null;
+    salary?: number | null;
+    joining_date?: string | null;
+    aadhaar_number?: string | null;
+    notes?: string | null;
+  }[];
+  defaultStatus?: EmployeeStatus;
+  defaultJobRole?: string;
+  assignedAdminUserId?: string | null;
+  duplicateStrategy?: "skip" | "allow";
+  sourceFileName?: string;
+}
+
+export interface BulkImportEmployeesActionResult {
+  ok: boolean;
+  insertedCount: number;
+  duplicateCount: number;
+  skippedCount: number;
+  error?: string;
+}
+
+/**
+ * Server action to bulk import employee rows from parsed spreadsheets.
+ */
+export async function bulkImportEmployeesAction(
+  payload: BulkImportEmployeesPayload,
+): Promise<BulkImportEmployeesActionResult> {
+  await requirePermission("employees.manage");
+
+  if (!payload.employees || !payload.employees.length) {
+    return {
+      ok: false,
+      insertedCount: 0,
+      duplicateCount: 0,
+      skippedCount: 0,
+      error: "No employee rows provided for import.",
+    };
+  }
+
+  const { bulkInsertEmployees } = await import("@/lib/employees");
+
+  const employeesToInsert: NewEmployee[] = payload.employees.map((e) => ({
+    name: e.name,
+    phone: e.phone,
+    job_role: e.job_role || payload.defaultJobRole || "car-cleaner",
+    status: e.status || payload.defaultStatus || "active",
+    location: e.location || null,
+    salary: e.salary ?? null,
+    joining_date: e.joining_date || null,
+    aadhaar_number: e.aadhaar_number || null,
+    aadhaar_photo_path: null,
+    profile_photo_path: null,
+    signature_path: null,
+    terms_accepted_at: null,
+    reminder_call_date: null,
+    resignation_date: null,
+    assigned_admin_user_id: payload.assignedAdminUserId || null,
+    notes: e.notes || (payload.sourceFileName ? `Imported from ${payload.sourceFileName}` : "Bulk uploaded via spreadsheet"),
+  }));
+
+  const result = await bulkInsertEmployees(employeesToInsert, {
+    duplicateStrategy: payload.duplicateStrategy ?? "skip",
+    assignedAdminUserId: payload.assignedAdminUserId,
+  });
+
+  const summary = `Bulk imported ${result.insertedCount} employee${
+    result.insertedCount === 1 ? "" : "s"
+  }${
+    result.duplicateCount > 0
+      ? ` (${result.duplicateCount} duplicates skipped)`
+      : ""
+  }${payload.sourceFileName ? ` from ${payload.sourceFileName}` : ""}`;
+
+  await logAudit("employee.bulk_import", {
+    entity: "employee",
+    summary,
+    metadata: {
+      insertedCount: result.insertedCount,
+      duplicateCount: result.duplicateCount,
+      fileName: payload.sourceFileName,
+      assignedAdminUserId: payload.assignedAdminUserId,
+    },
+  });
+
+  revalidatePath("/admin/employees");
+  revalidatePath("/admin/my-employees");
+
+  return {
+    ok: result.insertedCount > 0 || result.duplicateCount > 0,
+    insertedCount: result.insertedCount,
+    duplicateCount: result.duplicateCount,
+    skippedCount: result.skippedCount,
+    error: result.errors.length > 0 ? result.errors.join("; ") : undefined,
+  };
 }

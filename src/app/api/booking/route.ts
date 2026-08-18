@@ -133,6 +133,7 @@ export async function POST(req: NextRequest) {
   // already promoted by another tab.
   const draftId = typeof body.draftId === "string" && body.draftId ? body.draftId : null;
   try {
+    let leadId: string;
     if (draftId) {
       const promoted = await promoteLeadDraft(draftId, payload);
       if (promoted) {
@@ -141,7 +142,9 @@ export async function POST(req: NextRequest) {
       // draft is gone / already promoted — quietly insert a new lead.
     }
     const lead = await insertLead(payload);
-    return NextResponse.json({ success: true, id: lead.id });
+    leadId = lead.id;
+
+    return NextResponse.json({ success: true, id: leadId });
   } catch (err) {
     console.error("Booking insert failed:", err);
     return NextResponse.json(

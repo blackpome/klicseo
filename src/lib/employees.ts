@@ -262,3 +262,114 @@ export async function listJobCounts(opts: { assignedAdminUserId?: string } = {})
     .map(([job_role, count]) => ({ job_role, count }))
     .sort((a, b) => b.count - a.count || a.job_role.localeCompare(b.job_role));
 }
+
+export interface BulkInsertEmployeesOptions {
+  /** "skip" (default) will ignore employees whose phone number already exists in DB */
+  duplicateStrategy?: "skip" | "allow";
+  /** Optional assigned admin user ID for all imported employees */
+  assignedAdminUserId?: string | null;
+}
+
+export interface BulkInsertEmployeesResult {
+  insertedCount: number;
+  duplicateCount: number;
+  skippedCount: number;
+  insertedIds: string[];
+  errors: string[];
+}
+
+/**
+ * Bulk insert employees with AES encryption, phone HMAC hashing, and duplicate detection.
+ */
+export async function bulkInsertEmployees(
+  employees: NewEmployee[],
+  options: BulkInsertEmployeesOptions = {},
+): Promise<BulkInsertEmployeesResult> {
+  const duplicateStrategy = options.duplicateStrategy ?? "skip";
+  const assignedAdminUserId = options.assignedAdminUserId || null;
+
+  if (!employees.length) {
+    return { insertedCount: 0, duplicateCount: 0, skippedCount: 0, insertedIds: [], errors: [] };
+  }
+
+  // 1. Calculate phone hashes for all incoming employees
+  const incomingWithHash = employees.map((emp) => ({
+    emp,
+    phone_hash: phoneHash(emp.phone),
+  }));
+
+  // 2. Check for duplicates against existing DB rows if duplicateStrategy is "skip"
+  const existingPhoneHashes = new Set<string>();
+  if (duplicateStrategy === "skip") {
+    const validHashes = incomingWithHash
+      .map((i) => i.phone_hash)
+      .filter((h): h is string => Boolean(h));
+
+    if (validHashes.length > 0) {
+      for (let i = 0; i < validHashes.length; i += 200) {
+        const batch = validHashes.slice(i, i + 200);
+        const { data: matched, error: hashErr } = await supabase()
+          .from("employees")
+          .select("phone_hash")
+          .in("phone_hash", batch);
+
+        if (hashErr) throw hashErr;
+        for (const row of matched ?? []) {
+          if (row.phone_hash) existingPhoneHashes.add(row.phone_hash);
+        }
+      }
+    }
+  }
+
+  // 3. Filter employees and deduplicate within incoming batch
+  const seenBatchHashes = new Set<string>();
+  const toInsert: Record<string, unknown>[] = [];
+  let duplicateCount = 0;
+
+  for (const { emp, phone_hash } of incomingWithHash) {
+    if (phone_hash && duplicateStrategy === "skip") {
+      if (existingPhoneHashes.has(phone_hash) || seenBatchHashes.has(phone_hash)) {
+        duplicateCount++;
+        continue;
+      }
+      seenBatchHashes.add(phone_hash);
+    }
+
+    const payload: Record<string, unknown> = {
+      ...emp,
+      status: emp.status ?? "active",
+      job_role: emp.job_role || "car-cleaner",
+      assigned_admin_user_id: assignedAdminUserId ?? emp.assigned_admin_user_id ?? null,
+      phone_hash,
+    };
+
+    const sealed = sealFields(payload, ENCRYPTED_EMPLOYEE_FIELDS);
+    toInsert.push(sealed);
+  }
+
+  // 4. Batch insert into employees in chunks of 100
+  const insertedIds: string[] = [];
+  const errors: string[] = [];
+
+  for (let i = 0; i < toInsert.length; i += 100) {
+    const chunk = toInsert.slice(i, i + 100);
+    const { data, error } = await supabase()
+      .from("employees")
+      .insert(chunk)
+      .select("id");
+
+    if (error) {
+      errors.push(`Batch insert failed at rows ${i + 1}-${i + chunk.length}: ${error.message}`);
+    } else if (data) {
+      insertedIds.push(...data.map((r: { id: string }) => r.id));
+    }
+  }
+
+  return {
+    insertedCount: insertedIds.length,
+    duplicateCount,
+    skippedCount: duplicateCount,
+    insertedIds,
+    errors,
+  };
+}

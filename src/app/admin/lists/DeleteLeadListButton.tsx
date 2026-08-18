@@ -1,36 +1,43 @@
 "use client";
 
-import { useFormStatus } from "react-dom";
+import { useTransition } from "react";
 import { Trash2, Loader2 } from "lucide-react";
 import { deleteLeadListAction } from "./actions";
 
-function Submit() {
-  const { pending } = useFormStatus();
+export default function DeleteLeadListButton({ id, name }: { id: string; name: string }) {
+  const [isPending, startTransition] = useTransition();
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!confirm(`Delete list "${name}"? This will remove all lead associations.`)) {
+      return;
+    }
+
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.append("id", id);
+      await deleteLeadListAction(formData);
+      if (typeof window !== "undefined") {
+        window.location.href = "/admin/lists";
+      }
+    });
+  };
+
   return (
     <button
-      type="submit"
-      disabled={pending}
+      type="button"
+      onClick={handleDelete}
+      disabled={isPending}
       title="Delete list"
-      className="grid h-8 w-8 place-items-center rounded-lg text-red-300 bg-red-500/10 hover:bg-red-500/20 transition-colors disabled:opacity-60"
+      className="grid h-7 w-7 place-items-center rounded-lg text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 transition-colors disabled:opacity-60"
     >
-      {pending ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+      {isPending ? (
+        <Loader2 size={13} className="animate-spin text-rose-400" />
+      ) : (
+        <Trash2 size={13} />
+      )}
     </button>
-  );
-}
-
-// Icon-only delete. Confirms before deleting (irreversible).
-export default function DeleteLeadListButton({ id, name }: { id: string; name: string }) {
-  return (
-    <form
-      action={deleteLeadListAction}
-      onSubmit={(e) => {
-        if (!confirm(`Delete list "${name}"? This will remove all lead associations.`)) {
-          e.preventDefault();
-        }
-      }}
-    >
-      <input type="hidden" name="id" value={id} />
-      <Submit />
-    </form>
   );
 }

@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requirePermission } from "@/lib/admin-auth";
+import { requirePermission, currentAdmin } from "@/lib/admin-auth";
+import { getAdminUser } from "@/lib/admin-users";
+import { addLeadsToList, insertLeadList } from "@/lib/leadLists";
+import { supabase } from "@/lib/supabase";
 import {
   deleteLead,
   insertLead,
@@ -11,10 +14,13 @@ import {
   getLead,
   type LeadStatus,
   type LeadUpdate,
+  type NewLead,
 } from "@/lib/leads";
 import { priceFor, type ServiceDiscounts } from "@/lib/pricing";
 import { getServiceDiscounts } from "@/lib/discounts";
 import { logAudit } from "@/lib/audit";
+
+import { processQueueAutoRefills } from "@/lib/lead-routing";
 
 export async function setStatusAction(formData: FormData) {
   await requirePermission("leads.manage");
@@ -23,6 +29,10 @@ export async function setStatusAction(formData: FormData) {
   if (!id || !status) return;
   await updateLeadStatus(id, status);
   await logAudit("lead.status", { entity: "lead", entityId: id, summary: `Set lead status → ${status}` });
+  
+  // Trigger Serverless Queue Auto-Refill check immediately
+  await processQueueAutoRefills();
+
   revalidatePath("/admin");
 }
 
@@ -36,7 +46,7 @@ export async function deleteLeadAction(formData: FormData) {
   redirect("/admin");
 }
 
-export async function updateNotesAction(formData: FormData) {
+export async function updateLeadNotesAction(formData: FormData) {
   await requirePermission("leads.manage");
   const id = String(formData.get("id") ?? "");
   const notes = String(formData.get("notes") ?? "");
@@ -44,26 +54,38 @@ export async function updateNotesAction(formData: FormData) {
   // Route through updateLead so the notes field is encrypted by the lib.
   await updateLead(id, { notes: notes || null });
   await logAudit("lead.notes", { entity: "lead", entityId: id, summary: "Updated lead notes" });
+  revalidatePath("/admin");
   revalidatePath(`/admin/${id}`);
 }
+
+export const updateNotesAction = updateLeadNotesAction;
 
 // Build the lead payload shared between create and update. The price override
 // input is only applied when the user didn't pick a service+option combo we can
 // auto-price; on edit, a blank field means "clear the override".
-function readLeadFromForm(formData: FormData, discounts: ServiceDiscounts) {
-  const service = String(formData.get("service") ?? "") || null;
-  const service_option = String(formData.get("service_option") ?? "") || null;
-  const interior_add_on = formData.get("interior_add_on") === "on";
-  const vehicle_type = String(formData.get("vehicle_type") ?? "") || null;
-  const parking_location = String(formData.get("parking_location") ?? "") || null;
+function readLeadFromForm(
+  formData: FormData,
+  serviceDiscounts: ServiceDiscounts,
+): Omit<NewLead, "source" | "gate_access_consent" | "latitude" | "longitude" | "custom_fields"> {
+  const service = (String(formData.get("service") ?? "") || null) as any;
+  const service_option = (String(formData.get("service_option") ?? "") || null) as any;
+  const interior_add_on = formData.get("interior_add_on") === "true" || formData.get("interior_add_on") === "on";
+  const vehicle_type = (String(formData.get("vehicle_type") ?? "") || null) as any;
+  const parking_location = (String(formData.get("parking_location") ?? "") || null) as any;
 
   const priced =
     service_option && vehicle_type
-      ? priceFor(service_option, vehicle_type, interior_add_on, (parking_location as "" | "inside" | "outside") || "", discounts)
+      ? priceFor(
+          service_option,
+          vehicle_type,
+          interior_add_on,
+          (parking_location as "" | "inside" | "outside") || "",
+          serviceDiscounts,
+        )
       : null;
 
-  const overrideRaw = String(formData.get("price_total") ?? "").trim();
-  const override = overrideRaw === "" ? null : Number(overrideRaw);
+  const overrideStr = String(formData.get("price_total") ?? "").trim();
+  const override = overrideStr ? Number(overrideStr) : null;
 
   return {
     name: String(formData.get("name") ?? "").trim() || null,
@@ -89,6 +111,8 @@ function readLeadFromForm(formData: FormData, discounts: ServiceDiscounts) {
     price_total: (override != null && Number.isFinite(override) ? override : null) ?? priced?.discountedTotal ?? null,
     discount_percent: priced?.basePercent ?? null,
     notes: String(formData.get("notes") ?? "") || null,
+    status: (String(formData.get("status") ?? "") || "new") as LeadStatus,
+    add_on_labels: null,
   };
 }
 
@@ -108,8 +132,49 @@ export async function createLeadAction(
     custom_fields: null,
   });
 
-  await logAudit("lead.create", { entity: "lead", entityId: lead.id, summary: `Created lead ${data.name ?? ""}`.trim() });
+  const admin = await currentAdmin();
+  const adminRow = admin?.email ? await getAdminUser(admin.email) : null;
+  const listIdFromForm = String(formData.get("list_id") ?? "").trim();
+
+  let targetListId = listIdFromForm || null;
+
+  // If no list explicitly selected, auto-link to staff's list
+  if (!targetListId && adminRow?.id) {
+    const { data: staffLists } = await supabase()
+      .from("lead_lists")
+      .select("id, name")
+      .eq("assigned_admin_user_id", adminRow.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (staffLists && staffLists.length > 0) {
+      targetListId = staffLists[0].id;
+    } else {
+      // Auto-create an inbound list for the staff so the lead appears immediately in their view
+      const staffName = adminRow.employees?.name || adminRow.email.split("@")[0];
+      const newList = await insertLeadList({
+        name: `Inbound Leads - ${staffName}`,
+        assigned_admin_user_id: adminRow.id,
+      });
+      targetListId = newList.id;
+    }
+  }
+
+  if (targetListId) {
+    await addLeadsToList(targetListId, [lead.id]);
+    revalidatePath(`/admin/lists/${targetListId}`);
+  }
+
+  await logAudit("lead.create", {
+    entity: "lead",
+    entityId: lead.id,
+    summary: `Created lead ${data.name ?? ""}`.trim(),
+    metadata: { targetListId },
+  });
+
   revalidatePath("/admin");
+  revalidatePath("/admin/my-lists");
+  revalidatePath("/admin/lists");
   redirect("/admin");
 }
 
@@ -135,3 +200,166 @@ export async function updateLeadAction(_prev: { error?: string }, formData: Form
   revalidatePath(`/admin/${id}`);
   redirect(`/admin/${id}`);
 }
+
+export interface BulkImportActionPayload {
+  leads: Array<{
+    name: string | null;
+    phone: string | null;
+    car_number: string | null;
+    car_brand: string | null;
+    car_model: string | null;
+    vehicle_type: string | null;
+    address: string | null;
+    pincode: string | null;
+    custom_fields: Record<string, string> | null;
+  }>;
+  targetListId?: string | null;
+  newListName?: string | null;
+  assignedAdminUserId?: string | null;
+  defaultStatus?: LeadStatus;
+  duplicateStrategy?: "skip" | "update" | "allow";
+  sourceFileName?: string;
+}
+
+export interface BulkImportActionResult {
+  success: boolean;
+  total: number;
+  inserted: number;
+  updated: number;
+  skipped: number;
+  listId: string | null;
+  listName: string | null;
+  errors: string[];
+  error?: string;
+}
+
+export async function bulkImportLeadsAction(
+  payload: BulkImportActionPayload,
+): Promise<BulkImportActionResult> {
+  await requirePermission("leads.manage");
+
+  if (!payload || !Array.isArray(payload.leads) || payload.leads.length === 0) {
+    return {
+      success: false,
+      total: 0,
+      inserted: 0,
+      updated: 0,
+      skipped: 0,
+      listId: null,
+      listName: null,
+      errors: ["No valid lead rows provided for import."],
+      error: "No leads to import.",
+    };
+  }
+
+  let finalTargetListId: string | null = payload.targetListId || null;
+  let finalListName: string | null = null;
+
+  // 1. Create a new lead list if requested
+  if (payload.newListName && payload.newListName.trim()) {
+    try {
+      const { insertLeadList } = await import("@/lib/leadLists");
+      const listRow = await insertLeadList({
+        name: payload.newListName.trim(),
+        assigned_admin_user_id: payload.assignedAdminUserId || null,
+      });
+      finalTargetListId = listRow.id;
+      finalListName = listRow.name;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        total: payload.leads.length,
+        inserted: 0,
+        updated: 0,
+        skipped: 0,
+        listId: null,
+        listName: null,
+        errors: [`Failed to create new lead list: ${msg}`],
+        error: `Failed to create lead list: ${msg}`,
+      };
+    }
+  }
+
+  // 2. Prepare NewLead objects
+  const leadsToInsert: NewLead[] = payload.leads.map((l) => ({
+    name: l.name || null,
+    phone: l.phone || null,
+    car_number: l.car_number || null,
+    car_brand: l.car_brand || null,
+    car_model: l.car_model || null,
+    vehicle_type: l.vehicle_type || null,
+    address: l.address || null,
+    pincode: l.pincode || null,
+    area: null, // auto-derived in bulkInsertLeads
+    custom_fields: {
+      ...(l.custom_fields || {}),
+      upload_file: payload.sourceFileName || "Spreadsheet Upload",
+    },
+    status: payload.defaultStatus || "new",
+    source: "admin",
+    service: null,
+    service_option: null,
+    interior_add_on: false,
+    add_on_labels: null,
+    map_link: null,
+    parking_location: null,
+    car_cover_choice: null,
+    gate_access_consent: false,
+    gate_access_notes: null,
+    shift: null,
+    callback_date: null,
+    callback_time: null,
+    latitude: null,
+    longitude: null,
+    price_total: null,
+    discount_percent: null,
+    notes: payload.sourceFileName ? `Imported from ${payload.sourceFileName}` : "Bulk uploaded via spreadsheet",
+  }));
+
+  // 3. Execute bulk insert
+  const { bulkInsertLeads } = await import("@/lib/leads");
+  const result = await bulkInsertLeads(leadsToInsert, {
+    duplicateStrategy: payload.duplicateStrategy || "skip",
+    listId: finalTargetListId,
+  });
+
+  // 4. Audit trail
+  const summaryText = `Bulk import: ${result.inserted} added, ${result.updated} updated, ${result.skipped} skipped${
+    finalListName ? ` into list "${finalListName}"` : ""
+  }${payload.sourceFileName ? ` from ${payload.sourceFileName}` : ""}`;
+
+  await logAudit("lead.bulk_upload", {
+    entity: "lead",
+    summary: summaryText,
+    metadata: {
+      total: result.total,
+      inserted: result.inserted,
+      updated: result.updated,
+      skipped: result.skipped,
+      listId: finalTargetListId,
+      listName: finalListName,
+      fileName: payload.sourceFileName,
+      duplicateStrategy: payload.duplicateStrategy,
+    },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/lists");
+  if (finalTargetListId) {
+    revalidatePath(`/admin/lists/${finalTargetListId}`);
+    revalidatePath("/admin/my-lists");
+  }
+
+  return {
+    success: result.errors.length === 0 || result.inserted > 0 || result.updated > 0,
+    total: result.total,
+    inserted: result.inserted,
+    updated: result.updated,
+    skipped: result.skipped,
+    listId: finalTargetListId,
+    listName: finalListName,
+    errors: result.errors,
+  };
+}
+

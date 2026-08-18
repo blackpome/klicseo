@@ -2,7 +2,7 @@ import "server-only";
 import { supabase } from "./supabase";
 import { sealFields, unsealFields, unseal, phoneHash, normalizePhone } from "./crypto";
 import { areaFromPincode } from "./area";
-import type { CallReminder, LeadStatus } from "./leads-shared";
+import type { CallReminder, LeadStatus, LeadSource } from "./leads-shared";
 import type { LeadScope } from "./admin-auth";
 
 export * from "./leads-shared";
@@ -18,8 +18,6 @@ export const ENCRYPTED_LEAD_FIELDS = [
   "gate_access_notes",
   "notes",
 ] as const;
-
-export type LeadSource = "wizard" | "admin";
 
 export interface LeadRow {
   id: string;
@@ -154,27 +152,99 @@ export async function listServiceCounts(assignedAdminUserId?: string): Promise<A
     .sort((a, b) => b.count - a.count || a.service.localeCompare(b.service));
 }
 
-export async function listLeads(opts: {
+export interface LeadStatusSummary {
+  total: number;
+  new: number;
+  contacted: number;
+  follow_up: number;
+  call_not_responded: number;
+  booked: number;
+  cancelled: number;
+  draft: number;
+}
+
+/** Aggregate counts by status for top-level KPI metrics & tab counters */
+export async function listLeadStatusSummary(
+  assignedAdminUserId?: string,
+): Promise<LeadStatusSummary> {
+  let allowedLeadIds: string[] | null = null;
+  if (assignedAdminUserId) {
+    const { data: items, error: itemsErr } = await supabase()
+      .from("lead_list_items")
+      .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
+      .eq("lead_lists.assigned_admin_user_id", assignedAdminUserId);
+    if (itemsErr) throw itemsErr;
+    allowedLeadIds = Array.from(
+      new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id)),
+    );
+    if (allowedLeadIds.length === 0) {
+      return { total: 0, new: 0, contacted: 0, follow_up: 0, call_not_responded: 0, booked: 0, cancelled: 0, draft: 0 };
+    }
+  }
+
+  let q = supabase().from("leads").select("status");
+  if (allowedLeadIds) q = q.in("id", allowedLeadIds);
+  const { data, error } = await q.limit(10000);
+  if (error) throw error;
+
+  const summary: LeadStatusSummary = {
+    total: 0,
+    new: 0,
+    contacted: 0,
+    follow_up: 0,
+    call_not_responded: 0,
+    booked: 0,
+    cancelled: 0,
+    draft: 0,
+  };
+
+  for (const r of (data ?? []) as { status: LeadStatus }[]) {
+    if (r.status in summary) {
+      summary[r.status]++;
+    }
+    summary.total++;
+  }
+
+  return summary;
+}
+
+export interface ListLeadsOptions {
   status?: LeadStatus | "all";
   search?: string;
   area?: string;
-  limit?: number;
-  /** Inclusive lower bound on created_at, full ISO timestamp w/ TZ. */
-  fromIso?: string;
-  /** Inclusive upper bound on created_at, full ISO timestamp w/ TZ. */
-  toIso?: string;
-  /** Statuses to exclude (only honoured when `status` is "all" or unset).
-   *  Used by the admin list to hide drafts from the default view. */
-  excludeStatuses?: LeadStatus[];
-  /** Restrict to leads that appear in at least one lead_list assigned to this
-   *  admin user. Used to give non-super-admin staff a "my leads" view. */
-  assignedAdminUserId?: string;
-  /** Filter by service category (e.g. "CarWash", "CarDetailing", "OneTimeCarWash"). */
   service?: string;
-  /** Filter by specific service option id (e.g. "Monthly", "OneTimeManual"). */
   serviceOption?: string;
-} = {}): Promise<LeadRow[]> {
-  let q = supabase().from("leads").select("*").order("created_at", { ascending: false });
+  fromIso?: string;
+  toIso?: string;
+  excludeStatuses?: LeadStatus[];
+  assignedAdminUserId?: string;
+  page?: number;
+  pageSize?: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface PaginatedLeadsResult {
+  leads: LeadRow[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/**
+ * Fetch a paginated slice of leads with total match count for UI pagination.
+ */
+export async function listPaginatedLeads(
+  opts: ListLeadsOptions = {},
+): Promise<PaginatedLeadsResult> {
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.max(1, Math.min(200, opts.pageSize ?? 25));
+  const offset = opts.offset ?? (page - 1) * pageSize;
+  const limit = opts.limit ?? pageSize;
+
+  let q = supabase().from("leads").select("*", { count: "exact" }).order("created_at", { ascending: false });
+
   if (opts.status && opts.status !== "all") {
     q = q.eq("status", opts.status);
   } else if (opts.excludeStatuses && opts.excludeStatuses.length) {
@@ -185,13 +255,11 @@ export async function listLeads(opts: {
   if (opts.serviceOption && opts.serviceOption !== "all") q = q.eq("service_option", opts.serviceOption);
   if (opts.fromIso) q = q.gte("created_at", opts.fromIso);
   if (opts.toIso) q = q.lte("created_at", opts.toIso);
+
   if (opts.search) {
     const s = sanitizeSearch(opts.search);
     if (s) {
       const orParts = SEARCH_FIELDS.map((f) => `${f}.ilike.%${s}%`);
-      // If the query looks like a phone number, add an exact-match on
-      // phone_hash so we can find leads despite the phone column being
-      // encrypted.
       const ph = phoneHash(opts.search);
       if (ph && normalizePhone(opts.search).length >= 7) {
         orParts.push(`phone_hash.eq.${ph}`);
@@ -200,10 +268,6 @@ export async function listLeads(opts: {
     }
   }
 
-  // "My leads" scope: restrict to leads appearing in a list assigned to the
-  // given admin user. Resolved in two steps — fetch the qualifying lead ids,
-  // then filter. PostgREST can't express this as a single .in() on the joined
-  // tables without writing a view, and this keeps the existing query plan.
   if (opts.assignedAdminUserId) {
     const { data: assignedLeadIds, error: listErr } = await supabase()
       .from("lead_list_items")
@@ -213,14 +277,36 @@ export async function listLeads(opts: {
     const ids = Array.from(
       new Set((assignedLeadIds ?? []).map((r: { lead_id: string }) => r.lead_id)),
     );
-    if (ids.length === 0) return [];
+    if (ids.length === 0) {
+      return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
+    }
     q = q.in("id", ids);
   }
 
-  q = q.limit(opts.limit ?? 200);
-  const { data, error } = await q;
+  q = q.range(offset, offset + limit - 1);
+  const { data, count, error } = await q;
   if (error) throw error;
-  return (data ?? []).map((r) => unsealFields(r as LeadRow, ENCRYPTED_LEAD_FIELDS)!) as LeadRow[];
+
+  const totalCount = count ?? 0;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const leads = (data ?? []).map((r) => unsealFields(r as LeadRow, ENCRYPTED_LEAD_FIELDS)!) as LeadRow[];
+
+  return {
+    leads,
+    totalCount,
+    page,
+    pageSize,
+    totalPages,
+  };
+}
+
+export async function listLeads(opts: ListLeadsOptions = {}): Promise<LeadRow[]> {
+  const res = await listPaginatedLeads({
+    ...opts,
+    pageSize: opts.limit ?? 200,
+    page: 1,
+  });
+  return res.leads;
 }
 
 /** For a set of lead ids, return a Map from lead_id → list of list names they
@@ -485,3 +571,178 @@ export async function listCallReminders(opts: { limit?: number; assignedAdminUse
   }));
   return [...dueClean, ...fresh].slice(0, limit);
 }
+
+// --- Bulk Import Engine -----------------------------------------------------
+
+export interface BulkInsertLeadResult {
+  total: number;
+  inserted: number;
+  updated: number;
+  skipped: number;
+  createdLeadIds: string[];
+  allLeadIds: string[];
+  errors: string[];
+}
+
+/**
+ * Bulk insert an array of leads with encryption, area derivation, duplicate
+ * detection, and optional lead list assignment.
+ */
+export async function bulkInsertLeads(
+  leads: NewLead[],
+  opts: {
+    duplicateStrategy?: "skip" | "update" | "allow";
+    listId?: string | null;
+  } = {},
+): Promise<BulkInsertLeadResult> {
+  const { duplicateStrategy = "skip", listId } = opts;
+  const errors: string[] = [];
+  const createdLeadIds: string[] = [];
+  const allLeadIds: string[] = [];
+  let inserted = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  if (!leads || leads.length === 0) {
+    return { total: 0, inserted: 0, updated: 0, skipped: 0, createdLeadIds: [], allLeadIds: [], errors: [] };
+  }
+
+  // 1. Pre-calculate phone hashes and cache pincode areas
+  const leadsWithHashes = leads.map((l) => {
+    const ph = phoneHash(l.phone);
+    return { ...l, computed_phone_hash: ph };
+  });
+
+  const uniquePincodes = Array.from(new Set(leads.map((l) => l.pincode).filter(Boolean))) as string[];
+  const areaCache = new Map<string, string | null>();
+  await Promise.all(
+    uniquePincodes.map(async (pin) => {
+      const area = await areaFromPincode(pin);
+      areaCache.set(pin, area);
+    }),
+  );
+
+  // 2. Query existing phone hashes if duplicate checking is enabled
+  const existingMap = new Map<string, string>(); // phone_hash -> existing lead id
+  if (duplicateStrategy !== "allow") {
+    const allHashes = Array.from(new Set(leadsWithHashes.map((l) => l.computed_phone_hash).filter(Boolean))) as string[];
+    // Query in batches of 200 hashes
+    for (let i = 0; i < allHashes.length; i += 200) {
+      const batch = allHashes.slice(i, i + 200);
+      const { data, error } = await supabase()
+        .from("leads")
+        .select("id, phone_hash")
+        .in("phone_hash", batch);
+      if (error) {
+        errors.push(`Duplicate lookup query error: ${error.message}`);
+      } else {
+        (data ?? []).forEach((r: { id: string; phone_hash: string | null }) => {
+          if (r.phone_hash) existingMap.set(r.phone_hash, r.id);
+        });
+      }
+    }
+  }
+
+  // 3. Process records into to-insert and to-update buckets
+  const toInsertPayloads: Record<string, unknown>[] = [];
+
+  for (const lead of leadsWithHashes) {
+    const ph = lead.computed_phone_hash;
+    const existingId = ph ? existingMap.get(ph) : undefined;
+
+    if (existingId && duplicateStrategy === "skip") {
+      skipped++;
+      allLeadIds.push(existingId);
+      continue;
+    }
+
+    if (existingId && duplicateStrategy === "update") {
+      try {
+        const patch: LeadUpdate = {
+          name: lead.name || undefined,
+          car_brand: lead.car_brand || undefined,
+          car_model: lead.car_model || undefined,
+          car_number: lead.car_number || undefined,
+          vehicle_type: lead.vehicle_type || undefined,
+          address: lead.address || undefined,
+          pincode: lead.pincode || undefined,
+          area: lead.area || (lead.pincode ? areaCache.get(lead.pincode) ?? null : undefined),
+          custom_fields: lead.custom_fields || undefined,
+        };
+        await updateLead(existingId, patch);
+        updated++;
+        allLeadIds.push(existingId);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`Failed to update existing lead for phone ${lead.phone ?? "unknown"}: ${msg}`);
+      }
+      continue;
+    }
+
+    // New lead to insert
+    const area = lead.area || (lead.pincode ? areaCache.get(lead.pincode) ?? null : null);
+    const now = new Date().toISOString();
+    const payload: Record<string, unknown> = {
+      ...lead,
+      source: lead.source ?? "admin",
+      status: lead.status ?? "new",
+      phone_hash: ph,
+      area,
+      submitted_at: lead.submitted_at ?? now,
+      gate_access_consent: lead.gate_access_consent ?? false,
+    };
+    delete payload.computed_phone_hash;
+
+    const sealed = sealFields(payload, ENCRYPTED_LEAD_FIELDS);
+    toInsertPayloads.push(sealed);
+  }
+
+  // 4. Batch insert new records in chunks of 100
+  const CHUNK_SIZE = 100;
+  for (let i = 0; i < toInsertPayloads.length; i += CHUNK_SIZE) {
+    const chunk = toInsertPayloads.slice(i, i + CHUNK_SIZE);
+    const { data, error } = await supabase()
+      .from("leads")
+      .insert(chunk)
+      .select("id");
+
+    if (error) {
+      errors.push(`Batch insert failed at row offset ${i + 1}: ${error.message}`);
+    } else {
+      const ids = (data ?? []).map((r: { id: string }) => r.id);
+      inserted += ids.length;
+      createdLeadIds.push(...ids);
+      allLeadIds.push(...ids);
+    }
+  }
+
+  // 5. Link all touched leads to target list if specified
+  if (listId && allLeadIds.length > 0) {
+    const uniqueIds = Array.from(new Set(allLeadIds));
+    const items = uniqueIds.map((leadId) => ({
+      list_id: listId,
+      lead_id: leadId,
+    }));
+    // Batch upsert into lead_list_items
+    for (let i = 0; i < items.length; i += 200) {
+      const itemChunk = items.slice(i, i + 200);
+      const { error } = await supabase()
+        .from("lead_list_items")
+        .upsert(itemChunk, { onConflict: "list_id,lead_id", ignoreDuplicates: true });
+      if (error) {
+        errors.push(`Failed to attach leads to list: ${error.message}`);
+      }
+    }
+  }
+
+  return {
+    total: leads.length,
+    inserted,
+    updated,
+    skipped,
+    createdLeadIds,
+    allLeadIds,
+    errors,
+  };
+}
+

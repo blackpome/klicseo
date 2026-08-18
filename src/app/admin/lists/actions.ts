@@ -178,6 +178,8 @@ export async function removeLeadFromListAction(formData: FormData): Promise<{ er
     });
 
     revalidatePath(`/admin/lists/${listId}`);
+    revalidatePath("/admin/lists");
+    revalidatePath("/admin/my-lists");
     return { error: undefined };
   } catch (err) {
     console.error("Failed to remove lead from list:", err);
@@ -188,11 +190,11 @@ export async function removeLeadFromListAction(formData: FormData): Promise<{ er
 /**
  * Delete a lead list action.
  */
-export async function deleteLeadListAction(formData: FormData): Promise<void> {
+export async function deleteLeadListAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("leads.manage");
 
   const listId = String(formData.get("id") ?? "");
-  if (!listId) return;
+  if (!listId) return { ok: false, error: "Missing list ID" };
 
   try {
     // Get list name for audit log before deletion
@@ -208,11 +210,14 @@ export async function deleteLeadListAction(formData: FormData): Promise<void> {
     });
 
     revalidatePath("/admin/lists");
-    redirect("/admin/lists");
+    revalidatePath("/admin/my-lists");
+    return { ok: true };
   } catch (err) {
     console.error("Failed to delete lead list:", err);
-    // Redirect back with error? For now, just redirect to lists page
-    redirect("/admin/lists");
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to delete lead list",
+    };
   }
 }
 
@@ -259,7 +264,6 @@ export async function searchLeadsForListAction(search: string): Promise<any[]> {
     return await listLeads({
       search: q,
       limit: 20,
-      excludeStatuses: ["draft"],
     });
   } catch (err) {
     console.error("Failed to search leads for list:", err);

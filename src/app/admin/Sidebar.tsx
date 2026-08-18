@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,9 +16,12 @@ import {
   ClipboardList,
   Wallet,
   ScrollText,
+  UploadCloud,
   LogOut,
   Menu,
   X,
+  Sparkles,
+  BarChart3,
 } from "lucide-react";
 import { ROLE_LABEL, type AdminRole } from "@/lib/admin-users-shared";
 import type { CallReminder } from "@/lib/leads-shared";
@@ -28,15 +31,30 @@ export interface NavItem {
   href: string;
   label: string;
   icon: keyof typeof ICONS;
-  // exact = highlight only on exact path match (avoids /admin matching everything)
   exact?: boolean;
 }
+
 export interface NavGroup {
   title: string;
   items: NavItem[];
 }
 
-const ICONS = { Inbox, PlusCircle, Users, UserPlus, UserCog, Tag, Car, Settings2, Briefcase, ClipboardList, Wallet, ScrollText } as const;
+const ICONS = {
+  Inbox,
+  PlusCircle,
+  UploadCloud,
+  Users,
+  UserPlus,
+  UserCog,
+  Tag,
+  Car,
+  Settings2,
+  Briefcase,
+  ClipboardList,
+  Wallet,
+  ScrollText,
+  BarChart3,
+} as const;
 
 export default function Sidebar({
   groups,
@@ -54,59 +72,95 @@ export default function Sidebar({
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  const isActive = (item: NavItem) =>
-    item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
+  // Find the single best matching active item:
+  const activeItemHref = useMemo(() => {
+    const allHrefs = groups.flatMap((g) => g.items.map((i) => i.href));
+
+    // 1. Strict exact match
+    for (const href of allHrefs) {
+      if (pathname === href) return href;
+    }
+
+    // 2. Prefix match (e.g. /admin/employees/[id] matches /admin/employees)
+    // Only match if no other more specific menu item matches pathname
+    const prefixCandidates = allHrefs.filter((href) => {
+      if (!pathname.startsWith(href + "/")) return false;
+      const hasMoreSpecificMatch = allHrefs.some(
+        (other) =>
+          other !== href &&
+          other.length > href.length &&
+          (pathname === other || pathname.startsWith(other + "/")),
+      );
+      return !hasMoreSpecificMatch;
+    });
+
+    return prefixCandidates[0] || null;
+  }, [groups, pathname]);
 
   const initials = email.slice(0, 2).toUpperCase();
 
-  // withBell: show the bell in the brand row. True for the desktop rail; false
-  // for the mobile drawer (the mobile bell lives in the top bar, and showing it
-  // in the drawer would collide with the close button).
-  const renderNav = (withBell: boolean) => (
-    <div className="flex h-full flex-col">
-      {/* Brand */}
-      <div className="px-5 py-5 border-b border-white/10 flex items-start justify-between gap-2">
-        <div>
-          <Link
-            href="/admin"
-            onClick={() => setOpen(false)}
-            className="text-sm font-bold tracking-[0.2em] uppercase"
-            style={{ fontFamily: "var(--font-playfair)" }}
-          >
-            Klicseo<span className="text-[#C9A84C]">.</span>
-          </Link>
-          <p className="text-[10px] uppercase tracking-[0.25em] text-white/30 mt-0.5">Admin</p>
-        </div>
-        {withBell && showBell && <NotificationBell items={reminders} align="left" />}
+  const renderNav = () => (
+    <div className="flex h-full flex-col bg-[#071228] text-white">
+      {/* Brand Header */}
+      <div className="px-5 py-5 border-b border-white/[0.08] flex items-center justify-between">
+        <Link
+          href="/admin"
+          onClick={() => setOpen(false)}
+          className="flex items-center gap-2.5 group"
+        >
+          <div className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-[#9C7A2A] via-[#C9A84C] to-[#E8CC7A] text-[#050E21] font-bold text-xs shadow-md shadow-[#C9A84C]/20 group-hover:scale-105 transition-transform">
+            K
+          </div>
+          <div>
+            <div
+              className="text-sm font-bold tracking-[0.18em] uppercase text-white group-hover:text-[#E8CC7A] transition-colors"
+              style={{ fontFamily: "var(--font-playfair)" }}
+            >
+              Klicseo<span className="text-[#C9A84C]">.</span>
+            </div>
+            <p className="text-[9px] uppercase tracking-[0.25em] text-white/35 font-medium -mt-0.5">
+              Backoffice
+            </p>
+          </div>
+        </Link>
+
+        {showBell && <NotificationBell items={reminders} align="left" />}
       </div>
 
-      {/* Nav groups */}
+      {/* Navigation Groups */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
         {groups.map((group) => (
           <div key={group.title}>
-            <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30">
+            <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">
               {group.title}
             </p>
             <ul className="space-y-1">
               {group.items.map((item) => {
                 const Icon = ICONS[item.icon];
-                const active = isActive(item);
+                const active = activeItemHref === item.href;
                 return (
                   <li key={item.href}>
                     <Link
                       href={item.href}
                       onClick={() => setOpen(false)}
-                      className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+                      className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs transition-all ${
                         active
-                          ? "bg-[#C9A84C]/15 text-[#E8CC7A] font-semibold ring-1 ring-[#C9A84C]/25"
-                          : "text-white/60 hover:text-white hover:bg-white/[0.06]"
+                          ? "bg-gradient-to-r from-[#C9A84C]/20 to-[#C9A84C]/5 text-[#E8CC7A] font-semibold border border-[#C9A84C]/30 shadow-sm"
+                          : "text-white/60 hover:text-white hover:bg-white/[0.04]"
                       }`}
                     >
+                      {active && (
+                        <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[#C9A84C]" />
+                      )}
                       <Icon
-                        size={17}
-                        className={active ? "text-[#C9A84C]" : "text-white/40 group-hover:text-white/70"}
+                        size={16}
+                        className={`transition-colors ${
+                          active
+                            ? "text-[#C9A84C]"
+                            : "text-white/40 group-hover:text-white/80"
+                        }`}
                       />
-                      {item.label}
+                      <span className="truncate">{item.label}</span>
                     </Link>
                   </li>
                 );
@@ -116,26 +170,25 @@ export default function Sidebar({
         ))}
       </nav>
 
-      {/* User footer */}
-      <div className="border-t border-white/10 p-3">
-        <div className="flex items-center gap-3 rounded-xl px-2 py-2">
-          <div
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-bold text-[#050E21]"
-            style={{ background: "linear-gradient(135deg,#9C7A2A,#C9A84C,#E8CC7A)" }}
-          >
+      {/* User Card Footer */}
+      <div className="border-t border-white/[0.08] p-3 bg-white/[0.01]">
+        <div className="flex items-center gap-3 rounded-xl p-2 bg-white/[0.02] border border-white/5">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[10px] font-bold text-[#050E21] bg-gradient-to-br from-[#9C7A2A] via-[#C9A84C] to-[#E8CC7A]">
             {initials}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-white/80">{email}</p>
-            <p className="text-[10px] uppercase tracking-wider text-white/35">{ROLE_LABEL[role]}</p>
+            <p className="truncate text-xs font-medium text-white">{email}</p>
+            <p className="text-[9px] uppercase tracking-wider text-[#C9A84C] font-semibold">
+              {ROLE_LABEL[role]}
+            </p>
           </div>
           <form action="/api/admin/logout" method="post">
             <button
               type="submit"
-              title="Logout"
-              className="grid h-8 w-8 place-items-center rounded-lg text-white/50 hover:text-red-300 hover:bg-red-500/10"
+              title="Sign out"
+              className="grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:bg-white/10 hover:text-rose-400 transition-colors"
             >
-              <LogOut size={16} />
+              <LogOut size={13} />
             </button>
           </form>
         </div>
@@ -145,44 +198,47 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Mobile top bar */}
-      <div className="md:hidden sticky top-0 z-30 flex items-center justify-between border-b border-white/10 bg-[#071029]/80 px-4 py-3 backdrop-blur">
-        <Link href="/admin" className="text-sm font-bold tracking-[0.2em] uppercase" style={{ fontFamily: "var(--font-playfair)" }}>
+      {/* Mobile Top Bar */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-30 flex h-14 items-center justify-between border-b border-white/10 bg-[#071228]/95 px-4 backdrop-blur-md">
+        <button
+          onClick={() => setOpen(true)}
+          type="button"
+          className="grid h-9 w-9 place-items-center rounded-lg bg-white/5 text-white/70 hover:bg-white/10"
+        >
+          <Menu size={18} />
+        </button>
+
+        <Link
+          href="/admin"
+          className="text-xs font-bold tracking-[0.2em] uppercase"
+          style={{ fontFamily: "var(--font-playfair)" }}
+        >
           Klicseo<span className="text-[#C9A84C]">.</span>
         </Link>
-        <div className="flex items-center gap-2">
-          {showBell && <NotificationBell items={reminders} align="right" />}
-          <button
-            onClick={() => setOpen(true)}
-            aria-label="Open menu"
-            className="grid h-9 w-9 place-items-center rounded-lg bg-white/5 text-white/70 hover:bg-white/10"
-          >
-            <Menu size={18} />
-          </button>
-        </div>
+
+        {showBell ? <NotificationBell items={reminders} align="right" /> : <div className="w-9" />}
       </div>
 
-      {/* Desktop fixed rail */}
-      <aside className="hidden md:flex fixed inset-y-0 left-0 z-30 w-64 flex-col border-r border-white/10 bg-[#071029]">
-        {renderNav(true)}
-      </aside>
-
-      {/* Mobile drawer */}
+      {/* Mobile Drawer Overlay */}
       {open && (
-        <div className="md:hidden fixed inset-0 z-40">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-72 max-w-[80%] border-r border-white/10 bg-[#071029] shadow-2xl">
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <div className="relative z-10 w-72 max-w-[80vw] h-full shadow-2xl">
             <button
               onClick={() => setOpen(false)}
-              aria-label="Close menu"
-              className="absolute right-3 top-4 grid h-8 w-8 place-items-center rounded-lg text-white/50 hover:bg-white/10"
+              className="absolute top-4 right-4 z-20 grid h-8 w-8 place-items-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20"
             >
-              <X size={18} />
+              <X size={16} />
             </button>
-            {renderNav(false)}
-          </aside>
+            {renderNav()}
+          </div>
         </div>
       )}
+
+      {/* Desktop Fixed Left Sidebar Rail */}
+      <aside className="hidden md:block fixed inset-y-0 left-0 z-30 w-64 border-r border-white/[0.08] shadow-xl">
+        {renderNav()}
+      </aside>
     </>
   );
 }

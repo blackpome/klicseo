@@ -1,0 +1,256 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { requirePermission } from "@/lib/admin-auth";
+import { logAudit } from "@/lib/audit";
+import {
+  countMatchingLeads,
+  createAllocationSchedule,
+  cancelScheduledAllocation,
+  pauseScheduledAllocation,
+  resumeScheduledAllocation,
+  deleteScheduledAllocation,
+  transferStaffLeads,
+  recycleAndReassignLeads,
+  type NewLeadAllocationRequest,
+  type LeadAllocationFilter,
+  type RecycleLeadsRequest,
+  type RecycleLeadsResult,
+} from "@/lib/lead-routing";
+
+/**
+ * Preview how many unallocated leads match the given conditions.
+ */
+export async function previewMatchingLeadsAction(
+  filter: LeadAllocationFilter,
+): Promise<{ count: number }> {
+  try {
+    await requirePermission("leads.view");
+    const count = await countMatchingLeads(filter);
+    return { count };
+  } catch (err) {
+    console.error("previewMatchingLeadsAction error:", err);
+    return { count: 0 };
+  }
+}
+
+/**
+ * Execute immediate allocation or configure advanced scheduling.
+ */
+export async function submitLeadAllocationAction(
+  req: NewLeadAllocationRequest,
+): Promise<{ ok: boolean; allocatedCount?: number; mode?: string; error?: string }> {
+  try {
+    await requirePermission("leads.manage");
+
+    if (!req.lead_count || req.lead_count <= 0) {
+      return { ok: false, error: "Please enter a valid number of leads to allocate." };
+    }
+
+    if ((!req.assignee_ids || req.assignee_ids.length === 0) && !req.target_list_id) {
+      return { ok: false, error: "Please select at least one staff member or destination list." };
+    }
+
+    const res = await createAllocationSchedule(req);
+
+    let summary = `Allocated ${res.allocatedCount} leads to ${req.assignee_ids.length} staff`;
+    if (res.mode === "daily_recurring") {
+      summary = `Configured daily recurring schedule: ${req.lead_count} leads at ${req.recurring_time || "09:30"} IST`;
+    } else if (res.mode === "queue_replenish") {
+      summary = `Configured queue auto-replenish: refill ${req.lead_count} leads when staff queue drops below ${req.replenish_threshold || 5}`;
+    } else if (res.mode === "once_scheduled") {
+      summary = `Scheduled allocation of ${req.lead_count} leads for ${req.scheduled_for}`;
+    }
+
+    await logAudit("lead_allocation.configure", {
+      entity: "lead_allocation",
+      entityId: res.id || "immediate",
+      summary,
+    });
+
+    revalidatePath("/admin/lists");
+    revalidatePath("/admin/my-lists");
+    return {
+      ok: true,
+      allocatedCount: res.allocatedCount,
+      mode: res.mode,
+    };
+  } catch (err: unknown) {
+    console.error("submitLeadAllocationAction error:", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to allocate leads.",
+    };
+  }
+}
+
+
+
+/**
+ * Cancel a pending one-time scheduled allocation.
+ */
+export async function cancelScheduledAllocationAction(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requirePermission("leads.manage");
+    await cancelScheduledAllocation(id);
+    await logAudit("lead_schedule.cancel", {
+      entity: "lead_allocation_schedule",
+      entityId: id,
+      summary: "Cancelled scheduled lead allocation",
+    });
+
+    revalidatePath("/admin/lists");
+    return { ok: true };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to cancel schedule.",
+    };
+  }
+}
+
+/**
+ * Pause an active recurring automation.
+ */
+export async function pauseScheduledAllocationAction(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requirePermission("leads.manage");
+    await pauseScheduledAllocation(id);
+    await logAudit("lead_schedule.pause", {
+      entity: "lead_allocation_schedule",
+      entityId: id,
+      summary: "Paused recurring lead allocation rule",
+    });
+
+    revalidatePath("/admin/lists");
+    return { ok: true };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to pause automation.",
+    };
+  }
+}
+
+/**
+ * Resume a paused recurring automation.
+ */
+export async function resumeScheduledAllocationAction(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requirePermission("leads.manage");
+    await resumeScheduledAllocation(id);
+    await logAudit("lead_schedule.resume", {
+      entity: "lead_allocation_schedule",
+      entityId: id,
+      summary: "Resumed recurring lead allocation rule",
+    });
+
+    revalidatePath("/admin/lists");
+    return { ok: true };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to resume automation.",
+    };
+  }
+}
+
+/**
+ * Permanently delete a schedule or automation rule.
+ */
+export async function deleteScheduledAllocationAction(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requirePermission("leads.manage");
+    await deleteScheduledAllocation(id);
+    await logAudit("lead_schedule.delete", {
+      entity: "lead_allocation_schedule",
+      entityId: id,
+      summary: "Deleted lead allocation rule permanently",
+    });
+
+    revalidatePath("/admin/lists");
+    return { ok: true };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to delete automation rule.",
+    };
+  }
+}
+
+/**
+ * 1-Click transfer all campaign lists from one staff to another.
+ */
+export async function transferStaffLeadsAction(
+  fromAdminUserId: string,
+  toAdminUserId: string,
+  reason: string,
+): Promise<{ ok: boolean; transferredCount?: number; error?: string }> {
+  try {
+    await requirePermission("leads.manage");
+    if (!fromAdminUserId || !toAdminUserId) {
+      return { ok: false, error: "Source and destination staff must be selected." };
+    }
+    const res = await transferStaffLeads(fromAdminUserId, toAdminUserId, reason);
+    await logAudit("lead_lists.transfer", {
+      entity: "admin_user",
+      entityId: toAdminUserId,
+      summary: `Transferred ${res.transferredCount} lists from ${fromAdminUserId} to ${toAdminUserId}`,
+    });
+
+    revalidatePath("/admin/lists");
+    revalidatePath("/admin/my-lists");
+    return { ok: true, transferredCount: res.transferredCount };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to transfer leads.",
+    };
+  }
+}
+
+/**
+ * Selectively recycle and reassign non-positive leads from a list or telecaller to new telecallers.
+ */
+export async function recycleLeadsAction(
+  req: RecycleLeadsRequest,
+): Promise<{ ok: boolean; result?: RecycleLeadsResult; error?: string }> {
+  try {
+    await requirePermission("leads.manage");
+    if (!req.target_admin_user_ids?.length && !req.target_list_id) {
+      return { ok: false, error: "Please select at least one target telecaller or destination list." };
+    }
+
+    const result = await recycleAndReassignLeads(req);
+
+    await logAudit("lead_recycling.execute", {
+      entity: "lead_list",
+      entityId: req.source_list_id || req.source_admin_user_id || "bulk",
+      summary: `Recycled ${result.recycledCount} leads across ${result.assignedStaffCount} telecaller(s). Protected ${result.protectedCount} leads.`,
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/lists");
+    if (req.source_list_id) revalidatePath(`/admin/lists/${req.source_list_id}`);
+    for (const id of result.createdListIds) {
+      revalidatePath(`/admin/lists/${id}`);
+    }
+    revalidatePath("/admin/my-lists");
+
+    return { ok: true, result };
+  } catch (err: unknown) {
+    console.error("recycleLeadsAction error:", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to recycle leads.",
+    };
+  }
+}

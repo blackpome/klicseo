@@ -3,9 +3,10 @@
 import { useState, useTransition, useMemo } from "react";
 import { useRef, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Edit, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Edit, Plus, Trash2, UploadCloud, RotateCcw, CheckCircle2 } from "lucide-react";
 import LeadStatusControl from "../../LeadStatusControl";
 import DeleteLeadListButton from "../DeleteLeadListButton";
+import RecycleLeadsModal from "../RecycleLeadsModal";
 import WhatsAppLink from "@/components/WhatsAppLink";
 import { LEAD_STATUS_COLOR, LEAD_STATUSES, LEAD_STATUS_LABEL, type LeadStatus } from "@/lib/leads-shared";
 import type { LeadListRow } from "@/lib/leadLists-shared";
@@ -32,13 +33,17 @@ type LeadForList = {
 export default function LeadListDetailClient({
   list,
   initialLeads,
+  adminUsers = [],
   isSuperAdmin,
 }: {
   list: LeadListRow;
   initialLeads: LeadForList[];
+  adminUsers?: { id: string; email: string; name: string }[];
   isSuperAdmin: boolean;
 }) {
   const [leads, setLeads] = useState<LeadForList[]>(initialLeads);
+  const [recycleModalOpen, setRecycleModalOpen] = useState(false);
+  const [bannerMessage, setBannerMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<LeadForList[]>([]);
   const [selectedLeadsToAdd, setSelectedLeadsToAdd] = useState<Set<string>>(new Set());
@@ -279,8 +284,29 @@ export default function LeadListDetailClient({
     });
   }
 
+  // Status breakdown map for modal
+  const statusBreakdownObj = useMemo(() => {
+    const obj: Record<string, number> = {};
+    for (const l of leads) {
+      obj[l.status] = (obj[l.status] ?? 0) + 1;
+    }
+    return obj;
+  }, [leads]);
+
   return (
     <>
+      {bannerMessage && (
+        <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center justify-between mb-4 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="shrink-0" />
+            <span>{bannerMessage}</span>
+          </div>
+          <button onClick={() => setBannerMessage(null)} className="p-1 rounded-lg hover:bg-emerald-500/20">
+            ✕
+          </button>
+        </div>
+      )}
+
       <Link href={isSuperAdmin ? "/admin/lists" : "/admin/my-lists"} className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4">
         <ArrowLeft size={13} /> {isSuperAdmin ? "Back to all lists" : "Back to my lists"}
       </Link>
@@ -297,7 +323,23 @@ export default function LeadListDetailClient({
             {" | Assigned to: "}{list.assigned_admin_user?.name || "-"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {isSuperAdmin && leads.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setRecycleModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-500/20 to-indigo-500/20 border border-purple-500/40 text-purple-300 hover:bg-purple-500/30 transition-all shadow-sm"
+            >
+              <RotateCcw size={13} /> Recycle Leads
+            </button>
+          )}
+
+          <Link
+            href={`/admin/upload?listId=${list.id}`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#C9A84C]/15 border border-[#C9A84C]/30 text-[#E8CC7A] hover:bg-[#C9A84C]/25 transition-all"
+          >
+            <UploadCloud size={14} /> Upload Leads
+          </Link>
           {isSuperAdmin && (
             <Link
               href={`/admin/lists/${list.id}/edit`}
@@ -310,61 +352,108 @@ export default function LeadListDetailClient({
         </div>
       </div>
 
+      {recycleModalOpen && (
+        <RecycleLeadsModal
+          isOpen={recycleModalOpen}
+          onClose={() => setRecycleModalOpen(false)}
+          sourceListId={list.id}
+          sourceListName={list.name}
+          sourceAdminUserId={list.assigned_admin_user_id ?? undefined}
+          sourceStaffName={list.assigned_admin_user?.name ?? undefined}
+          adminUsers={adminUsers}
+          statusBreakdown={statusBreakdownObj}
+          onSuccess={(msg) => {
+            setBannerMessage(msg);
+            setTimeout(() => setBannerMessage(null), 6000);
+            if (typeof window !== "undefined") {
+              window.location.reload();
+            }
+          }}
+        />
+      )}
+
       {/* Filter pills */}
-      <div className="space-y-3 mb-5">
+      <div className="space-y-3 mb-5 p-3 rounded-2xl bg-white/[0.02] border border-white/[0.05]">
         <div className="flex gap-2 flex-wrap items-center">
-          <span className="text-[10px] uppercase tracking-wider text-white/35 mr-1">Status</span>
+          <span className="text-[10px] uppercase tracking-wider text-white/40 font-bold mr-1">Filter by Status:</span>
           <button
             type="button"
             onClick={() => setStatusFilter("all")}
-            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
-              statusFilter === "all" ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+            className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all ${
+              statusFilter === "all"
+                ? "bg-[#C9A84C] text-[#050E21] shadow-sm"
+                : "bg-white/[0.04] text-white/60 hover:text-white hover:bg-white/10"
             }`}
           >
-            All <span className={statusFilter === "all" ? "text-[#050E21]/60" : "text-white/35"}>{statusCounts.get("all") ?? 0}</span>
+            All Leads <span className={statusFilter === "all" ? "text-[#050E21]/70 font-bold" : "text-white/40"}>({statusCounts.get("all") ?? 0})</span>
           </button>
           {LEAD_STATUSES.map((s) => {
             const count = statusCounts.get(s) ?? 0;
             if (count === 0) return null;
+            const isSelected = statusFilter === s;
             return (
               <button
                 key={s}
                 type="button"
                 onClick={() => setStatusFilter(s)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
-                  statusFilter === s ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+                className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  isSelected
+                    ? "bg-[#C9A84C] text-[#050E21] shadow-sm"
+                    : "bg-white/[0.04] text-white/70 hover:text-white hover:bg-white/10"
                 }`}
               >
-                {LEAD_STATUS_LABEL[s]} <span className={statusFilter === s ? "text-[#050E21]/60" : "text-white/35"}>{count}</span>
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: LEAD_STATUS_COLOR[s] }}
+                />
+                <span>{LEAD_STATUS_LABEL[s]}</span>
+                <span className={isSelected ? "text-[#050E21]/70 font-bold" : "text-white/40"}>
+                  ({count})
+                </span>
               </button>
             );
           })}
         </div>
 
         {services.length > 1 && (
-          <div className="flex gap-2 flex-wrap items-center">
-            <span className="text-[10px] uppercase tracking-wider text-white/35 mr-1">Service</span>
+          <div className="flex gap-2 flex-wrap items-center pt-2 border-t border-white/[0.04]">
+            <span className="text-[10px] uppercase tracking-wider text-white/40 font-bold mr-1">Service:</span>
             <button
               type="button"
               onClick={() => setServiceFilter("all")}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
-                serviceFilter === "all" ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+              className={`px-2.5 py-0.5 rounded-lg text-[11px] font-semibold transition-all ${
+                serviceFilter === "all" ? "bg-white/20 text-white" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
               }`}
             >
-              All <span className={serviceFilter === "all" ? "text-[#050E21]/60" : "text-white/35"}>{serviceCounts.get("all") ?? 0}</span>
+              All <span className="text-white/40">({serviceCounts.get("all") ?? 0})</span>
             </button>
             {services.map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => setServiceFilter(s)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
-                  serviceFilter === s ? "bg-[#C9A84C] text-[#050E21]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
+                className={`px-2.5 py-0.5 rounded-lg text-[11px] font-semibold transition-all ${
+                  serviceFilter === s ? "bg-[#C9A84C]/20 border border-[#C9A84C]/40 text-[#E8CC7A]" : "bg-white/[0.04] text-white/55 hover:bg-white/10"
                 }`}
               >
-                {s} <span className={serviceFilter === s ? "text-[#050E21]/60" : "text-white/35"}>{serviceCounts.get(s) ?? 0}</span>
+                {s} <span className="text-white/40">({serviceCounts.get(s) ?? 0})</span>
               </button>
             ))}
+          </div>
+        )}
+
+        {statusFilter !== "all" && (
+          <div className="text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-xl flex items-center justify-between">
+            <span>
+              Showing <strong>{filteredLeads.length} {LEAD_STATUS_LABEL[statusFilter]}</strong> {filteredLeads.length === 1 ? "lead" : "leads"} (out of {leads.length} total leads in this list).
+            </span>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("all")}
+              className="text-[#E8CC7A] hover:underline font-bold text-xs"
+            >
+              Show All Leads
+            </button>
           </div>
         )}
       </div>
@@ -475,8 +564,29 @@ export default function LeadListDetailClient({
           {leads.length === 0 ? "No leads in this list yet. Add leads using the search above." : "No leads match the current filters."}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full text-sm">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1 text-xs">
+            <span className="text-white/60">
+              Showing <strong className="text-white tabular-nums">{filteredLeads.length}</strong> of <strong className="text-white tabular-nums">{leads.length}</strong> total leads in this list
+              {statusFilter !== "all" && (
+                <span className="ml-1 text-[#E8CC7A]">
+                  (Status: <strong>{LEAD_STATUS_LABEL[statusFilter]}</strong>)
+                </span>
+              )}
+            </span>
+            {statusFilter !== "all" && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter("all")}
+                className="text-[#E8CC7A] hover:underline font-bold text-xs"
+              >
+                Show All {leads.length} Leads ➔
+              </button>
+            )}
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-white/10">
+            <table className="w-full text-sm">
             <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="px-3 py-2 text-left font-semibold">#</th>
@@ -542,6 +652,7 @@ export default function LeadListDetailClient({
             </tbody>
           </table>
         </div>
+      </div>
       )}
     </>
   );

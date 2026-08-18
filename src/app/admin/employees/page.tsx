@@ -4,7 +4,7 @@ import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
 import EmployeeStatusControl from "./EmployeeStatusControl";
 import WhatsAppLink from "@/components/WhatsAppLink";
-import { Pencil } from "lucide-react";
+import { Pencil, UploadCloud, Plus, Search } from "lucide-react";
 import DeleteEmployeeButton from "./[id]/DeleteEmployeeButton";
 import ExportToolbar from "@/components/ExportToolbar";
 import EmployeeBulkTable from "@/app/admin/EmployeeBulkTable";
@@ -90,31 +90,53 @@ export default async function AdminEmployeesPage({
     <AdminShell require="employees.view" section="employees">
       <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
-            {isSuperAdmin ? "Employees" : "My Employees"}
+          <h1
+            className="text-2xl md:text-3xl font-bold tracking-tight text-white"
+            style={{ fontFamily: "var(--font-playfair)" }}
+          >
+            {isSuperAdmin ? "Staff & Employees" : "My Assigned Staff"}
           </h1>
-          <p className="text-white/45 text-sm">{employees.length} shown</p>
+          <p className="text-white/45 text-xs mt-0.5">{employees.length} team members shown</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {canCreate ? (
-            <Link
-              href="/admin/employees/new"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-[#C9A84C] text-[#050E21] hover:bg-[#B0903C]"
-            >
-              Add Employee
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/admin/employees/upload"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white/80 hover:text-white hover:bg-white/[0.08] hover:border-[#C9A84C]/40 text-xs font-semibold transition-all shadow-sm"
+              >
+                <UploadCloud size={14} className="text-[#C9A84C]" />
+                <span>Upload Employees</span>
+              </Link>
+
+              <Link
+                href="/admin/employees/new"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-[#C9A84C] to-[#E8CC7A] text-[#050E21] hover:brightness-105 shadow-md shadow-[#C9A84C]/20"
+              >
+                <Plus size={14} />
+                <span>Add Employee</span>
+              </Link>
+            </div>
           ) : null}
           <form className="flex gap-2 items-center">
             {filter !== "all" && <input type="hidden" name="status" value={filter} />}
             {roleFilter && <input type="hidden" name="role" value={roleFilter} />}
-            <input
-              type="search"
-              name="q"
-              defaultValue={q ?? ""}
-              placeholder="Search name, phone, location, role…"
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C]"
-            />
-            <button className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15">Search</button>
+            <div className="relative">
+              <Search
+                size={13}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
+              />
+              <input
+                type="search"
+                name="q"
+                defaultValue={q ?? ""}
+                placeholder="Search name, phone, location…"
+                className="bg-[#050E21] border border-white/10 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#C9A84C]"
+              />
+            </div>
+            <button className="text-xs px-3 py-2 rounded-xl bg-white/[0.05] hover:bg-white/10 border border-white/10 font-semibold text-white/80">
+              Search
+            </button>
           </form>
         </div>
       </div>

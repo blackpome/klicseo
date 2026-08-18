@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentAdmin, resolveScope } from "@/lib/admin-auth";
-import { listLeads } from "@/lib/leads";
+import { listLeads, type ListLeadsOptions } from "@/lib/leads";
+import { formatPhone } from "@/lib/phone-shared";
+import type { LeadStatus } from "@/lib/leads-shared";
 
 // Leads export — full or date-range.
 //
@@ -128,6 +130,10 @@ export async function GET(req: NextRequest) {
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
   const format = (params.get("format") ?? "csv").toLowerCase();
+  const statusParam = params.get("status");
+  const qParam = params.get("q") ?? params.get("search");
+  const areaParam = params.get("area");
+  const serviceParam = params.get("service");
 
   const fromIso = ISO_DAY.test(from) ? `${from}T00:00:00+05:30` : undefined;
   const toIso = ISO_DAY.test(to) ? `${to}T23:59:59+05:30` : undefined;
@@ -136,7 +142,16 @@ export async function GET(req: NextRequest) {
   const scope = (await resolveScope(me)) ?? { kind: "all" as const };
   const assignedAdminUserId = scope.kind === "assigned" ? scope.adminUserId : undefined;
 
-  const leads = await listLeads({ limit: 50000, fromIso, toIso, assignedAdminUserId });
+  const leads = await listLeads({
+    limit: 50000,
+    fromIso,
+    toIso,
+    assignedAdminUserId,
+    status: statusParam && statusParam !== "all" ? (statusParam as LeadStatus) : undefined,
+    search: qParam || undefined,
+    area: areaParam && areaParam !== "all" ? areaParam : undefined,
+    service: serviceParam && serviceParam !== "all" ? serviceParam : undefined,
+  });
 
   const stamp = `${from || "all"}_to_${to || "all"}`;
 
@@ -170,7 +185,9 @@ function rowFromLead(l: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const col of CSV_COLUMNS) {
     const v = l[col.key];
-    if (v && typeof v === "object" && !Array.isArray(v)) {
+    if (col.key === "phone" && typeof v === "string") {
+      out[col.key] = formatPhone(v);
+    } else if (v && typeof v === "object" && !Array.isArray(v)) {
       out[col.key] = JSON.stringify(v);
     } else if (typeof v === "boolean") {
       out[col.key] = v ? "Yes" : "No";

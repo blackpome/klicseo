@@ -2,14 +2,30 @@
 
 import { useMemo, useState, useTransition, type ChangeEvent } from "react";
 import Link from "next/link";
-import { ListPlus } from "lucide-react";
+import {
+  ListPlus,
+  Phone,
+  MessageSquare,
+  MapPin,
+  ExternalLink,
+  CheckCircle2,
+  Clock,
+  Car,
+  Check,
+  AlertCircle,
+  X,
+  FileSpreadsheet,
+  Globe,
+  User,
+} from "lucide-react";
 import LeadStatusControl from "./LeadStatusControl";
 import WhatsAppLink from "@/components/WhatsAppLink";
+import { formatPhone } from "@/lib/phone-shared";
 import { addLeadsToListAction } from "./lists/actions";
-import type { LeadStatus } from "@/lib/leads-shared";
+import { getLeadSourceInfo, type LeadStatus } from "@/lib/leads-shared";
 import type { LeadListRow } from "@/lib/leadLists-shared";
 
-type LeadForTable = {
+export type LeadForTable = {
   id: string;
   created_at: string;
   submitted_at?: string | null;
@@ -23,6 +39,9 @@ type LeadForTable = {
   car_brand: string | null;
   car_model: string | null;
   car_number: string | null;
+  pincode: string | null;
+  area?: string | null;
+  address?: string | null;
   callback_date: string | null;
   callback_time: string | null;
   shift: string | null;
@@ -31,20 +50,10 @@ type LeadForTable = {
   longitude: number | null;
   price_total: number | null;
   source: string;
+  notes?: string | null;
+  custom_fields?: Record<string, string> | null;
   status: LeadStatus;
 };
-
-function isIST(tz: string | null | undefined): boolean {
-  if (!tz) return true;
-  try {
-    const now = new Date();
-    const fmt = (zone: string) =>
-      new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
-    return fmt(tz) === fmt("Asia/Kolkata");
-  } catch {
-    return false;
-  }
-}
 
 export default function LeadBulkListTable({
   leads,
@@ -57,310 +66,393 @@ export default function LeadBulkListTable({
   lists: LeadListRow[];
   statusColor: Record<LeadStatus, string>;
   canManageLists: boolean;
-  /** Map from lead_id → list of list names. Shown as pills in the List column. */
   leadListNames: Map<string, string[]>;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
-  const [listId, setListId] = useState("");
-  const [message, setMessage] = useState<{ kind: "error" | "ok"; text: string } | null>(null);
-  const [pending, startTransition] = useTransition();
-  const [rangeMode, setRangeMode] = useState(false);
-  const [rangeStartId, setRangeStartId] = useState<string | null>(null);
-  const [rangeStartIndex, setRangeStartIndex] = useState<number | null>(null);
-  const pointerTimersRef = { current: new Map<string, NodeJS.Timeout>() };
+  const [targetListId, setTargetListId] = useState<string>("");
+  const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  const allSelected = useMemo(() => leads.length > 0 && selected.size === leads.length, [leads.length, selected.size]);
+  const allSelected = useMemo(
+    () => leads.length > 0 && selected.size === leads.length,
+    [leads.length, selected.size],
+  );
 
-  function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(leads.map((lead) => lead.id)));
-  }
-
-  function handlePointerDown(id: string, index: number) {
-    const timer = setTimeout(() => {
-      // Long-press detected (500ms)
-      setRangeMode(true);
-      setRangeStartId(id);
-      setRangeStartIndex(index);
-      setSelected((current) => new Set(current).add(id));
-    }, 500);
-    pointerTimersRef.current.set(id, timer);
-  }
-
-  function handlePointerUp(id: string) {
-    const timer = pointerTimersRef.current.get(id);
-    if (timer) clearTimeout(timer);
-    pointerTimersRef.current.delete(id);
-  }
-
-  function toggleLead(id: string, index: number, event: ChangeEvent<HTMLInputElement>) {
-    const isShiftClick = (event.nativeEvent as MouseEvent).shiftKey;
-
-    // If in range mode, complete the range
-    if (rangeMode && rangeStartIndex !== null && id !== rangeStartId) {
-      const start = Math.min(rangeStartIndex, index);
-      const end = Math.max(rangeStartIndex, index);
-      setSelected((current) => {
-        const next = new Set(current);
-        for (let i = start; i <= end; i++) {
-          next.add(leads[i].id);
-        }
-        return next;
-      });
-      setRangeMode(false);
-      setRangeStartId(null);
-      setRangeStartIndex(null);
-      setLastSelectedIndex(index);
-      return;
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(leads.map((l) => l.id)));
     }
+  };
 
-    setSelected((current) => {
-      const next = new Set(current);
-      if (isShiftClick && lastSelectedIndex !== null) {
-        const start = Math.min(lastSelectedIndex, index);
-        const end = Math.max(lastSelectedIndex, index);
+  const toggleLead = (id: string, index: number, e: ChangeEvent<HTMLInputElement>) => {
+    const nativeEvent = e.nativeEvent as MouseEvent;
+    const isShift = nativeEvent.shiftKey;
+
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const willBeChecked = !next.has(id);
+
+      if (isShift && lastCheckedIndex !== null) {
+        const start = Math.min(lastCheckedIndex, index);
+        const end = Math.max(lastCheckedIndex, index);
         for (let i = start; i <= end; i++) {
-          next.add(leads[i].id);
+          const targetId = leads[i]?.id;
+          if (targetId) {
+            if (willBeChecked) next.add(targetId);
+            else next.delete(targetId);
+          }
         }
       } else {
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
+        if (willBeChecked) next.add(id);
+        else next.delete(id);
       }
       return next;
     });
-    setLastSelectedIndex(index);
-  }
 
-  function addSelected() {
-    if (!listId) {
-      setMessage({ kind: "error", text: "Choose a lead list first." });
-      return;
-    }
-    if (selected.size === 0) {
-      setMessage({ kind: "error", text: "Select at least one lead." });
-      return;
-    }
+    setLastCheckedIndex(index);
+  };
 
-    setMessage(null);
+  const handleAddToList = () => {
+    if (!targetListId || selected.size === 0) return;
+    const leadIds = Array.from(selected);
+
     startTransition(async () => {
-      const formData = new FormData();
-      formData.append("listId", listId);
-      Array.from(selected).forEach((id) => formData.append("leadIds", id));
-      const result = await addLeadsToListAction(formData);
-      if (result.error) {
-        setMessage({ kind: "error", text: result.error });
-        return;
+      const fd = new FormData();
+      fd.append("listId", targetListId);
+      for (const id of leadIds) {
+        fd.append("leadIds", id);
       }
-      const list = lists.find((item) => item.id === listId);
-      setMessage({ kind: "ok", text: `Added ${selected.size} lead${selected.size === 1 ? "" : "s"} to ${list?.name ?? "list"}.` });
-      setSelected(new Set());
+
+      const res = await addLeadsToListAction(fd);
+
+      if (!res?.error) {
+        setMessage({
+          kind: "ok",
+          text: `Added ${leadIds.length} lead${leadIds.length === 1 ? "" : "s"} to list.`,
+        });
+        setSelected(new Set());
+        setTargetListId("");
+      } else {
+        setMessage({ kind: "err", text: res.error || "Failed to add leads to list." });
+      }
     });
-  }
+  };
 
   return (
-    <div className="space-y-3">
-      {canManageLists && (
-        <div className="flex items-center gap-2 flex-wrap rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-          <span className="text-xs text-white/45">{selected.size} selected</span>
-          <span className="text-xs text-white/35">Shift+click for range • Long-press on mobile</span>
-          {rangeMode && <span className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Range mode active — tap to complete</span>}
-          <select
-            value={listId}
-            onChange={(e) => setListId(e.target.value)}
-            className="min-w-56 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#C9A84C]"
-          >
-            <option value="">- Select list -</option>
-            {lists.map((list) => (
-              <option key={list.id} value={list.id}>
-                {list.name}
-              </option>
-            ))}
-          </select>
+    <div className="space-y-3 relative">
+      {/* Toast Feedback */}
+      {message && (
+        <div
+          className={`flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl text-xs font-medium border ${
+            message.kind === "ok"
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+              : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {message.kind === "ok" ? <Check size={14} /> : <AlertCircle size={14} />}
+            <span>{message.text}</span>
+          </div>
           <button
             type="button"
-            onClick={addSelected}
-            disabled={pending || selected.size === 0 || lists.length === 0}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-[#C9A84C] text-[#050E21] hover:bg-[#B0903C] disabled:opacity-50"
+            onClick={() => setMessage(null)}
+            className="text-white/40 hover:text-white"
           >
-            <ListPlus size={14} /> {pending ? "Adding..." : "Add selected to list"}
+            <X size={13} />
           </button>
-          <Link href="/admin/lists/new" className="text-xs text-[#C9A84C] hover:underline">
-            Create list
-          </Link>
-          {message && (
-            <span className={`text-[11px] ${message.kind === "ok" ? "text-emerald-300" : "text-red-300"}`}>
-              {message.text}
-            </span>
-          )}
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-white/10">
-        <table className="w-full text-sm">
-          <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
-            <tr>
-              {canManageLists && (
-                <th className="px-3 py-2 text-left font-semibold">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleAll}
-                    className="h-4 w-4 accent-[#C9A84C]"
-                    aria-label="Select all leads"
-                  />
-                </th>
-              )}
-              <th className="text-left px-3 py-2 font-semibold">#</th>
-              <th className="text-left px-3 py-2 font-semibold">Submitted / Started (IST)</th>
-              <th className="text-left px-3 py-2 font-semibold">Name</th>
-              <th className="text-left px-3 py-2 font-semibold">Phone</th>
-              <th className="text-left px-3 py-2 font-semibold">Service</th>
-              <th className="text-left px-3 py-2 font-semibold">Vehicle</th>
-              <th className="text-left px-3 py-2 font-semibold">Callback</th>
-              <th className="text-left px-3 py-2 font-semibold">Shift</th>
-              <th className="text-left px-3 py-2 font-semibold">GPS</th>
-              <th className="text-right px-3 py-2 font-semibold">Price</th>
-              <th className="text-left px-3 py-2 font-semibold">Source</th>
-              <th className="text-left px-3 py-2 font-semibold">List</th>
-              <th className="text-left px-3 py-2 font-semibold">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leads.map((lead, i) => (
-              <tr key={lead.id} className="border-t border-white/5 hover:bg-white/[0.02]">
+      {/* Main Table Container */}
+      <div className="rounded-2xl border border-white/[0.08] bg-[#071228] overflow-hidden shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-white/[0.08] bg-white/[0.02] text-white/40 text-[10px] font-bold uppercase tracking-[0.15em]">
                 {canManageLists && (
-                  <td className={`px-3 py-2 ${
-                    rangeMode && rangeStartId === lead.id
-                      ? "bg-amber-500/10 border border-amber-500/30 rounded"
-                      : ""
-                  }`}>
+                  <th className="px-4 py-3.5 w-10 text-center">
                     <input
                       type="checkbox"
-                      checked={selected.has(lead.id)}
-                      onChange={(e) => toggleLead(lead.id, i, e)}
-                      onPointerDown={() => handlePointerDown(lead.id, i)}
-                      onPointerUp={() => handlePointerUp(lead.id)}
-                      onPointerLeave={() => handlePointerUp(lead.id)}
-                      className="h-4 w-4 accent-[#C9A84C]"
-                      aria-label={`Select ${lead.name ?? "lead"}`}
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      className="h-4 w-4 rounded border-white/20 bg-white/5 text-[#C9A84C] accent-[#C9A84C] cursor-pointer"
+                      aria-label="Select all leads"
                     />
-                  </td>
+                  </th>
                 )}
-                <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{i + 1}</td>
-                <td className="px-3 py-2 whitespace-nowrap text-xs">
-                  {lead.status === "draft" ? (
-                    <div className="text-white/30 text-[10px] uppercase tracking-wide">Started</div>
-                  ) : (
-                    <div className="text-[10px] uppercase tracking-wide text-white/30">Submitted</div>
-                  )}
-                  <div className="text-white/80 font-medium">
-                    {new Date(lead.submitted_at ?? lead.created_at).toLocaleString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                      timeZone: "Asia/Kolkata",
-                    })}
-                  </div>
-                  <div className="text-white/50">
-                    {new Date(lead.submitted_at ?? lead.created_at).toLocaleString("en-IN", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: true,
-                      timeZone: "Asia/Kolkata",
-                    })}{" "}
-                    <span className="text-white/30">IST</span>
-                  </div>
-                </td>
-                <td className="px-3 py-2 font-semibold">
-                  <Link href={`/admin/${lead.id}`} className="hover:text-[#C9A84C] hover:underline">
-                    {lead.name ?? "(unnamed)"}
-                  </Link>
-                </td>
-                <td className="px-3 py-2">
-                  <span className="inline-flex items-center gap-1.5">
-                    {lead.phone ? (
-                      <>
-                        <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline">
-                          {lead.phone}
-                        </a>
-                        <WhatsAppLink phone={lead.phone} label={`WhatsApp ${lead.name ?? lead.phone ?? ""}`.trim()} />
-                      </>
-                    ) : (
-                      "-"
-                    )}
-                  </span>
-                </td>
-                <td className="px-3 py-2">
-                  <div>{lead.service ?? "-"}</div>
-                  <div className="text-[11px] text-white/45">
-                    {[lead.service_option, ...(lead.add_on_labels ?? []).map((lbl) => `+ ${lbl}`)].filter(Boolean).join(" | ")}
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <div>{[lead.car_brand, lead.car_model].filter(Boolean).join(" ") || lead.vehicle_type || "-"}</div>
-                  <div className="text-[11px] text-white/45">{[lead.vehicle_type, lead.car_number].filter(Boolean).join(" | ")}</div>
-                </td>
-                <td className="px-3 py-2 text-xs whitespace-nowrap">
-                  {lead.callback_date ? <div className="text-white/80 font-medium">{lead.callback_date}</div> : null}
-                  {lead.callback_time ? (
-                    <div className="text-white/50 text-[11px]">
-                      {lead.callback_time}
-                      {lead.client_timezone && !isIST(lead.client_timezone) && (
-                        <span
-                          className="ml-1 rounded px-1 py-0.5 text-[9px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30"
-                          title={lead.client_timezone}
-                        >
-                          Non-IST
-                        </span>
-                      )}
-                    </div>
-                  ) : null}
-                  {!lead.callback_date && !lead.callback_time ? <span className="text-white/30">-</span> : null}
-                </td>
-                <td className="px-3 py-2 text-xs">{lead.shift ?? "-"}</td>
-                <td className="px-3 py-2 text-xs">
-                  {lead.map_link ? (
-                    <a href={lead.map_link} target="_blank" rel="noopener noreferrer" className="text-[#3B82F6] hover:underline">
-                      Map
-                    </a>
-                  ) : lead.latitude != null && lead.longitude != null ? (
-                    <a
-                      href={`https://www.google.com/maps?q=${lead.latitude},${lead.longitude}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#3B82F6] hover:underline"
-                    >
-                      Map
-                    </a>
-                  ) : (
-                    <span className="text-white/30">-</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right font-semibold">
-                  {lead.price_total != null ? `Rs ${lead.price_total.toLocaleString("en-IN")}` : "-"}
-                </td>
-                <td className="px-3 py-2 text-[11px] text-white/50">{lead.source}</td>
-                <td className="px-3 py-2">
-                  {leadListNames.has(lead.id) ? (
-                    <div className="flex flex-wrap gap-1">
-                      {leadListNames.get(lead.id)!.map((name) => (
-                        <span key={name} className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#C9A84C]/15 text-[#E8CC7A] border border-[#C9A84C]/25 whitespace-nowrap">
-                          {name}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-white/25 text-[10px]">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  <LeadStatusControl id={lead.id} status={lead.status} color={statusColor[lead.status]} />
-                </td>
+                <th className="px-3 py-3.5 w-12">#</th>
+                <th className="px-4 py-3.5">Customer & Vehicle</th>
+                <th className="px-4 py-3.5">Contact & Actions</th>
+                <th className="px-4 py-3.5">Service & Price</th>
+                <th className="px-4 py-3.5">Locality & Source</th>
+                <th className="px-4 py-3.5">List / Tags</th>
+                <th className="px-4 py-3.5 text-right">Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+
+            <tbody className="divide-y divide-white/[0.04]">
+              {leads.map((lead, i) => {
+                const isSelected = selected.has(lead.id);
+                const vehicleSummary =
+                  [lead.car_brand, lead.car_model].filter(Boolean).join(" ") ||
+                  lead.vehicle_type ||
+                  "";
+                const dateStr = new Date(lead.submitted_at ?? lead.created_at).toLocaleDateString(
+                  "en-IN",
+                  {
+                    day: "2-digit",
+                    month: "short",
+                    timeZone: "Asia/Kolkata",
+                  },
+                );
+
+                const sourceInfo = getLeadSourceInfo(lead);
+
+                return (
+                  <tr
+                    key={lead.id}
+                    className={`group transition-colors ${
+                      isSelected
+                        ? "bg-[#C9A84C]/10"
+                        : "hover:bg-white/[0.02]"
+                    }`}
+                  >
+                    {/* Checkbox */}
+                    {canManageLists && (
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => toggleLead(lead.id, i, e)}
+                          className="h-4 w-4 rounded border-white/20 bg-white/5 text-[#C9A84C] accent-[#C9A84C] cursor-pointer"
+                        />
+                      </td>
+                    )}
+
+                    {/* Row Index */}
+                    <td className="px-3 py-3 text-white/30 text-[11px] font-mono tabular-nums">
+                      {i + 1}
+                    </td>
+
+                    {/* Customer & Vehicle */}
+                    <td className="px-4 py-3 min-w-[200px]">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/admin/${lead.id}`}
+                          className="font-semibold text-white group-hover:text-[#E8CC7A] transition-colors text-sm"
+                        >
+                          {lead.name || "(Unnamed Lead)"}
+                        </Link>
+
+                        {lead.status === "draft" && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/10 text-white/50 uppercase">
+                            Draft
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-white/50">
+                        {vehicleSummary ? (
+                          <span className="flex items-center gap-1 text-white/70">
+                            <Car size={11} className="text-[#C9A84C]" />
+                            {vehicleSummary}
+                          </span>
+                        ) : (
+                          <span>No vehicle</span>
+                        )}
+
+                        {lead.car_number && (
+                          <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-[#E8CC7A] uppercase border border-white/10">
+                            {lead.car_number}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Contact & Inline Actions */}
+                    <td className="px-4 py-3 min-w-[170px]">
+                      {lead.phone ? (
+                        <div className="space-y-1">
+                          <div className="font-mono text-xs text-white/90 flex items-center gap-1.5 font-semibold">
+                            <span>{formatPhone(lead.phone)}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <a
+                              href={`tel:${lead.phone}`}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/5 hover:bg-[#C9A84C]/20 text-[#E8CC7A] text-[10px] font-medium transition-colors border border-white/5"
+                              title="Call customer"
+                            >
+                              <Phone size={10} /> Call
+                            </a>
+
+                            <WhatsAppLink
+                              phone={lead.phone}
+                              label="Chat"
+                            />
+
+                            {lead.map_link && (
+                              <a
+                                href={lead.map_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/5 hover:bg-sky-500/20 text-sky-400 text-[10px] transition-colors border border-white/5"
+                                title="Open Google Maps Location"
+                              >
+                                <MapPin size={10} />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-white/30">—</span>
+                      )}
+                    </td>
+
+                    {/* Service & Price */}
+                    <td className="px-4 py-3 min-w-[160px]">
+                      <div className="font-medium text-white/90 text-xs">
+                        {lead.service || <span className="text-white/30">Unspecified Service</span>}
+                      </div>
+
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-white/40">
+                        {lead.service_option && <span>{lead.service_option}</span>}
+                        {lead.price_total != null && (
+                          <span className="font-semibold text-[#E8CC7A]">
+                            ₹{lead.price_total.toLocaleString("en-IN")}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Locality & Source Badge */}
+                    <td className="px-4 py-3 min-w-[150px]">
+                      {lead.area ? (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-[10px] font-medium">
+                          <MapPin size={10} /> {lead.area}
+                        </div>
+                      ) : lead.pincode ? (
+                        <span className="font-mono text-xs text-white/60">PIN {lead.pincode}</span>
+                      ) : (
+                        <span className="text-white/30 text-[11px]">Chennai</span>
+                      )}
+
+                      <div className="flex items-center gap-1.5 text-[10px] text-white/40 mt-1 flex-wrap">
+                        <span>{dateStr}</span>
+                        <span>•</span>
+
+                        {/* Interactive Source Tooltip Badge */}
+                        <div className="relative group/tip inline-flex items-center">
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded border text-[10px] font-semibold cursor-help transition-all hover:brightness-125 ${sourceInfo.badgeBg} ${sourceInfo.textColor}`}
+                          >
+                            {sourceInfo.iconType === "upload" && <FileSpreadsheet size={10} />}
+                            {sourceInfo.iconType === "globe" && <Globe size={10} />}
+                            {sourceInfo.iconType === "user" && <User size={10} />}
+                            <span>{sourceInfo.shortLabel}</span>
+                          </span>
+
+                          {/* Floating Astryx Tooltip Box */}
+                          <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tip:flex flex-col items-center z-50 whitespace-nowrap drop-shadow-2xl">
+                            <div className="bg-[#050E21] border border-white/20 text-white text-[11px] px-3 py-2 rounded-xl shadow-2xl space-y-0.5 text-left min-w-[190px]">
+                              <div className="font-bold text-[#E8CC7A] flex items-center gap-1.5">
+                                {sourceInfo.iconType === "upload" && <FileSpreadsheet size={12} />}
+                                {sourceInfo.iconType === "globe" && <Globe size={12} />}
+                                {sourceInfo.iconType === "user" && <User size={12} />}
+                                <span>{sourceInfo.label}</span>
+                              </div>
+                              <div className="text-[10px] text-white/70">
+                                {sourceInfo.description}
+                              </div>
+                            </div>
+                            <div className="w-2 h-2 -mt-1 rotate-45 bg-[#050E21] border-r border-b border-white/20" />
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Lead List Tags */}
+                    <td className="px-4 py-3 min-w-[130px]">
+                      {leadListNames.has(lead.id) ? (
+                        <div className="flex flex-wrap gap-1">
+                          {leadListNames.get(lead.id)!.map((name) => (
+                            <span
+                              key={name}
+                              className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[#C9A84C]/15 text-[#E8CC7A] border border-[#C9A84C]/25 whitespace-nowrap"
+                            >
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-white/20 text-[10px]">—</span>
+                      )}
+                    </td>
+
+                    {/* Status Dropdown */}
+                    <td className="px-4 py-3 text-right">
+                      <LeadStatusControl
+                        id={lead.id}
+                        status={lead.status}
+                        color={statusColor[lead.status] || "#C9A84C"}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {/* Floating Bottom Dock for Bulk Actions */}
+      {selected.size > 0 && canManageLists && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-[#071228]/95 backdrop-blur-md border border-[#C9A84C]/40 rounded-2xl px-5 py-3 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center gap-2 text-xs text-white font-medium pr-2 border-r border-white/10">
+            <span className="grid h-5 w-5 place-items-center rounded-full bg-[#C9A84C] text-[#050E21] font-bold text-[10px]">
+              {selected.size}
+            </span>
+            <span>selected</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={targetListId}
+              onChange={(e) => setTargetListId(e.target.value)}
+              className="bg-[#050E21] border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#C9A84C]"
+            >
+              <option value="">— Assign to List —</option>
+              {lists.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              disabled={!targetListId || isPending}
+              onClick={handleAddToList}
+              className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#C9A84C] to-[#E8CC7A] text-[#050E21] text-xs font-bold hover:brightness-105 transition-all disabled:opacity-50 inline-flex items-center gap-1.5 shadow-md shadow-[#C9A84C]/20"
+            >
+              <ListPlus size={13} />
+              <span>{isPending ? "Assigning…" : "Add to List"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors"
+              title="Deselect all"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

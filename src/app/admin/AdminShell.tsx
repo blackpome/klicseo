@@ -7,20 +7,13 @@ import type { CallReminder } from "@/lib/leads-shared";
 import Sidebar, { type NavGroup } from "./Sidebar";
 import AuthSessionGuard from "./AuthSessionGuard";
 
-// Wraps authed admin pages with the sidebar + real HMAC signature check and the
-// live allowlist lookup. Login/forgot/reset pages deliberately render bare.
-//
-// Pass `require` to gate a page on a specific permission: if the signed-in user
-// lacks it, they get an "access denied" panel instead of the page body.
 export default async function AdminShell({
   children,
   require,
   section = "leads",
 }: {
   children: React.ReactNode;
-  /** Permission(s) required to view this page. The user needs at least one. */
   require?: Permission | Permission[];
-  /** Which reminder feed powers the bell on this page. Defaults to "leads". */
   section?: "leads" | "employees";
 }) {
   const me = await currentAdmin();
@@ -31,18 +24,20 @@ export default async function AdminShell({
   const isSuperAdmin = me.role === "super_admin";
   const denied = require != null && (Array.isArray(require) ? !require.some(can) : !can(require));
 
-  // Resolve scope once for the whole shell (used by bell + available to pages).
+  // Resolve scope once for the whole shell
   const scope = (await resolveScope(me)) ?? { kind: "all" as const };
   const assignedAdminUserId = scope.kind === "assigned" ? scope.adminUserId : undefined;
 
-  // Build nav groups, hiding anything the user can't reach.
+  // Build nav groups
   const groups: NavGroup[] = [];
 
   const leadsItems = [
     can("leads.view") && { href: "/admin", label: isSuperAdmin ? "All Leads" : "My Leads", icon: "Inbox" as const, exact: true },
     isSuperAdmin && can("leads.view") && { href: "/admin/lists", label: "Lead Lists", icon: "ClipboardList" as const },
     !isSuperAdmin && can("leads.view") && { href: "/admin/my-lists", label: "My Lists", icon: "ClipboardList" as const },
+    can("leads.view") && { href: "/admin/reports", label: "Daily Reports", icon: "BarChart3" as const },
     can("leads.manage") && { href: "/admin/new", label: "Add Lead", icon: "PlusCircle" as const },
+    can("leads.manage") && { href: "/admin/upload", label: "Upload Leads", icon: "UploadCloud" as const },
     can("payments.view") && { href: "/admin/payments", label: "Payments", icon: "Wallet" as const },
   ].filter(Boolean) as NavGroup["items"];
   if (leadsItems.length) groups.push({ title: "Leads", items: leadsItems });
@@ -51,11 +46,11 @@ export default async function AdminShell({
     isSuperAdmin && can("employees.view") && { href: "/admin/employees", label: "All Employees", icon: "Users" as const },
     can("employees.view") && { href: "/admin/my-employees", label: "My Employees", icon: "Users" as const },
     can("employees.manage") && { href: "/admin/employees/new", label: "Add Employee", icon: "UserPlus" as const },
+    can("employees.manage") && { href: "/admin/employees/upload", label: "Upload Employees", icon: "UploadCloud" as const },
   ].filter(Boolean) as NavGroup["items"];
   if (employeeItems.length) groups.push({ title: "Employees", items: employeeItems });
 
   if (canManageAccess) {
-    // Jobs (careers) management lives with the Employees group.
     const empGroup = groups.find((g) => g.title === "Employees");
     if (empGroup) empGroup.items.push({ href: "/admin/jobs", label: "Jobs", icon: "Briefcase" });
     else groups.push({ title: "Employees", items: [{ href: "/admin/jobs", label: "Jobs", icon: "Briefcase" }] });
@@ -73,25 +68,21 @@ export default async function AdminShell({
     });
   }
 
-  // Call reminders power the notification bell. The feed depends on the
-  // current section: employees pages surface employee call reminders, every
-  // other admin page surfaces lead call reminders. Scoped to the admin's scope.
   const bellPermission: Permission = section === "employees" ? "employees.view" : "leads.view";
   let reminders: CallReminder[] = [];
   if (can(bellPermission)) {
     try {
-      reminders = section === "employees"
-        ? await listEmployeeCallReminders({ assignedAdminUserId })
-        : await listCallReminders({ assignedAdminUserId });
+      reminders =
+        section === "employees"
+          ? await listEmployeeCallReminders({ assignedAdminUserId })
+          : await listCallReminders({ assignedAdminUserId });
     } catch {
-      reminders = []; // a DB hiccup shouldn't break the whole shell
+      reminders = [];
     }
   }
 
   return (
-    <div className="min-h-screen md:pl-64">
-      {/* Probes the session every few seconds and bounces to /admin/login
-          immediately on a forced sign-out from another tab/device. */}
+    <div className="min-h-screen bg-[#050E21] text-white selection:bg-[#C9A84C]/30 selection:text-[#E8CC7A]">
       <AuthSessionGuard />
       <Sidebar
         groups={groups}
@@ -100,20 +91,23 @@ export default async function AdminShell({
         reminders={reminders}
         showBell={can(bellPermission)}
       />
-      <main className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
-        {denied ? (
-          <div className="mx-auto max-w-md text-center py-24">
-            <h1 className="text-xl font-bold mb-2" style={{ fontFamily: "var(--font-playfair)" }}>
-              No access
-            </h1>
-            <p className="text-white/45 text-sm">
-              Your account doesn’t have permission to view this section. Ask an admin if you need it.
-            </p>
-          </div>
-        ) : (
-          children
-        )}
-      </main>
+
+      <div className="md:pl-64 flex flex-col min-h-screen">
+        <main className="flex-1 px-4 py-6 md:px-8 md:py-8 pt-18 md:pt-8 max-w-7xl w-full mx-auto">
+          {denied ? (
+            <div className="mx-auto max-w-md text-center py-24 rounded-2xl border border-white/10 bg-[#071228] p-8">
+              <h1 className="text-xl font-bold mb-2 text-white" style={{ fontFamily: "var(--font-playfair)" }}>
+                Access Restricted
+              </h1>
+              <p className="text-white/45 text-xs">
+                Your role does not have permission to access this view. Contact an administrator for assistance.
+              </p>
+            </div>
+          ) : (
+            children
+          )}
+        </main>
+      </div>
     </div>
   );
 }

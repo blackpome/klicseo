@@ -1,18 +1,40 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import {
+  ArrowLeft,
+  Phone,
+  MapPin,
+  User,
+  Car,
+  Calendar,
+  Sunrise,
+  Sunset,
+  Sparkles,
+  Pencil,
+  Wallet,
+  Globe,
+  ExternalLink,
+  Shield,
+  Layers,
+  Clock,
+  MessageSquare,
+  Copy,
+  FileSpreadsheet,
+  UploadCloud,
+} from "lucide-react";
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
 import LeadStatusControl from "../LeadStatusControl";
 import LeadNotesEditor from "./LeadNotesEditor";
 import DeleteLeadButton from "./DeleteLeadButton";
 import WhatsAppLink from "@/components/WhatsAppLink";
+import { formatPhone } from "@/lib/phone-shared";
 import { getLead, assertLeadInScope } from "@/lib/leads";
-import { LEAD_STATUS_COLOR } from "@/lib/leads-shared";
+import { LEAD_STATUS_COLOR, getLeadSourceInfo } from "@/lib/leads-shared";
 import { getCustomerPayments } from "@/lib/payments";
 import { inr } from "@/lib/pricing";
 import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 import type { Permission } from "@/lib/admin-users-shared";
-import { ArrowLeft, Phone, MapPin, User, Car, Calendar, Sunrise, Sunset, Sparkles, Pencil, Wallet, Globe } from "lucide-react";
 
 const STATUS_COLOR = LEAD_STATUS_COLOR;
 
@@ -21,20 +43,28 @@ function isIST(tz: string | null | undefined): boolean {
   try {
     const now = new Date();
     const fmt = (zone: string) =>
-      new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: zone,
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(now);
     return fmt(tz) === fmt("Asia/Kolkata");
   } catch {
     return false;
   }
 }
 
-/** Convert a user-local callback time to IST for display in the admin panel.
- *  Returns null when fromTZ is already IST or the inputs are missing/invalid. */
-function callbackLocalToIST(dateStr: string | null, timeStr: string | null, fromTZ: string | null): string | null {
+function callbackLocalToIST(
+  dateStr: string | null,
+  timeStr: string | null,
+  fromTZ: string | null,
+): string | null {
   if (!dateStr || !fromTZ || isIST(fromTZ)) return null;
   const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
   if (!dm) return null;
-  let wallH = 10, wallM = 0;
+  let wallH = 10;
+  let wallM = 0;
   if (timeStr) {
     const tm = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i.exec(timeStr.trim());
     if (tm) {
@@ -44,17 +74,22 @@ function callbackLocalToIST(dateStr: string | null, timeStr: string | null, from
     }
   }
   try {
-    // Strategy: guess UTC = wallH:wallM, ask what fromTZ shows, derive the real offset.
     const guess = new Date(Date.UTC(+dm[1], +dm[2] - 1, +dm[3], wallH, wallM));
     const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: fromTZ, hour: "2-digit", minute: "2-digit", hour12: false,
+      timeZone: fromTZ,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
     }).formatToParts(guess);
     const gotH = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
     const gotM = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0");
     const offsetMs = ((gotH - wallH) * 60 + (gotM - wallM)) * 60 * 1000;
     const utcActual = new Date(guess.getTime() - offsetMs);
     return new Intl.DateTimeFormat("en-IN", {
-      timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true,
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
     }).format(utcActual);
   } catch {
     return null;
@@ -67,27 +102,22 @@ function fmt(value: string | number | boolean | null | undefined): string {
   return String(value);
 }
 
-function Field({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
-  return (
-    <div className="border-b border-white/5 py-2.5">
-      <div className="text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1">{label}</div>
-      <div className={`text-sm text-white ${mono ? "font-mono" : ""}`}>{value}</div>
-    </div>
-  );
-}
-
-function Section({ title, icon: Icon, children }: {
-  title: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  children: React.ReactNode;
+function DetailRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
 }) {
   return (
-    <section className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <h2 className="flex items-center gap-2 text-[11px] font-bold text-[#C9A84C] uppercase tracking-widest mb-2">
-        <Icon size={12} /> {title}
-      </h2>
-      <div>{children}</div>
-    </section>
+    <div className="flex items-start justify-between gap-4 py-2.5 border-b border-white/[0.04] last:border-0 text-xs">
+      <span className="text-white/40 font-medium">{label}</span>
+      <span className={`text-right font-medium text-white ${mono ? "font-mono" : ""}`}>
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -98,23 +128,25 @@ export default async function LeadDetailPage({
 }) {
   const { id } = await params;
   const me = await currentAdmin();
+  if (!me) notFound();
 
   let lead;
   try {
     lead = await getLead(id);
+    if (!lead) notFound();
+    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+    await assertLeadInScope(id, scope);
   } catch (err) {
     return (
       <AdminShell require="leads.view">
-        <AdminError err={err} />
+        <div className="max-w-3xl space-y-4">
+          <Link href="/admin" className="text-xs text-white/50 hover:text-white inline-flex items-center gap-1">
+            <ArrowLeft size={13} /> Back
+          </Link>
+          <AdminError err={err} />
+        </div>
       </AdminShell>
     );
-  }
-  if (!lead) notFound();
-
-  // Scope guard: non-super-admins may only open leads in their assigned lists.
-  if (me) {
-    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
-    if (!(await assertLeadInScope(id, scope))) notFound();
   }
 
   const canViewPayments = me != null && me.permissions.includes("payments.view" as Permission);
@@ -130,259 +162,313 @@ export default async function LeadDetailPage({
 
   return (
     <AdminShell require="leads.view">
-      <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
-        <Link href="/admin" className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white">
-          <ArrowLeft size={13} /> {me?.role === "super_admin" ? "All leads" : "My leads"}
-        </Link>
-        <div className="flex items-center gap-3">
-          <LeadStatusControl id={lead.id} status={lead.status} color={STATUS_COLOR[lead.status]} />
+      <div className="space-y-6">
+        {/* Navigation & Header Toolbar */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <Link
-            href={`/admin/${lead.id}/edit`}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 text-white/80 hover:text-white hover:border-white/30"
+            href="/admin"
+            className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white transition-colors"
           >
-            <Pencil size={12} /> Edit
+            <ArrowLeft size={13} /> {me?.role === "super_admin" ? "All Leads" : "My Leads"}
           </Link>
-          <DeleteLeadButton id={lead.id} />
+
+          <div className="flex items-center gap-2.5">
+            <LeadStatusControl id={lead.id} status={lead.status} color={STATUS_COLOR[lead.status]} />
+
+            <Link
+              href={`/admin/${lead.id}/edit`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 text-white/80 hover:text-white hover:bg-white/10 transition-all"
+            >
+              <Pencil size={13} /> Edit
+            </Link>
+
+            <DeleteLeadButton id={lead.id} />
+          </div>
         </div>
-      </div>
 
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
-          {lead.name ?? "Unnamed lead"}
-        </h1>
-        <p className="text-white/50 text-sm mt-1 flex items-center gap-3 flex-wrap">
-          {lead.phone && (
-            <span className="inline-flex items-center gap-2">
-              <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline inline-flex items-center gap-1">
-                <Phone size={12} /> {lead.phone}
-              </a>
-              <WhatsAppLink phone={lead.phone} label={`WhatsApp ${lead.name ?? lead.phone}`} />
-            </span>
-          )}
-          <span className="text-white/30">·</span>
-          <span className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wide text-white/30">
-              {lead.status === "draft" ? "Started" : "Submitted"}
-            </span>
-            {new Date(lead.submitted_at ?? lead.created_at).toLocaleString("en-IN", {
-              dateStyle: "medium",
-              timeStyle: "short",
-              timeZone: "Asia/Kolkata",
-            })}{" "}
-            <span className="text-white/30 text-[10px]">IST</span>
-          </span>
-          <span className="text-white/30">·</span>
-          <span className="uppercase tracking-wider text-[10px] font-bold text-white/40">
-            from {lead.source}
-          </span>
-        </p>
-      </header>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Section title="Contact" icon={User}>
-          <Field label="Name" value={fmt(lead.name)} />
-          <Field
-            label="Phone"
-            value={
-              lead.phone ? (
-                <span className="inline-flex items-center gap-2">
-                  <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline">{lead.phone}</a>
-                  <WhatsAppLink phone={lead.phone} label={`WhatsApp ${lead.name ?? lead.phone}`} />
-                </span>
-              ) : "—"
-            }
-          />
-        </Section>
-
-        <Section title="Service" icon={Sparkles}>
-          <Field label="Category" value={fmt(lead.service)} />
-          <Field label="Option" value={fmt(lead.service_option)} />
-          <Field
-            label="Add-ons"
-            value={
-              lead.add_on_labels && lead.add_on_labels.length
-                ? lead.add_on_labels.join(", ")
-                : lead.interior_add_on
-                ? "Yes (legacy)"
-                : "—"
-            }
-          />
-          <Field
-            label="Price (snapshot)"
-            value={
-              lead.price_total != null ? (
-                lead.price_base != null ? (
-                  <span className="flex flex-col gap-0.5">
-                    <span>₹{lead.price_base.toLocaleString("en-IN")} <span className="text-white/40 text-[11px]">website price</span></span>
-                    {lead.price_interior_addon != null && lead.price_interior_addon > 0 && (
-                      <span>
-                        ₹{lead.price_interior_addon.toLocaleString("en-IN")}{" "}
-                        <span className="text-white/40 text-[11px]">
-                          {lead.add_on_labels?.length ? lead.add_on_labels.join(" + ") : "add-ons"}
-                        </span>
-                      </span>
-                    )}
-                    <span className="font-bold text-[#C9A84C]">₹{lead.price_total.toLocaleString("en-IN")} <span className="text-[11px] font-normal text-white/40">total price</span></span>
-                  </span>
-                ) : (
-                  `₹${lead.price_total.toLocaleString("en-IN")}`
-                )
-              ) : "—"
-            }
-          />
-        </Section>
-
-        <Section title="Vehicle" icon={Car}>
-          <Field label="Type" value={fmt(lead.vehicle_type)} />
-          <Field label="Brand" value={fmt(lead.car_brand)} />
-          <Field label="Model" value={fmt(lead.car_model)} />
-          <Field label="Number plate" value={fmt(lead.car_number)} mono />
-        </Section>
-
-        <Section title="Location" icon={MapPin}>
-          <Field label="Pincode" value={fmt(lead.pincode)} mono />
-          <Field label="Area" value={fmt(lead.area)} />
-          <Field
-            label="Address"
-            value={lead.address ? <span className="whitespace-pre-line">{lead.address}</span> : "—"}
-          />
-          <Field label="Parking" value={fmt(lead.parking_location)} />
-          <Field label="Car cover" value={fmt(lead.car_cover_choice)} />
-          <Field
-            label="Gate access notes"
-            value={
-              lead.gate_access_notes ? (
-                <span className="whitespace-pre-line">{lead.gate_access_notes}</span>
-              ) : lead.gate_access_consent ? (
-                "Confirmed (legacy flag)"
-              ) : (
-                "—"
-              )
-            }
-          />
-          <Field
-            label="Map"
-            value={
-              lead.map_link ? (
-                <a
-                  href={lead.map_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#3B82F6] hover:underline break-all"
+        {/* Lead Profile Header Card */}
+        <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-6 shadow-xl">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1
+                  className="text-2xl md:text-3xl font-bold text-white tracking-tight"
+                  style={{ fontFamily: "var(--font-playfair)" }}
                 >
-                  {lead.map_link} ↗
-                </a>
-              ) : lead.latitude != null && lead.longitude != null ? (
-                <a
-                  href={`https://www.google.com/maps?q=${lead.latitude},${lead.longitude}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#3B82F6] hover:underline inline-flex items-center gap-1"
-                >
-                  Open on Google Maps ↗
-                  <span className="text-white/40 text-[11px] font-mono ml-1">
-                    ({lead.latitude.toFixed(5)}, {lead.longitude.toFixed(5)})
+                  {lead.name || "(Unnamed Lead)"}
+                </h1>
+
+                {lead.area && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-300 text-xs font-medium">
+                    <MapPin size={12} /> {lead.area}
                   </span>
-                </a>
-              ) : (
-                "—"
-              )
-            }
-          />
-        </Section>
+                )}
+              </div>
 
-        <Section title="Scheduling" icon={Calendar}>
-          <Field
-            label="Service shift"
-            value={
-              lead.shift ? (
-                <span className="inline-flex items-center gap-2">
-                  <ShiftIcon size={14} className="text-[#C9A84C]" />
-                  {shiftLabel}
-                </span>
-              ) : (
-                "—"
-              )
-            }
-          />
-          <Field label="Callback date" value={fmt(lead.callback_date)} />
-          <Field
-            label="Callback time"
-            value={
-              lead.callback_time ? (
-                <span className="flex flex-col gap-1">
-                  <span>{lead.callback_time}</span>
-                  {lead.client_timezone && !isIST(lead.client_timezone) && (() => {
-                    const ist = callbackLocalToIST(lead.callback_date, lead.callback_time, lead.client_timezone);
-                    return (
-                      <span className="text-[11px] text-orange-300">
-                        {ist ? `= ${ist} IST` : ""} (user in {lead.client_timezone})
-                      </span>
-                    );
-                  })()}
-                </span>
-              ) : "—"
-            }
-          />
-          {lead.client_timezone && (
-            <Field
-              label="User's timezone"
-              value={
-                <span className="inline-flex items-center gap-2">
-                  <Globe size={12} className={!isIST(lead.client_timezone) ? "text-orange-400" : "text-emerald-400"} />
-                  <span className={!isIST(lead.client_timezone) ? "text-orange-300" : ""}>
-                    {lead.client_timezone}
-                    {!isIST(lead.client_timezone) && (
-                      <span className="ml-2 text-[10px] font-bold uppercase tracking-wide bg-orange-500/20 text-orange-300 border border-orange-500/30 rounded px-1.5 py-0.5">
-                        Outside India
-                      </span>
-                    )}
+              <div className="flex items-center gap-3 mt-2 text-xs text-white/50 flex-wrap">
+                {lead.phone && (
+                  <span className="flex items-center gap-2">
+                    <a
+                      href={`tel:${lead.phone}`}
+                      className="font-mono text-[#E8CC7A] hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <Phone size={12} /> {formatPhone(lead.phone)}
+                    </a>
+                    <WhatsAppLink phone={lead.phone} label="WhatsApp" />
                   </span>
+                )}
+
+                <span>•</span>
+                {/* Source Pill with Floating Tooltip */}
+                {(() => {
+                  const src = getLeadSourceInfo(lead);
+                  return (
+                    <div className="relative group/tip inline-flex items-center">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-semibold cursor-help transition-all hover:brightness-125 ${src.badgeBg} ${src.textColor}`}
+                      >
+                        {src.iconType === "upload" && <FileSpreadsheet size={12} />}
+                        {src.iconType === "globe" && <Globe size={12} />}
+                        {src.iconType === "user" && <User size={12} />}
+                        <span>{src.shortLabel}</span>
+                      </span>
+
+                      {/* Floating Tooltip Box */}
+                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tip:flex flex-col items-center z-50 whitespace-nowrap drop-shadow-2xl">
+                        <div className="bg-[#050E21] border border-white/20 text-white text-[11px] px-3 py-2 rounded-xl shadow-2xl space-y-0.5 text-left min-w-[200px]">
+                          <div className="font-bold text-[#E8CC7A] flex items-center gap-1.5">
+                            {src.iconType === "upload" && <FileSpreadsheet size={12} />}
+                            {src.iconType === "globe" && <Globe size={12} />}
+                            {src.iconType === "user" && <User size={12} />}
+                            <span>{src.label}</span>
+                          </div>
+                          <div className="text-[10px] text-white/70">
+                            {src.description}
+                          </div>
+                        </div>
+                        <div className="w-2 h-2 -mt-1 rotate-45 bg-[#050E21] border-r border-b border-white/20" />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <span>•</span>
+                <span>
+                  Submitted:{" "}
+                  <strong className="text-white/70">
+                    {new Date(lead.submitted_at ?? lead.created_at).toLocaleString("en-IN", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                      timeZone: "Asia/Kolkata",
+                    })}{" "}
+                    IST
+                  </strong>
                 </span>
-              }
-            />
-          )}
-        </Section>
+              </div>
+            </div>
 
-        {lead.custom_fields && Object.keys(lead.custom_fields).length > 0 && (
-          <Section title="Additional details" icon={Sparkles}>
-            {Object.entries(lead.custom_fields).map(([label, value]) => (
-              <Field key={label} label={label} value={fmt(value)} />
-            ))}
-          </Section>
-        )}
-
-        {canViewPayments && (
-          <Section title="Payments" icon={Wallet}>
-            {paymentHistory.length === 0 ? (
-              <p className="text-sm text-white/40 py-1">
-                No payments recorded.{" "}
-                <Link href="/admin/payments" className="text-[#C9A84C] hover:underline">Open payment tracker →</Link>
-              </p>
-            ) : (
-              <div className="space-y-1.5 py-1">
-                {paymentHistory.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between gap-3 text-sm border-b border-white/5 pb-1.5 last:border-0">
-                    <span className="text-white/70">{p.period}</span>
-                    <span className="text-white/50 text-xs">
-                      {p.amount != null ? inr(p.amount) : "—"}
-                      {p.method ? ` · ${p.method.toUpperCase()}` : ""}
-                      {p.paid_at ? ` · ${p.paid_at}` : ""}
-                    </span>
-                    <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${p.status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>
-                      {p.status}
-                    </span>
-                  </div>
-                ))}
-                <Link href="/admin/payments" className="inline-block text-[#C9A84C] text-xs hover:underline mt-1">Open payment tracker →</Link>
+            {lead.price_total != null && (
+              <div className="text-right">
+                <span className="text-[10px] text-white/40 uppercase tracking-wider block">
+                  Total Deal Value
+                </span>
+                <span className="text-2xl font-bold text-[#E8CC7A]">
+                  ₹{lead.price_total.toLocaleString("en-IN")}
+                </span>
               </div>
             )}
-          </Section>
-        )}
+          </div>
+        </div>
 
-        <Section title="Internal notes" icon={User}>
-          <LeadNotesEditor id={lead.id} initialNotes={lead.notes ?? ""} />
-        </Section>
+        {/* 2-Column Workspace Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left 2-Columns: Details & Vehicle Info */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Vehicle & Service Info Card */}
+            <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 shadow-lg">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#C9A84C] border-b border-white/[0.06] pb-3">
+                <Car size={15} /> Vehicle & Service Configuration
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                <div>
+                  <DetailRow label="Vehicle Maker / Brand" value={fmt(lead.car_brand)} />
+                  <DetailRow label="Vehicle Model" value={fmt(lead.car_model)} />
+                  <DetailRow
+                    label="Registration Plate"
+                    value={
+                      lead.car_number ? (
+                        <span className="font-mono text-[#E8CC7A] uppercase bg-white/5 px-2 py-0.5 rounded border border-white/10">
+                          {lead.car_number}
+                        </span>
+                      ) : (
+                        "—"
+                      )
+                    }
+                  />
+                  <DetailRow label="Vehicle Segment" value={fmt(lead.vehicle_type)} />
+                </div>
+
+                <div>
+                  <DetailRow label="Service Package" value={fmt(lead.service)} />
+                  <DetailRow label="Service Option" value={fmt(lead.service_option)} />
+                  <DetailRow
+                    label="Add-ons"
+                    value={
+                      lead.add_on_labels && lead.add_on_labels.length > 0
+                        ? lead.add_on_labels.join(", ")
+                        : lead.interior_add_on
+                        ? "Interior Add-on"
+                        : "—"
+                    }
+                  />
+                  <DetailRow
+                    label="Parking Location"
+                    value={fmt(lead.parking_location)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Address & Location Card */}
+            <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 shadow-lg">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#C9A84C] border-b border-white/[0.06] pb-3">
+                <MapPin size={15} /> Location & Address Details
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="flex items-start justify-between gap-4">
+                  <span className="text-white/40">Permanent Address</span>
+                  <span className="text-right text-white max-w-md">
+                    {lead.address || "—"}
+                  </span>
+                </div>
+
+                <DetailRow
+                  label="Locality / Derived Area"
+                  value={lead.area || "—"}
+                />
+                <DetailRow
+                  label="Postal PIN Code"
+                  value={lead.pincode ? `PIN ${lead.pincode}` : "—"}
+                  mono
+                />
+
+                {(lead.map_link || (lead.latitude != null && lead.longitude != null)) && (
+                  <div className="pt-2">
+                    <a
+                      href={
+                        lead.map_link ||
+                        `https://www.google.com/maps?q=${lead.latitude},${lead.longitude}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-500/10 border border-sky-500/25 text-sky-300 hover:bg-sky-500/20 text-xs font-semibold transition-colors"
+                    >
+                      <MapPin size={13} /> Open Location in Google Maps <ExternalLink size={11} />
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Automotive / RTO Custom Fields (if present) */}
+            {lead.custom_fields && Object.keys(lead.custom_fields).length > 0 && (
+              <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 shadow-lg">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#C9A84C] border-b border-white/[0.06] pb-3">
+                  <Layers size={15} /> RTO & Vehicle Specifications
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                  {Object.entries(lead.custom_fields).map(([k, v]) => (
+                    <DetailRow key={k} label={k} value={String(v)} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Payment Records (if permitted) */}
+            {canViewPayments && (
+              <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 shadow-lg">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                  <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#C9A84C]">
+                    <Wallet size={15} /> Customer Payment History
+                  </span>
+                  <Link
+                    href={`/admin/payments/new?leadId=${lead.id}`}
+                    className="text-xs text-[#E8CC7A] hover:underline font-semibold"
+                  >
+                    + Record Payment
+                  </Link>
+                </div>
+
+                {paymentHistory.length === 0 ? (
+                  <p className="text-xs text-white/40 py-2">No payments recorded for this lead yet.</p>
+                ) : (
+                  <div className="divide-y divide-white/[0.04]">
+                    {paymentHistory.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between py-2 text-xs">
+                        <div>
+                          <p className="font-semibold text-white">
+                            ₹{p.amount != null ? p.amount.toLocaleString("en-IN") : "0"}
+                          </p>
+                          <p className="text-[10px] text-white/40">
+                            {p.period} · {p.method || "Payment"} {p.paid_at ? `(${p.paid_at})` : ""}
+                          </p>
+                        </div>
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300">
+                          {p.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Telecaller Schedule & Notes */}
+          <div className="space-y-6">
+            {/* Follow-up & Callback Schedule */}
+            <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 shadow-lg">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#C9A84C] border-b border-white/[0.06] pb-3">
+                <Clock size={15} /> Telecaller Follow-up
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <DetailRow
+                  label="Callback Date"
+                  value={lead.callback_date || <span className="text-white/30">Not scheduled</span>}
+                />
+                <DetailRow
+                  label="Callback Time"
+                  value={lead.callback_time || <span className="text-white/30">—</span>}
+                />
+                <DetailRow
+                  label="Assigned Shift"
+                  value={
+                    lead.shift ? (
+                      <span className="inline-flex items-center gap-1 font-semibold text-[#E8CC7A]">
+                        <ShiftIcon size={13} /> {shiftLabel}
+                      </span>
+                    ) : (
+                      "—"
+                    )
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Internal Notes Editor */}
+            <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 shadow-lg">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#C9A84C] border-b border-white/[0.06] pb-3">
+                <MessageSquare size={15} /> Internal Telecaller Notes
+              </div>
+
+              <LeadNotesEditor id={lead.id} initialNotes={lead.notes ?? ""} />
+            </div>
+          </div>
+        </div>
       </div>
     </AdminShell>
   );

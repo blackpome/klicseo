@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, ClipboardList } from "lucide-react";
+import { ArrowRight, ClipboardList, PhoneCall, Sparkles } from "lucide-react";
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
 import { currentAdmin } from "@/lib/admin-auth";
@@ -14,14 +14,14 @@ export default async function MyListsPage() {
   if (!user) {
     return (
       <AdminShell require="leads.view">
-        <div className="max-w-xl rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center">
-          <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-xl bg-[#C9A84C]/15 text-[#C9A84C]">
-            <ClipboardList size={22} />
+        <div className="max-w-xl mx-auto rounded-2xl border border-white/10 bg-[#071228] p-8 text-center space-y-3">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#C9A84C]/15 text-[#C9A84C]">
+            <ClipboardList size={24} />
           </div>
-          <h1 className="text-xl font-bold mb-2" style={{ fontFamily: "var(--font-playfair)" }}>
-            No admin account
+          <h1 className="text-xl font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>
+            No admin account found
           </h1>
-          <p className="text-sm text-white/45">You must be signed in with an admin account to see your lists.</p>
+          <p className="text-xs text-white/45">You must be signed in with an admin account to access your assigned lists.</p>
         </div>
       </AdminShell>
     );
@@ -38,58 +38,77 @@ export default async function MyListsPage() {
     );
   }
 
+  const staffName = user.employees?.name ?? user.email;
+
   return (
     <AdminShell require="leads.view">
-      <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
+      <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
-            My Lists
+          <h1
+            className="text-2xl md:text-3xl font-bold tracking-tight text-white"
+            style={{ fontFamily: "var(--font-playfair)" }}
+          >
+            My Lead Lists
           </h1>
-          <p className="text-white/45 text-sm">
-            {lists.length} assigned to {user.employees?.name ?? "you"}
+          <p className="text-xs text-white/50 mt-0.5">
+            Campaign worklists assigned to <strong>{staffName}</strong> ({lists.length} lists active)
           </p>
         </div>
-      </div>
 
-      {lists.length === 0 ? (
-        <div className="text-center py-16 text-white/40 text-sm">No lead lists are assigned to you yet.</div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full text-sm">
-            <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
-              <tr>
-                <th className="px-3 py-2 text-left font-semibold">#</th>
-                <th className="px-3 py-2 text-left font-semibold">Name</th>
-                <th className="px-3 py-2 text-left font-semibold">Leads</th>
-                <th className="px-3 py-2 text-left font-semibold">Created By</th>
-                <th className="px-3 py-2 text-center font-semibold">Open</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lists.map((list, index) => (
-                <tr key={list.id} className="border-t border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{index + 1}</td>
-                  <td className="px-3 py-2">
-                    <Link href={`/admin/lists/${list.id}`} className="hover:text-[#C9A84C] hover:underline">
-                      {list.name}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2">{list.lead_count ?? 0}</td>
-                  <td className="px-3 py-2">{list.admin_users?.email || "-"}</td>
-                  <td className="px-3 py-2 text-center">
+        {lists.length === 0 ? (
+          <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-12 text-center space-y-3">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-white/30">
+              <ClipboardList size={24} />
+            </div>
+            <h3 className="text-sm font-semibold text-white">No lists assigned yet</h3>
+            <p className="text-xs text-white/40 max-w-sm mx-auto">
+              Your supervisor or super-admin has not assigned any lead calling lists to your account yet.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {lists.map((list) => {
+              const count = list.lead_count ?? 0;
+
+              return (
+                <div
+                  key={list.id}
+                  className="group rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 hover:border-[#C9A84C]/40 hover:bg-white/[0.01] transition-all shadow-lg flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
                     <Link
                       href={`/admin/lists/${list.id}`}
-                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-white/10 text-white/70 hover:text-white hover:bg-white/15"
+                      className="text-base font-bold text-white group-hover:text-[#E8CC7A] transition-colors block"
                     >
-                      Open <ArrowRight size={12} />
+                      {list.name}
                     </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+
+                    <p className="text-[11px] text-white/40">
+                      Created by {list.admin_users?.email || "Admin"}
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 pt-3 border-t border-white/[0.04]">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-white/40">Leads in List</span>
+                      <span className="font-bold text-white text-sm tabular-nums">
+                        {count} {count === 1 ? "lead" : "leads"}
+                      </span>
+                    </div>
+
+                    <Link
+                      href={`/admin/lists/${list.id}`}
+                      className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#C9A84C] to-[#E8CC7A] text-[#050E21] text-xs font-bold hover:brightness-105 transition-all inline-flex items-center justify-center gap-1.5 shadow-md shadow-[#C9A84C]/15"
+                    >
+                      <PhoneCall size={13} /> Start Calling ({count} Leads)
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </AdminShell>
   );
 }

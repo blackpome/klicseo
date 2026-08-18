@@ -198,7 +198,8 @@ export async function removeLeadFromList(listId: string, leadId: string): Promis
   const { error } = await supabase()
     .from("lead_list_items")
     .delete()
-    .match({ list_id: listId, lead_id: leadId });
+    .eq("list_id", listId)
+    .eq("lead_id", leadId);
 
   if (error) throw error;
 }
@@ -215,26 +216,6 @@ export async function getLeadsInList(listId: string, opts: {
   status?: string | "all";
   search?: string;
 } = {}): Promise<LeadRow[]> {
-  // We need to join lead_list_items with leads and unseal the lead fields
-  let q = supabase()
-    .from("lead_list_items")
-    .select(`
-      lead_id,
-      leads (*)
-    `)
-    .eq("list_id", listId)
-    .order("lead_id", { ascending: false });
-
-  if (opts.limit || opts.offset) {
-    const offset = opts.offset ?? 0;
-    const limit = opts.limit ?? 200;
-    q = q.range(offset, offset + limit - 1);
-  }
-
-  const { data, error } = await q;
-  if (error) throw error;
-
-  // Unseal the lead data
   const ENCRYPTED_LEAD_FIELDS = [
     "phone",
     "car_number",
@@ -244,18 +225,57 @@ export async function getLeadsInList(listId: string, opts: {
     "notes",
   ] as const;
 
-  return (data ?? [])
-    .map((row) => {
-      const joinedLead = Array.isArray(row.leads) ? row.leads[0] : row.leads;
-      return unsealFields(joinedLead as unknown as LeadRow | null, ENCRYPTED_LEAD_FIELDS);
-    })
-    .filter((lead): lead is LeadRow => Boolean(lead));
+  // We need to join lead_list_items with leads and unseal the lead fields
+  let q = supabase()
+    .from("lead_list_items")
+    .select(`
+      lead_id,
+      leads:lead_id (*)
+    `)
+    .eq("list_id", listId);
+
+  if (opts.limit) {
+    q = q.limit(opts.limit);
+  }
+
+  if (opts.offset) {
+    q = q.range(opts.offset, opts.offset + (opts.limit ?? 50) - 1);
+  }
+
+  const { data, error } = await q;
+
+  if (error) throw error;
+
+  // Flatten the joined data and unseal encrypted fields
+  const leads = (data ?? [])
+    .map((item: any) => item.leads)
+    .filter(Boolean)
+    .map((lead: any) => unsealFields(lead, ENCRYPTED_LEAD_FIELDS as unknown as string[]));
+
+  // In-memory filtering if needed
+  let filtered = leads;
+
+  if (opts.status && opts.status !== "all") {
+    filtered = filtered.filter((lead: any) => lead.status === opts.status);
+  }
+
+  if (opts.search) {
+    const s = opts.search.toLowerCase();
+    filtered = filtered.filter((lead: any) =>
+      lead.name?.toLowerCase().includes(s) ||
+      lead.phone?.includes(s) ||
+      lead.car_brand?.toLowerCase().includes(s) ||
+      lead.car_model?.toLowerCase().includes(s)
+    );
+  }
+
+  return filtered as LeadRow[];
 }
 
 /**
- * Update a lead list (name, assigned_admin_user_id).
- * @param listId - The ID of the lead list to update
- * @param updates - Object containing fields to update
+ * Update a lead list (name or assigned employee).
+ * @param listId - The ID of the lead list
+ * @param updates - Partial updates for the list
  */
 export async function updateLeadList(listId: string, updates: Partial<NewLeadList>): Promise<void> {
   const { error } = await supabase()
@@ -271,6 +291,19 @@ export async function updateLeadList(listId: string, updates: Partial<NewLeadLis
  * @param listId - The ID of the lead list to delete
  */
 export async function deleteLeadList(listId: string): Promise<void> {
+  // 1. Delete junction table entries
+  await supabase()
+    .from("lead_list_items")
+    .delete()
+    .eq("list_id", listId);
+
+  // 2. Set foreign references to null
+  await supabase()
+    .from("lead_allocation_schedules")
+    .update({ target_list_id: null })
+    .eq("target_list_id", listId);
+
+  // 3. Delete the lead list
   const { error } = await supabase()
     .from("lead_lists")
     .delete()
