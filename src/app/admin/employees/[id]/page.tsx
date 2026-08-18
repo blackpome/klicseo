@@ -18,6 +18,7 @@ import AdminError from "../../AdminError";
 import EmployeeStatusControl from "../EmployeeStatusControl";
 import DeleteEmployeeButton from "./DeleteEmployeeButton";
 import WhatsAppLink from "@/components/WhatsAppLink";
+import PhoneCell from "@/components/PhoneCell";
 import { getJobBySlug } from "@/lib/jobs";
 import {
   getEmployee,
@@ -144,12 +145,7 @@ export default async function EmployeeDetailPage({
             {emp.name}
           </h1>
           <p className="text-white/50 text-sm mt-1 flex items-center gap-3 flex-wrap">
-            <span className="inline-flex items-center gap-2">
-              <a href={`tel:${emp.phone}`} className="text-[#C9A84C] hover:underline inline-flex items-center gap-1">
-                <Phone size={12} /> {emp.phone}
-              </a>
-              <WhatsAppLink phone={emp.phone} label={`WhatsApp ${emp.name ?? emp.phone}`} />
-            </span>
+            <PhoneCell phone={emp.phone} name={emp.name} compact={true} />
             <span className="text-white/30">·</span>
             <span>{job?.title ?? emp.job_role}</span>
             <span className="text-white/30">·</span>
@@ -178,12 +174,7 @@ export default async function EmployeeDetailPage({
           <Field label="Name" value={fmt(emp.name)} />
           <Field
             label="Phone"
-            value={
-              <span className="inline-flex items-center gap-2">
-                <a href={`tel:${emp.phone}`} className="text-[#C9A84C] hover:underline">{emp.phone}</a>
-                <WhatsAppLink phone={emp.phone} label={`WhatsApp ${emp.name ?? emp.phone}`} />
-              </span>
-            }
+            value={<PhoneCell phone={emp.phone} name={emp.name} compact={true} />}
           />
         </Section>
 

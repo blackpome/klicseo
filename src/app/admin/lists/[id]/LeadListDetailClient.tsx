@@ -8,6 +8,7 @@ import LeadStatusControl from "../../LeadStatusControl";
 import DeleteLeadListButton from "../DeleteLeadListButton";
 import RecycleLeadsModal from "../RecycleLeadsModal";
 import WhatsAppLink from "@/components/WhatsAppLink";
+import PhoneCell from "@/components/PhoneCell";
 import ColumnVisibilityPicker from "@/components/ColumnVisibilityPicker";
 import { useColumnPreferences, type ColumnDefinition } from "@/lib/useColumnPreferences";
 import { LEAD_STATUS_COLOR, LEAD_STATUSES, LEAD_STATUS_LABEL, type LeadStatus } from "@/lib/leads-shared";
@@ -668,16 +669,7 @@ export default function LeadListDetailClient({
 
                   {colPrefs.isVisible("phone") && (
                     <td className="px-3 py-2">
-                      {lead.phone ? (
-                        <span className="inline-flex items-center gap-1.5 font-mono">
-                          <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline">
-                            {lead.phone}
-                          </a>
-                          <WhatsAppLink phone={lead.phone} label={`WhatsApp ${lead.name ?? lead.phone}`} />
-                        </span>
-                      ) : (
-                        "-"
-                      )}
+                      <PhoneCell phone={lead.phone} name={lead.name} compact={true} />
                     </td>
                   )}
 

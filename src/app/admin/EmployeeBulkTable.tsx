@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition, type ChangeEvent } from "react";
 import Link from "next/link";
 import { Users } from "lucide-react";
 import WhatsAppLink from "@/components/WhatsAppLink";
+import PhoneCell from "@/components/PhoneCell";
 import { formatPhone } from "@/lib/phone-shared";
 import { assignEmployeesAction } from "./employees/actions";
 import type { EmployeeRow } from "@/lib/employees-shared";
@@ -218,12 +219,7 @@ export default function EmployeeBulkTable({
                   </Link>
                 </td>
                 <td className="px-3 py-2">
-                  <span className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold">
-                    <a href={`tel:${e.phone}`} className="text-[#C9A84C] hover:underline">
-                      {formatPhone(e.phone)}
-                    </a>
-                    <WhatsAppLink phone={e.phone} label={`WhatsApp ${e.name ?? e.phone ?? ""}`.trim()} />
-                  </span>
+                  <PhoneCell phone={e.phone} name={e.name} compact={true} />
                 </td>
                 <td className="px-3 py-2 text-xs">{e.job_role}</td>
                 <td className="px-3 py-2 text-xs">{e.assigned_admin_user?.name || e.assigned_admin_user?.email || "—"}</td>

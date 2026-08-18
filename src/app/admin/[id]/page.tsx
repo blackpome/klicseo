@@ -28,6 +28,7 @@ import LeadStatusControl from "../LeadStatusControl";
 import LeadNotesEditor from "./LeadNotesEditor";
 import DeleteLeadButton from "./DeleteLeadButton";
 import WhatsAppLink from "@/components/WhatsAppLink";
+import PhoneCell from "@/components/PhoneCell";
 import { formatPhone } from "@/lib/phone-shared";
 import { getLead, assertLeadInScope } from "@/lib/leads";
 import { LEAD_STATUS_COLOR, getLeadSourceInfo } from "@/lib/leads-shared";
@@ -221,15 +222,7 @@ export default async function LeadDetailPage({
 
               <div className="flex items-center gap-3 mt-2 text-xs text-white/50 flex-wrap">
                 {lead.phone && (
-                  <span className="flex items-center gap-2">
-                    <a
-                      href={`tel:${lead.phone}`}
-                      className="font-mono text-[#E8CC7A] hover:underline flex items-center gap-1 font-semibold"
-                    >
-                      <Phone size={12} /> {formatPhone(lead.phone)}
-                    </a>
-                    <WhatsAppLink phone={lead.phone} label="WhatsApp" />
-                  </span>
+                  <PhoneCell phone={lead.phone} name={lead.name} compact={true} />
                 )}
 
                 <span>•</span>

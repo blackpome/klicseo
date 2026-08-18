@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Bell, Clock, Sparkles, Phone, UserPlus, X, ArrowRight, ExternalLink } from "lucide-react";
 import type { CallReminder, ReminderKind } from "@/lib/leads-shared";
-import { formatPhone } from "@/lib/phone-shared";
+import { formatPhone, telLink } from "@/lib/phone-shared";
 
 const KIND_META: Record<
   ReminderKind,
@@ -142,7 +142,7 @@ export default function NotificationBell({
                       <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
                         {it.phone ? (
                           <a
-                            href={`tel:${it.phone}`}
+                            href={telLink(it.phone)}
                             className="inline-flex items-center gap-1 font-mono text-[#C9A84C] hover:underline"
                           >
                             <Phone size={10} /> {formatPhone(it.phone)}

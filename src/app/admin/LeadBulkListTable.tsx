@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import LeadStatusControl from "./LeadStatusControl";
 import WhatsAppLink from "@/components/WhatsAppLink";
+import PhoneCell from "@/components/PhoneCell";
 import ColumnVisibilityPicker from "@/components/ColumnVisibilityPicker";
 import { useColumnPreferences, type ColumnDefinition } from "@/lib/useColumnPreferences";
 import { formatPhone } from "@/lib/phone-shared";
@@ -316,25 +317,15 @@ export default function LeadBulkListTable({
                       <td className="px-4 py-3 min-w-[170px]">
                         {lead.phone ? (
                           <div className="space-y-1">
-                            <div className="font-mono text-xs text-white/90 flex items-center gap-1.5 font-semibold">
-                              <span>{formatPhone(lead.phone)}</span>
-                            </div>
-
-                            <div className="flex items-center gap-2 pt-0.5">
-                              <a
-                                href={`tel:${lead.phone}`}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/5 hover:bg-[#C9A84C]/20 text-[#E8CC7A] text-[10px] font-medium transition-colors border border-white/5"
-                                title="Call customer"
-                              >
-                                <Phone size={10} /> Call
-                              </a>
-
-                              <WhatsAppLink
-                                phone={lead.phone}
-                                label="Chat"
-                              />
-
-                              {lead.map_link && (
+                            <PhoneCell
+                              phone={lead.phone}
+                              name={lead.name}
+                              showCallButton={true}
+                              showCopyButton={true}
+                              showWhatsApp={true}
+                            />
+                            {lead.map_link && (
+                              <div className="pt-0.5">
                                 <a
                                   href={lead.map_link}
                                   target="_blank"
@@ -342,10 +333,10 @@ export default function LeadBulkListTable({
                                   className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/5 hover:bg-sky-500/20 text-sky-400 text-[10px] transition-colors border border-white/5"
                                   title="Open Google Maps Location"
                                 >
-                                  <MapPin size={10} />
+                                  <MapPin size={10} /> Maps
                                 </a>
-                              )}
-                            </div>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className="text-white/30">—</span>
