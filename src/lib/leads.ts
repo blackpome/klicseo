@@ -153,6 +153,7 @@ export async function listServiceCounts(assignedAdminUserId?: string): Promise<A
 }
 
 export interface LeadStatusSummary {
+  [key: string]: number;
   total: number;
   new: number;
   contacted: number;
@@ -198,10 +199,9 @@ export async function listLeadStatusSummary(
     draft: 0,
   };
 
-  for (const r of (data ?? []) as { status: LeadStatus }[]) {
-    if (r.status in summary) {
-      summary[r.status]++;
-    }
+  for (const r of (data ?? []) as { status: string }[]) {
+    const s = r.status || "new";
+    summary[s] = (summary[s] ?? 0) + 1;
     summary.total++;
   }
 

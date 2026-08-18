@@ -11,6 +11,7 @@ import WhatsAppLink from "@/components/WhatsAppLink";
 import ColumnVisibilityPicker from "@/components/ColumnVisibilityPicker";
 import { useColumnPreferences, type ColumnDefinition } from "@/lib/useColumnPreferences";
 import { LEAD_STATUS_COLOR, LEAD_STATUSES, LEAD_STATUS_LABEL, type LeadStatus } from "@/lib/leads-shared";
+import { DEFAULT_LEAD_STATUS_ITEMS, type CustomLeadStatus } from "@/lib/site-settings-shared";
 import type { LeadListRow } from "@/lib/leadLists-shared";
 import {
   addLeadsToListAction,
@@ -50,11 +51,13 @@ export default function LeadListDetailClient({
   initialLeads,
   adminUsers = [],
   isSuperAdmin,
+  leadStatuses,
 }: {
   list: LeadListRow;
   initialLeads: LeadForList[];
   adminUsers?: { id: string; email: string; name: string }[];
   isSuperAdmin: boolean;
+  leadStatuses?: CustomLeadStatus[];
 }) {
   const [leads, setLeads] = useState<LeadForList[]>(initialLeads);
   const [recycleModalOpen, setRecycleModalOpen] = useState(false);
@@ -78,6 +81,28 @@ export default function LeadListDetailClient({
     "klicseo_lead_list_detail_columns_v1",
     LIST_DETAIL_COLUMNS,
   );
+
+  const configuredStatuses = useMemo(() => {
+    return leadStatuses && leadStatuses.length > 0
+      ? leadStatuses
+      : DEFAULT_LEAD_STATUS_ITEMS;
+  }, [leadStatuses]);
+
+  const statusLabelMap = useMemo(() => {
+    const map: Record<string, string> = { ...LEAD_STATUS_LABEL };
+    for (const s of configuredStatuses) {
+      map[s.id] = s.label;
+    }
+    return map;
+  }, [configuredStatuses]);
+
+  const statusColorMap = useMemo(() => {
+    const map: Record<string, string> = { ...LEAD_STATUS_COLOR };
+    for (const s of configuredStatuses) {
+      map[s.id] = s.color;
+    }
+    return map;
+  }, [configuredStatuses]);
 
   // Derive unique services from the leads in this list
   const services = useMemo(() => {
@@ -407,15 +432,15 @@ export default function LeadListDetailClient({
           >
             All Leads <span className={statusFilter === "all" ? "text-[#050E21]/70 font-bold" : "text-white/40"}>({statusCounts.get("all") ?? 0})</span>
           </button>
-          {LEAD_STATUSES.map((s) => {
-            const count = statusCounts.get(s) ?? 0;
+          {configuredStatuses.map((s) => {
+            const count = statusCounts.get(s.id as any) ?? 0;
             if (count === 0) return null;
-            const isSelected = statusFilter === s;
+            const isSelected = statusFilter === s.id;
             return (
               <button
-                key={s}
+                key={s.id}
                 type="button"
-                onClick={() => setStatusFilter(s)}
+                onClick={() => setStatusFilter(s.id as any)}
                 className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
                   isSelected
                     ? "bg-[#C9A84C] text-[#050E21] shadow-sm"
@@ -424,9 +449,9 @@ export default function LeadListDetailClient({
               >
                 <span
                   className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: LEAD_STATUS_COLOR[s] }}
+                  style={{ backgroundColor: s.color }}
                 />
-                <span>{LEAD_STATUS_LABEL[s]}</span>
+                <span>{s.label}</span>
                 <span className={isSelected ? "text-[#050E21]/70 font-bold" : "text-white/40"}>
                   ({count})
                 </span>
@@ -591,7 +616,7 @@ export default function LeadListDetailClient({
                 Showing <strong className="text-white tabular-nums">{filteredLeads.length}</strong> of <strong className="text-white tabular-nums">{leads.length}</strong> total leads in this list
                 {statusFilter !== "all" && (
                   <span className="ml-1 text-[#E8CC7A]">
-                    (Status: <strong>{LEAD_STATUS_LABEL[statusFilter]}</strong>)
+                    (Status: <strong>{statusLabelMap[statusFilter] || statusFilter}</strong>)
                   </span>
                 )}
               </span>
@@ -693,7 +718,12 @@ export default function LeadListDetailClient({
 
                   {colPrefs.isVisible("status") && (
                     <td className="px-3 py-2">
-                      <LeadStatusControl id={lead.id} status={lead.status} color={LEAD_STATUS_COLOR[lead.status]} />
+                      <LeadStatusControl
+                        id={lead.id}
+                        status={lead.status}
+                        color={statusColorMap[lead.status] || "#C9A84C"}
+                        customStatuses={configuredStatuses}
+                      />
                     </td>
                   )}
 

@@ -3,6 +3,7 @@ import AdminShell from "../../AdminShell";
 import AdminError from "../../AdminError";
 import { getLeadList, getLeadsInList } from "@/lib/leadLists";
 import type { LeadListRow } from "@/lib/leadLists-shared";
+import { getSiteSettings } from "@/lib/site-settings";
 import LeadListDetailClient from "./LeadListDetailClient";
 import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 import { listAssignableAdminUsers } from "@/lib/admin-users";
@@ -19,9 +20,15 @@ export default async function LeadListPage({
   let leads: Awaited<ReturnType<typeof getLeadsInList>> = [];
   let adminUsers: { id: string; email: string; name: string }[] = [];
   let notFoundError = false;
+  let leadStatuses = undefined;
 
   try {
-    list = await getLeadList(id);
+    const [fetchedList, siteSettings] = await Promise.all([
+      getLeadList(id),
+      getSiteSettings().catch(() => null),
+    ]);
+    list = fetchedList;
+    leadStatuses = siteSettings?.leadStatuses;
     if (!list) {
       // Non-super-admins don't have access to /admin/lists; send them to my-lists.
       if (me && me.role !== "super_admin") redirect("/admin/my-lists");
@@ -62,6 +69,7 @@ export default async function LeadListPage({
         initialLeads={leads}
         adminUsers={adminUsers}
         isSuperAdmin={me?.role === "super_admin"}
+        leadStatuses={leadStatuses}
       />
     </AdminShell>
   );

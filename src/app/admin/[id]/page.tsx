@@ -31,6 +31,8 @@ import WhatsAppLink from "@/components/WhatsAppLink";
 import { formatPhone } from "@/lib/phone-shared";
 import { getLead, assertLeadInScope } from "@/lib/leads";
 import { LEAD_STATUS_COLOR, getLeadSourceInfo } from "@/lib/leads-shared";
+import { getSiteSettings } from "@/lib/site-settings";
+import { DEFAULT_LEAD_STATUS_ITEMS, type CustomLeadStatus } from "@/lib/site-settings-shared";
 import { getCustomerPayments } from "@/lib/payments";
 import { inr } from "@/lib/pricing";
 import { currentAdmin, resolveScope } from "@/lib/admin-auth";
@@ -149,6 +151,13 @@ export default async function LeadDetailPage({
     );
   }
 
+  const siteSettings = await getSiteSettings().catch(() => null);
+  const configuredStatuses: CustomLeadStatus[] =
+    siteSettings?.leadStatuses && siteSettings.leadStatuses.length > 0
+      ? siteSettings.leadStatuses
+      : DEFAULT_LEAD_STATUS_ITEMS;
+  const statusColorMap = Object.fromEntries(configuredStatuses.map((s) => [s.id, s.color]));
+
   const canViewPayments = me != null && me.permissions.includes("payments.view" as Permission);
   const paymentHistory = canViewPayments ? await getCustomerPayments(id).catch(() => []) : [];
 
@@ -173,7 +182,12 @@ export default async function LeadDetailPage({
           </Link>
 
           <div className="flex items-center gap-2.5">
-            <LeadStatusControl id={lead.id} status={lead.status} color={STATUS_COLOR[lead.status]} />
+            <LeadStatusControl
+              id={lead.id}
+              status={lead.status}
+              color={statusColorMap[lead.status] || "#C9A84C"}
+              customStatuses={configuredStatuses}
+            />
 
             <Link
               href={`/admin/${lead.id}/edit`}

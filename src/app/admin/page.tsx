@@ -26,6 +26,8 @@ import {
   LEAD_STATUS_LABEL,
   type LeadStatus,
 } from "@/lib/leads-shared";
+import { getSiteSettings } from "@/lib/site-settings";
+import { DEFAULT_LEAD_STATUS_ITEMS, type CustomLeadStatus } from "@/lib/site-settings-shared";
 import { listLeadLists } from "@/lib/leadLists";
 import type { LeadListRow } from "@/lib/leadLists-shared";
 import { currentAdmin } from "@/lib/admin-auth";
@@ -34,15 +36,8 @@ import ExportToolbar from "@/components/ExportToolbar";
 import Pagination from "@/components/Pagination";
 import LeadBulkListTable from "./LeadBulkListTable";
 
-const STATUS_TABS: { id: LeadStatus | "all"; label: string }[] = [
-  { id: "all", label: "All Leads" },
-  ...LEAD_STATUSES.map((s) => ({ id: s, label: LEAD_STATUS_LABEL[s] })),
-];
-
-const STATUS_COLOR = LEAD_STATUS_COLOR;
-
 function buildLeadsHref(args: {
-  status?: LeadStatus | "all";
+  status?: string;
   q?: string;
   area?: string;
   service?: string;
@@ -78,9 +73,24 @@ export default async function AdminLeadsPage({
     if (me.role === "super_admin" || me.role === "admin") redirect("/admin/access");
   }
 
+  const siteSettings = await getSiteSettings();
+  const configuredStatuses: CustomLeadStatus[] =
+    siteSettings.leadStatuses && siteSettings.leadStatuses.length > 0
+      ? siteSettings.leadStatuses
+      : DEFAULT_LEAD_STATUS_ITEMS;
+
+  const statusTabs: { id: string; label: string }[] = [
+    { id: "all", label: "All Leads" },
+    ...configuredStatuses.map((s) => ({ id: s.id, label: s.label })),
+  ];
+
+  const statusColorMap: Record<string, string> = Object.fromEntries(
+    configuredStatuses.map((s) => [s.id, s.color]),
+  );
+
   const canManage = Boolean(me?.permissions.includes("leads.manage"));
   const { status, q, area, service, page: pageParam, pageSize: pageSizeParam } = await searchParams;
-  const filter = (STATUS_TABS.find((t) => t.id === status)?.id ?? "all") as LeadStatus | "all";
+  const filter = statusTabs.find((t) => t.id === status)?.id ?? "all";
   const areaFilter = area && area !== "all" ? area : undefined;
   const serviceFilter = service && service !== "all" ? service : undefined;
 
@@ -105,7 +115,7 @@ export default async function AdminLeadsPage({
     const canManageLists = Boolean(me?.permissions.includes("leads.manage"));
     [paginated, statusSummary, areaCounts, leadLists, serviceCounts] = await Promise.all([
       listPaginatedLeads({
-        status: filter,
+        status: filter as any,
         search: q,
         area: areaFilter,
         service: serviceFilter,
@@ -284,7 +294,7 @@ export default async function AdminLeadsPage({
         <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-4 space-y-4 shadow-lg">
           {/* Status Tabs Segmented Control */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {STATUS_TABS.map((t) => {
+            {statusTabs.map((t) => {
               const active = filter === t.id;
               const count =
                 t.id === "all"
@@ -429,9 +439,10 @@ export default async function AdminLeadsPage({
             <LeadBulkListTable
               leads={leads}
               lists={leadLists}
-              statusColor={STATUS_COLOR}
+              statusColor={statusColorMap}
               canManageLists={Boolean(me?.permissions.includes("leads.manage"))}
               leadListNames={leadListNames}
+              customStatuses={configuredStatuses}
             />
 
             {/* Pagination Controls */}

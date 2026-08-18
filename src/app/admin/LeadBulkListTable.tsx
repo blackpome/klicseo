@@ -25,6 +25,7 @@ import { useColumnPreferences, type ColumnDefinition } from "@/lib/useColumnPref
 import { formatPhone } from "@/lib/phone-shared";
 import { addLeadsToListAction } from "./lists/actions";
 import { getLeadSourceInfo, type LeadStatus } from "@/lib/leads-shared";
+import type { CustomLeadStatus } from "@/lib/site-settings-shared";
 import type { LeadListRow } from "@/lib/leadLists-shared";
 
 export type LeadForTable = {
@@ -74,12 +75,14 @@ export default function LeadBulkListTable({
   statusColor,
   canManageLists,
   leadListNames,
+  customStatuses,
 }: {
   leads: LeadForTable[];
   lists: LeadListRow[];
-  statusColor: Record<LeadStatus, string>;
+  statusColor: Record<string, string>;
   canManageLists: boolean;
   leadListNames: Map<string, string[]>;
+  customStatuses?: CustomLeadStatus[];
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [targetListId, setTargetListId] = useState<string>("");
@@ -457,6 +460,7 @@ export default function LeadBulkListTable({
                           id={lead.id}
                           status={lead.status}
                           color={statusColor[lead.status] || "#C9A84C"}
+                          customStatuses={customStatuses}
                         />
                       </td>
                     )}
