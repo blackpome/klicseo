@@ -186,8 +186,8 @@ export default function LeadBulkListTable({
                 <th className="px-3 py-3.5 w-12">#</th>
                 <th className="px-4 py-3.5">Customer & Vehicle</th>
                 <th className="px-4 py-3.5">Contact & Actions</th>
+                <th className="px-4 py-3.5">Location / Locality</th>
                 <th className="px-4 py-3.5">Service & Price</th>
-                <th className="px-4 py-3.5">Locality & Source</th>
                 <th className="px-4 py-3.5">List / Tags</th>
                 <th className="px-4 py-3.5 text-right">Status</th>
               </tr>
@@ -312,23 +312,7 @@ export default function LeadBulkListTable({
                       )}
                     </td>
 
-                    {/* Service & Price */}
-                    <td className="px-4 py-3 min-w-[160px]">
-                      <div className="font-medium text-white/90 text-xs">
-                        {lead.service || <span className="text-white/30">Unspecified Service</span>}
-                      </div>
-
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-white/40">
-                        {lead.service_option && <span>{lead.service_option}</span>}
-                        {lead.price_total != null && (
-                          <span className="font-semibold text-[#E8CC7A]">
-                            ₹{lead.price_total.toLocaleString("en-IN")}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Locality & Source Badge */}
+                    {/* Locality & Location */}
                     <td className="px-4 py-3 min-w-[150px]">
                       {lead.area ? (
                         <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-[10px] font-medium">
@@ -371,6 +355,22 @@ export default function LeadBulkListTable({
                             <div className="w-2 h-2 -mt-1 rotate-45 bg-[#050E21] border-r border-b border-white/20" />
                           </div>
                         </div>
+                      </div>
+                    </td>
+
+                    {/* Service & Price */}
+                    <td className="px-4 py-3 min-w-[160px]">
+                      <div className="font-medium text-white/90 text-xs">
+                        {lead.service || <span className="text-white/30">Unspecified Service</span>}
+                      </div>
+
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-white/40">
+                        {lead.service_option && <span>{lead.service_option}</span>}
+                        {lead.price_total != null && (
+                          <span className="font-semibold text-[#E8CC7A]">
+                            ₹{lead.price_total.toLocaleString("en-IN")}
+                          </span>
+                        )}
                       </div>
                     </td>
 

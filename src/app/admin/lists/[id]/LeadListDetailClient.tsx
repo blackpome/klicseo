@@ -3,7 +3,7 @@
 import { useState, useTransition, useMemo } from "react";
 import { useRef, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Edit, Plus, Trash2, UploadCloud, RotateCcw, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Check, Edit, Plus, Trash2, UploadCloud, RotateCcw, CheckCircle2, MapPin } from "lucide-react";
 import LeadStatusControl from "../../LeadStatusControl";
 import DeleteLeadListButton from "../DeleteLeadListButton";
 import RecycleLeadsModal from "../RecycleLeadsModal";
@@ -27,6 +27,9 @@ type LeadForList = {
   car_brand: string | null;
   car_model: string | null;
   car_number: string | null;
+  area?: string | null;
+  pincode?: string | null;
+  address?: string | null;
   status: LeadStatus;
 };
 
@@ -592,6 +595,7 @@ export default function LeadListDetailClient({
                 <th className="px-3 py-2 text-left font-semibold">#</th>
                 <th className="px-3 py-2 text-left font-semibold">Name</th>
                 <th className="px-3 py-2 text-left font-semibold">Phone</th>
+                <th className="px-3 py-2 text-left font-semibold">Location / Locality</th>
                 <th className="px-3 py-2 text-left font-semibold">Service</th>
                 <th className="px-3 py-2 text-left font-semibold">Vehicle</th>
                 <th className="px-3 py-2 text-left font-semibold">Status</th>
@@ -603,13 +607,13 @@ export default function LeadListDetailClient({
                 <tr key={lead.id} className="border-t border-white/5 hover:bg-white/[0.02]">
                   <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{index + 1}</td>
                   <td className="px-3 py-2">
-                    <Link href={`/admin/${lead.id}`} className="hover:text-[#C9A84C] hover:underline">
+                    <Link href={`/admin/${lead.id}`} className="hover:text-[#C9A84C] hover:underline font-medium text-white">
                       {lead.name ?? "(unnamed)"}
                     </Link>
                   </td>
                   <td className="px-3 py-2">
                     {lead.phone ? (
-                      <span className="inline-flex items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1.5 font-mono">
                         <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline">
                           {lead.phone}
                         </a>
@@ -617,6 +621,18 @@ export default function LeadListDetailClient({
                       </span>
                     ) : (
                       "-"
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {lead.area ? (
+                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-xs font-medium">
+                        <MapPin size={11} className="shrink-0" />
+                        <span>{lead.area}</span>
+                      </div>
+                    ) : lead.pincode ? (
+                      <span className="font-mono text-xs text-white/60">PIN {lead.pincode}</span>
+                    ) : (
+                      <span className="text-white/30 text-xs">—</span>
                     )}
                   </td>
                   <td className="px-3 py-2">
