@@ -18,12 +18,14 @@ import {
   MESSAGE_TEMPLATE_DEFAULTS,
   MESSAGE_TEMPLATE_DEFS,
   FOOTER_LOCATION_DEFAULTS,
+  DEFAULT_LEAD_STATUS_ITEMS,
   isMessageTemplateKey,
   isMediaKey,
   isSocialKey,
   isServiceRadiusKey,
   type BookingConfig,
   type CustomField,
+  type CustomLeadStatus,
   type Media,
   type MediaKey,
   type ServiceRadius,
@@ -51,6 +53,7 @@ export const SITE_DEFAULTS: SiteSettings = {
   serviceRadius: SERVICE_RADIUS_DEFAULTS,
   messageTemplates: MESSAGE_TEMPLATE_DEFAULTS,
   footerLocation: FOOTER_LOCATION_DEFAULTS,
+  leadStatuses: DEFAULT_LEAD_STATUS_ITEMS,
   catalog: null,
 };
 
@@ -66,7 +69,29 @@ const KEYS = {
   serviceRadius: "service_radius",
   messageTemplates: "message_templates",
   footerLocation: "footer_location",
+  leadStatuses: "lead_statuses",
 } as const;
+
+function parseLeadStatuses(raw: string): CustomLeadStatus[] {
+  try {
+    const list = JSON.parse(raw);
+    if (Array.isArray(list) && list.length > 0) {
+      return list
+        .map((item: any) => ({
+          id: String(item.id || "").trim(),
+          label: String(item.label || "").trim(),
+          color: String(item.color || "#C9A84C").trim(),
+          description: item.description ? String(item.description).trim() : undefined,
+          isSystem: Boolean(item.isSystem),
+          enabled: item.enabled !== false,
+        }))
+        .filter((item: CustomLeadStatus) => Boolean(item.id && item.label));
+    }
+  } catch {
+    // keep defaults
+  }
+  return DEFAULT_LEAD_STATUS_ITEMS;
+}
 
 function parseFooterLocation(raw: string): FooterLocation {
   try {
@@ -262,6 +287,8 @@ export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
         out.messageTemplates = parseMessageTemplates(row.value);
       } else if (row.key === KEYS.footerLocation && row.value) {
         out.footerLocation = parseFooterLocation(row.value);
+      } else if (row.key === KEYS.leadStatuses && row.value) {
+        out.leadStatuses = parseLeadStatuses(row.value);
       }
     }
   } catch {
@@ -270,6 +297,17 @@ export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
   out.catalog = await catalogPromise;
   return out;
 });
+
+// Save custom lead statuses configured by admin
+export async function setLeadStatusSettings(statuses: CustomLeadStatus[]): Promise<void> {
+  const row = {
+    key: KEYS.leadStatuses,
+    value: JSON.stringify(statuses),
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase().from("app_settings").upsert([row], { onConflict: "key" });
+  if (error) throw error;
+}
 
 // Save the text settings + social links (media is managed via upload/reset).
 export async function setSiteSettings(

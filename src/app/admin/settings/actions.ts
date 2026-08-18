@@ -116,3 +116,25 @@ export async function resetMediaAction(formData: FormData) {
   revalidatePath("/", "layout");
   revalidatePath("/admin/settings");
 }
+
+export async function saveLeadStatusSettingsAction(
+  statuses: { id: string; label: string; color: string; description?: string; isSystem?: boolean; enabled?: boolean }[],
+): Promise<{ ok?: boolean; error?: string }> {
+  try {
+    await requireManager();
+    const { setLeadStatusSettings } = await import("@/lib/site-settings");
+    await setLeadStatusSettings(statuses);
+    await logAudit("settings.lead_statuses", {
+      entity: "settings",
+      entityId: "lead_statuses",
+      summary: `Updated CRM lead statuses (${statuses.length} items configured)`,
+    });
+    revalidatePath("/admin");
+    revalidatePath("/admin/settings");
+    revalidatePath("/admin/lists");
+    revalidatePath("/admin/my-lists");
+    return { ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to save lead statuses." };
+  }
+}

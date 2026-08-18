@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import LeadStatusControl from "./LeadStatusControl";
 import WhatsAppLink from "@/components/WhatsAppLink";
+import ColumnVisibilityPicker from "@/components/ColumnVisibilityPicker";
+import { useColumnPreferences, type ColumnDefinition } from "@/lib/useColumnPreferences";
 import { formatPhone } from "@/lib/phone-shared";
 import { addLeadsToListAction } from "./lists/actions";
 import { getLeadSourceInfo, type LeadStatus } from "@/lib/leads-shared";
@@ -55,6 +57,17 @@ export type LeadForTable = {
   status: LeadStatus;
 };
 
+const MASTER_LEAD_COLUMNS: ColumnDefinition[] = [
+  { key: "customer", label: "Customer & Vehicle", required: true },
+  { key: "contact", label: "Contact & Actions", defaultVisible: true },
+  { key: "location", label: "Location / Locality", defaultVisible: true },
+  { key: "service", label: "Service & Price", defaultVisible: true },
+  { key: "lists", label: "List / Tags", defaultVisible: true },
+  { key: "status", label: "Lead Status", defaultVisible: true },
+  { key: "date", label: "Date / Time", defaultVisible: false },
+  { key: "notes", label: "Internal Notes", defaultVisible: false },
+];
+
 export default function LeadBulkListTable({
   leads,
   lists,
@@ -73,6 +86,11 @@ export default function LeadBulkListTable({
   const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const colPrefs = useColumnPreferences(
+    "klicseo_master_leads_columns_v1",
+    MASTER_LEAD_COLUMNS,
+  );
 
   const allSelected = useMemo(
     () => leads.length > 0 && selected.size === leads.length,
@@ -166,6 +184,22 @@ export default function LeadBulkListTable({
         </div>
       )}
 
+      {/* Toolbar with Table Controls & Column Visibility Picker */}
+      <div className="flex items-center justify-between gap-3 px-1">
+        <div className="text-xs text-white/50">
+          Showing <span className="text-white font-semibold tabular-nums">{leads.length}</span> leads
+        </div>
+        <ColumnVisibilityPicker
+          columns={colPrefs.columns}
+          isVisible={colPrefs.isVisible}
+          toggleColumn={colPrefs.toggleColumn}
+          showAll={colPrefs.showAll}
+          resetToDefault={colPrefs.resetToDefault}
+          visibleCount={colPrefs.visibleCount}
+          totalCount={colPrefs.totalCount}
+        />
+      </div>
+
       {/* Main Table Container */}
       <div className="rounded-2xl border border-white/[0.08] bg-[#071228] overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
@@ -185,11 +219,13 @@ export default function LeadBulkListTable({
                 )}
                 <th className="px-3 py-3.5 w-12">#</th>
                 <th className="px-4 py-3.5">Customer & Vehicle</th>
-                <th className="px-4 py-3.5">Contact & Actions</th>
-                <th className="px-4 py-3.5">Location / Locality</th>
-                <th className="px-4 py-3.5">Service & Price</th>
-                <th className="px-4 py-3.5">List / Tags</th>
-                <th className="px-4 py-3.5 text-right">Status</th>
+                {colPrefs.isVisible("contact") && <th className="px-4 py-3.5">Contact & Actions</th>}
+                {colPrefs.isVisible("location") && <th className="px-4 py-3.5">Location / Locality</th>}
+                {colPrefs.isVisible("service") && <th className="px-4 py-3.5">Service & Price</th>}
+                {colPrefs.isVisible("lists") && <th className="px-4 py-3.5">List / Tags</th>}
+                {colPrefs.isVisible("date") && <th className="px-4 py-3.5">Date</th>}
+                {colPrefs.isVisible("notes") && <th className="px-4 py-3.5">Notes</th>}
+                {colPrefs.isVisible("status") && <th className="px-4 py-3.5 text-right">Status</th>}
               </tr>
             </thead>
 
@@ -273,133 +309,157 @@ export default function LeadBulkListTable({
                     </td>
 
                     {/* Contact & Inline Actions */}
-                    <td className="px-4 py-3 min-w-[170px]">
-                      {lead.phone ? (
-                        <div className="space-y-1">
-                          <div className="font-mono text-xs text-white/90 flex items-center gap-1.5 font-semibold">
-                            <span>{formatPhone(lead.phone)}</span>
-                          </div>
+                    {colPrefs.isVisible("contact") && (
+                      <td className="px-4 py-3 min-w-[170px]">
+                        {lead.phone ? (
+                          <div className="space-y-1">
+                            <div className="font-mono text-xs text-white/90 flex items-center gap-1.5 font-semibold">
+                              <span>{formatPhone(lead.phone)}</span>
+                            </div>
 
-                          <div className="flex items-center gap-2 pt-0.5">
-                            <a
-                              href={`tel:${lead.phone}`}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/5 hover:bg-[#C9A84C]/20 text-[#E8CC7A] text-[10px] font-medium transition-colors border border-white/5"
-                              title="Call customer"
-                            >
-                              <Phone size={10} /> Call
-                            </a>
-
-                            <WhatsAppLink
-                              phone={lead.phone}
-                              label="Chat"
-                            />
-
-                            {lead.map_link && (
+                            <div className="flex items-center gap-2 pt-0.5">
                               <a
-                                href={lead.map_link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/5 hover:bg-sky-500/20 text-sky-400 text-[10px] transition-colors border border-white/5"
-                                title="Open Google Maps Location"
+                                href={`tel:${lead.phone}`}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/5 hover:bg-[#C9A84C]/20 text-[#E8CC7A] text-[10px] font-medium transition-colors border border-white/5"
+                                title="Call customer"
                               >
-                                <MapPin size={10} />
+                                <Phone size={10} /> Call
                               </a>
-                            )}
+
+                              <WhatsAppLink
+                                phone={lead.phone}
+                                label="Chat"
+                              />
+
+                              {lead.map_link && (
+                                <a
+                                  href={lead.map_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/5 hover:bg-sky-500/20 text-sky-400 text-[10px] transition-colors border border-white/5"
+                                  title="Open Google Maps Location"
+                                >
+                                  <MapPin size={10} />
+                                </a>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <span className="text-white/30">—</span>
-                      )}
-                    </td>
+                        ) : (
+                          <span className="text-white/30">—</span>
+                        )}
+                      </td>
+                    )}
 
                     {/* Locality & Location */}
-                    <td className="px-4 py-3 min-w-[150px]">
-                      {lead.area ? (
-                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-[10px] font-medium">
-                          <MapPin size={10} /> {lead.area}
-                        </div>
-                      ) : lead.pincode ? (
-                        <span className="font-mono text-xs text-white/60">PIN {lead.pincode}</span>
-                      ) : (
-                        <span className="text-white/30 text-[11px]">Chennai</span>
-                      )}
+                    {colPrefs.isVisible("location") && (
+                      <td className="px-4 py-3 min-w-[150px]">
+                        {lead.area ? (
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-[10px] font-medium">
+                            <MapPin size={10} /> {lead.area}
+                          </div>
+                        ) : lead.pincode ? (
+                          <span className="font-mono text-xs text-white/60">PIN {lead.pincode}</span>
+                        ) : (
+                          <span className="text-white/30 text-[11px]">Chennai</span>
+                        )}
 
-                      <div className="flex items-center gap-1.5 text-[10px] text-white/40 mt-1 flex-wrap">
-                        <span>{dateStr}</span>
-                        <span>•</span>
+                        <div className="flex items-center gap-1.5 text-[10px] text-white/40 mt-1 flex-wrap">
+                          <span>{dateStr}</span>
+                          <span>•</span>
 
-                        {/* Interactive Source Tooltip Badge */}
-                        <div className="relative group/tip inline-flex items-center">
-                          <span
-                            className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded border text-[10px] font-semibold cursor-help transition-all hover:brightness-125 ${sourceInfo.badgeBg} ${sourceInfo.textColor}`}
-                          >
-                            {sourceInfo.iconType === "upload" && <FileSpreadsheet size={10} />}
-                            {sourceInfo.iconType === "globe" && <Globe size={10} />}
-                            {sourceInfo.iconType === "user" && <User size={10} />}
-                            <span>{sourceInfo.shortLabel}</span>
-                          </span>
+                          {/* Interactive Source Tooltip Badge */}
+                          <div className="relative group/tip inline-flex items-center">
+                            <span
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded border text-[10px] font-semibold cursor-help transition-all hover:brightness-125 ${sourceInfo.badgeBg} ${sourceInfo.textColor}`}
+                            >
+                              {sourceInfo.iconType === "upload" && <FileSpreadsheet size={10} />}
+                              {sourceInfo.iconType === "globe" && <Globe size={10} />}
+                              {sourceInfo.iconType === "user" && <User size={10} />}
+                              <span>{sourceInfo.shortLabel}</span>
+                            </span>
 
-                          {/* Floating Astryx Tooltip Box */}
-                          <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tip:flex flex-col items-center z-50 whitespace-nowrap drop-shadow-2xl">
-                            <div className="bg-[#050E21] border border-white/20 text-white text-[11px] px-3 py-2 rounded-xl shadow-2xl space-y-0.5 text-left min-w-[190px]">
-                              <div className="font-bold text-[#E8CC7A] flex items-center gap-1.5">
-                                {sourceInfo.iconType === "upload" && <FileSpreadsheet size={12} />}
-                                {sourceInfo.iconType === "globe" && <Globe size={12} />}
-                                {sourceInfo.iconType === "user" && <User size={12} />}
-                                <span>{sourceInfo.label}</span>
+                            {/* Floating Astryx Tooltip Box */}
+                            <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tip:flex flex-col items-center z-50 whitespace-nowrap drop-shadow-2xl">
+                              <div className="bg-[#050E21] border border-white/20 text-white text-[11px] px-3 py-2 rounded-xl shadow-2xl space-y-0.5 text-left min-w-[190px]">
+                                <div className="font-bold text-[#E8CC7A] flex items-center gap-1.5">
+                                  {sourceInfo.iconType === "upload" && <FileSpreadsheet size={12} />}
+                                  {sourceInfo.iconType === "globe" && <Globe size={12} />}
+                                  {sourceInfo.iconType === "user" && <User size={12} />}
+                                  <span>{sourceInfo.label}</span>
+                                </div>
+                                <div className="text-[10px] text-white/70">
+                                  {sourceInfo.description}
+                                </div>
                               </div>
-                              <div className="text-[10px] text-white/70">
-                                {sourceInfo.description}
-                              </div>
+                              <div className="w-2 h-2 -mt-1 rotate-45 bg-[#050E21] border-r border-b border-white/20" />
                             </div>
-                            <div className="w-2 h-2 -mt-1 rotate-45 bg-[#050E21] border-r border-b border-white/20" />
                           </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
+                    )}
 
                     {/* Service & Price */}
-                    <td className="px-4 py-3 min-w-[160px]">
-                      <div className="font-medium text-white/90 text-xs">
-                        {lead.service || <span className="text-white/30">Unspecified Service</span>}
-                      </div>
+                    {colPrefs.isVisible("service") && (
+                      <td className="px-4 py-3 min-w-[160px]">
+                        <div className="font-medium text-white/90 text-xs">
+                          {lead.service || <span className="text-white/30">Unspecified Service</span>}
+                        </div>
 
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-white/40">
-                        {lead.service_option && <span>{lead.service_option}</span>}
-                        {lead.price_total != null && (
-                          <span className="font-semibold text-[#E8CC7A]">
-                            ₹{lead.price_total.toLocaleString("en-IN")}
-                          </span>
-                        )}
-                      </div>
-                    </td>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-white/40">
+                          {lead.service_option && <span>{lead.service_option}</span>}
+                          {lead.price_total != null && (
+                            <span className="font-semibold text-[#E8CC7A]">
+                              ₹{lead.price_total.toLocaleString("en-IN")}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )}
 
                     {/* Lead List Tags */}
-                    <td className="px-4 py-3 min-w-[130px]">
-                      {leadListNames.has(lead.id) ? (
-                        <div className="flex flex-wrap gap-1">
-                          {leadListNames.get(lead.id)!.map((name) => (
-                            <span
-                              key={name}
-                              className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[#C9A84C]/15 text-[#E8CC7A] border border-[#C9A84C]/25 whitespace-nowrap"
-                            >
-                              {name}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-white/20 text-[10px]">—</span>
-                      )}
-                    </td>
+                    {colPrefs.isVisible("lists") && (
+                      <td className="px-4 py-3 min-w-[130px]">
+                        {leadListNames.has(lead.id) ? (
+                          <div className="flex flex-wrap gap-1">
+                            {leadListNames.get(lead.id)!.map((name) => (
+                              <span
+                                key={name}
+                                className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[#C9A84C]/15 text-[#E8CC7A] border border-[#C9A84C]/25 whitespace-nowrap"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-white/20 text-[10px]">—</span>
+                        )}
+                      </td>
+                    )}
+
+                    {/* Submitted Date (Optional column) */}
+                    {colPrefs.isVisible("date") && (
+                      <td className="px-4 py-3 text-white/50 text-[11px] tabular-nums whitespace-nowrap">
+                        {dateStr}
+                      </td>
+                    )}
+
+                    {/* Notes (Optional column) */}
+                    {colPrefs.isVisible("notes") && (
+                      <td className="px-4 py-3 max-w-[180px] text-white/70 text-xs truncate" title={lead.notes || ""}>
+                        {lead.notes || <span className="text-white/20">—</span>}
+                      </td>
+                    )}
 
                     {/* Status Dropdown */}
-                    <td className="px-4 py-3 text-right">
-                      <LeadStatusControl
-                        id={lead.id}
-                        status={lead.status}
-                        color={statusColor[lead.status] || "#C9A84C"}
-                      />
-                    </td>
+                    {colPrefs.isVisible("status") && (
+                      <td className="px-4 py-3 text-right">
+                        <LeadStatusControl
+                          id={lead.id}
+                          status={lead.status}
+                          color={statusColor[lead.status] || "#C9A84C"}
+                        />
+                      </td>
+                    )}
                   </tr>
                 );
               })}

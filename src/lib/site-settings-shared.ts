@@ -363,6 +363,25 @@ export interface FooterLocation {
 }
 export const FOOTER_LOCATION_DEFAULTS: FooterLocation = { text: "", enabled: true };
 
+export interface CustomLeadStatus {
+  id: string;
+  label: string;
+  color: string;
+  description?: string;
+  isSystem?: boolean;
+  enabled?: boolean;
+}
+
+export const DEFAULT_LEAD_STATUS_ITEMS: CustomLeadStatus[] = [
+  { id: "draft", label: "Draft", color: "#8B5CF6", description: "Incomplete web wizard capture", isSystem: true, enabled: true },
+  { id: "new", label: "New", color: "#3B82F6", description: "Uncalled new inbound or uploaded lead", isSystem: true, enabled: true },
+  { id: "contacted", label: "Contacted", color: "#C9A84C", description: "Connected and call in progress", isSystem: true, enabled: true },
+  { id: "follow_up", label: "Follow up", color: "#06B6D4", description: "Callback scheduled", isSystem: true, enabled: true },
+  { id: "call_not_responded", label: "Call not responded", color: "#F97316", description: "Ringing / Busy / No response", isSystem: true, enabled: true },
+  { id: "booked", label: "Booked", color: "#10B981", description: "Confirmed customer booking", isSystem: true, enabled: true },
+  { id: "cancelled", label: "Cancelled", color: "#EF4444", description: "Not interested / Lost lead", isSystem: true, enabled: true },
+];
+
 export interface SiteSettings {
   startPrice: number;
   startPriceSuffix: string;
@@ -375,6 +394,7 @@ export interface SiteSettings {
   serviceRadius: ServiceRadius;
   messageTemplates: MessageTemplates;
   footerLocation: FooterLocation;
+  leadStatuses?: CustomLeadStatus[];
   /** Dynamic service catalog (categories + options + price lines). Null until
    *  loaded — consumers must fall back to legacy hardcoded data. */
   catalog: ServiceCatalog | null;
@@ -393,6 +413,7 @@ export const SITE_SETTINGS_FALLBACK: SiteSettings = {
   serviceRadius: SERVICE_RADIUS_DEFAULTS,
   messageTemplates: MESSAGE_TEMPLATE_DEFAULTS,
   footerLocation: FOOTER_LOCATION_DEFAULTS,
+  leadStatuses: DEFAULT_LEAD_STATUS_ITEMS,
   catalog: null,
 };
 

@@ -8,6 +8,8 @@ import LeadStatusControl from "../../LeadStatusControl";
 import DeleteLeadListButton from "../DeleteLeadListButton";
 import RecycleLeadsModal from "../RecycleLeadsModal";
 import WhatsAppLink from "@/components/WhatsAppLink";
+import ColumnVisibilityPicker from "@/components/ColumnVisibilityPicker";
+import { useColumnPreferences, type ColumnDefinition } from "@/lib/useColumnPreferences";
 import { LEAD_STATUS_COLOR, LEAD_STATUSES, LEAD_STATUS_LABEL, type LeadStatus } from "@/lib/leads-shared";
 import type { LeadListRow } from "@/lib/leadLists-shared";
 import {
@@ -32,6 +34,16 @@ type LeadForList = {
   address?: string | null;
   status: LeadStatus;
 };
+
+const LIST_DETAIL_COLUMNS: ColumnDefinition[] = [
+  { key: "name", label: "Customer Name", required: true },
+  { key: "phone", label: "Phone & WhatsApp", defaultVisible: true },
+  { key: "location", label: "Location / Locality", defaultVisible: true },
+  { key: "service", label: "Service & Options", defaultVisible: true },
+  { key: "vehicle", label: "Vehicle Info", defaultVisible: true },
+  { key: "status", label: "Lead Status", defaultVisible: true },
+  { key: "actions", label: "Actions", defaultVisible: true },
+];
 
 export default function LeadListDetailClient({
   list,
@@ -61,6 +73,11 @@ export default function LeadListDetailClient({
   const [pending, startTransition] = useTransition();
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
   const [serviceFilter, setServiceFilter] = useState<string>("all");
+
+  const colPrefs = useColumnPreferences(
+    "klicseo_lead_list_detail_columns_v1",
+    LIST_DETAIL_COLUMNS,
+  );
 
   // Derive unique services from the leads in this list
   const services = useMemo(() => {
@@ -569,23 +586,35 @@ export default function LeadListDetailClient({
       ) : (
         <div className="space-y-2">
           <div className="flex items-center justify-between px-1 text-xs">
-            <span className="text-white/60">
-              Showing <strong className="text-white tabular-nums">{filteredLeads.length}</strong> of <strong className="text-white tabular-nums">{leads.length}</strong> total leads in this list
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-white/60">
+                Showing <strong className="text-white tabular-nums">{filteredLeads.length}</strong> of <strong className="text-white tabular-nums">{leads.length}</strong> total leads in this list
+                {statusFilter !== "all" && (
+                  <span className="ml-1 text-[#E8CC7A]">
+                    (Status: <strong>{LEAD_STATUS_LABEL[statusFilter]}</strong>)
+                  </span>
+                )}
+              </span>
               {statusFilter !== "all" && (
-                <span className="ml-1 text-[#E8CC7A]">
-                  (Status: <strong>{LEAD_STATUS_LABEL[statusFilter]}</strong>)
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  className="text-[#E8CC7A] hover:underline font-bold text-xs"
+                >
+                  Show All {leads.length} Leads ➔
+                </button>
               )}
-            </span>
-            {statusFilter !== "all" && (
-              <button
-                type="button"
-                onClick={() => setStatusFilter("all")}
-                className="text-[#E8CC7A] hover:underline font-bold text-xs"
-              >
-                Show All {leads.length} Leads ➔
-              </button>
-            )}
+            </div>
+
+            <ColumnVisibilityPicker
+              columns={colPrefs.columns}
+              isVisible={colPrefs.isVisible}
+              toggleColumn={colPrefs.toggleColumn}
+              showAll={colPrefs.showAll}
+              resetToDefault={colPrefs.resetToDefault}
+              visibleCount={colPrefs.visibleCount}
+              totalCount={colPrefs.totalCount}
+            />
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-white/10">
@@ -594,12 +623,12 @@ export default function LeadListDetailClient({
               <tr>
                 <th className="px-3 py-2 text-left font-semibold">#</th>
                 <th className="px-3 py-2 text-left font-semibold">Name</th>
-                <th className="px-3 py-2 text-left font-semibold">Phone</th>
-                <th className="px-3 py-2 text-left font-semibold">Location / Locality</th>
-                <th className="px-3 py-2 text-left font-semibold">Service</th>
-                <th className="px-3 py-2 text-left font-semibold">Vehicle</th>
-                <th className="px-3 py-2 text-left font-semibold">Status</th>
-                <th className="px-3 py-2 text-center font-semibold">Actions</th>
+                {colPrefs.isVisible("phone") && <th className="px-3 py-2 text-left font-semibold">Phone</th>}
+                {colPrefs.isVisible("location") && <th className="px-3 py-2 text-left font-semibold">Location / Locality</th>}
+                {colPrefs.isVisible("service") && <th className="px-3 py-2 text-left font-semibold">Service</th>}
+                {colPrefs.isVisible("vehicle") && <th className="px-3 py-2 text-left font-semibold">Vehicle</th>}
+                {colPrefs.isVisible("status") && <th className="px-3 py-2 text-left font-semibold">Status</th>}
+                {colPrefs.isVisible("actions") && <th className="px-3 py-2 text-center font-semibold">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -611,58 +640,76 @@ export default function LeadListDetailClient({
                       {lead.name ?? "(unnamed)"}
                     </Link>
                   </td>
-                  <td className="px-3 py-2">
-                    {lead.phone ? (
-                      <span className="inline-flex items-center gap-1.5 font-mono">
-                        <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline">
-                          {lead.phone}
-                        </a>
-                        <WhatsAppLink phone={lead.phone} label={`WhatsApp ${lead.name ?? lead.phone}`} />
-                      </span>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {lead.area ? (
-                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-xs font-medium">
-                        <MapPin size={11} className="shrink-0" />
-                        <span>{lead.area}</span>
+
+                  {colPrefs.isVisible("phone") && (
+                    <td className="px-3 py-2">
+                      {lead.phone ? (
+                        <span className="inline-flex items-center gap-1.5 font-mono">
+                          <a href={`tel:${lead.phone}`} className="text-[#C9A84C] hover:underline">
+                            {lead.phone}
+                          </a>
+                          <WhatsAppLink phone={lead.phone} label={`WhatsApp ${lead.name ?? lead.phone}`} />
+                        </span>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  )}
+
+                  {colPrefs.isVisible("location") && (
+                    <td className="px-3 py-2">
+                      {lead.area ? (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-xs font-medium">
+                          <MapPin size={11} className="shrink-0" />
+                          <span>{lead.area}</span>
+                        </div>
+                      ) : lead.pincode ? (
+                        <span className="font-mono text-xs text-white/60">PIN {lead.pincode}</span>
+                      ) : (
+                        <span className="text-white/30 text-xs">—</span>
+                      )}
+                    </td>
+                  )}
+
+                  {colPrefs.isVisible("service") && (
+                    <td className="px-3 py-2">
+                      <div>{lead.service ?? "-"}</div>
+                      <div className="text-[11px] text-white/45">
+                        {[lead.service_option, ...(lead.add_on_labels ?? []).map((label) => `+ ${label}`)]
+                          .filter(Boolean)
+                          .join(" | ")}
                       </div>
-                    ) : lead.pincode ? (
-                      <span className="font-mono text-xs text-white/60">PIN {lead.pincode}</span>
-                    ) : (
-                      <span className="text-white/30 text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div>{lead.service ?? "-"}</div>
-                    <div className="text-[11px] text-white/45">
-                      {[lead.service_option, ...(lead.add_on_labels ?? []).map((label) => `+ ${label}`)]
-                        .filter(Boolean)
-                        .join(" | ")}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div>{[lead.car_brand, lead.car_model].filter(Boolean).join(" ") || lead.vehicle_type || "-"}</div>
-                    <div className="text-[11px] text-white/45">
-                      {[lead.vehicle_type, lead.car_number].filter(Boolean).join(" | ")}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <LeadStatusControl id={lead.id} status={lead.status} color={LEAD_STATUS_COLOR[lead.status]} />
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveLead(lead.id)}
-                      disabled={pending}
-                      className="text-xs px-2 py-1 rounded bg-white/10 text-red-300 hover:bg-red-500/20 disabled:opacity-50"
-                      title="Remove from list"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </td>
+                    </td>
+                  )}
+
+                  {colPrefs.isVisible("vehicle") && (
+                    <td className="px-3 py-2">
+                      <div>{[lead.car_brand, lead.car_model].filter(Boolean).join(" ") || lead.vehicle_type || "-"}</div>
+                      <div className="text-[11px] text-white/45">
+                        {[lead.vehicle_type, lead.car_number].filter(Boolean).join(" | ")}
+                      </div>
+                    </td>
+                  )}
+
+                  {colPrefs.isVisible("status") && (
+                    <td className="px-3 py-2">
+                      <LeadStatusControl id={lead.id} status={lead.status} color={LEAD_STATUS_COLOR[lead.status]} />
+                    </td>
+                  )}
+
+                  {colPrefs.isVisible("actions") && (
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveLead(lead.id)}
+                        disabled={pending}
+                        className="text-xs px-2 py-1 rounded bg-white/10 text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                        title="Remove from list"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

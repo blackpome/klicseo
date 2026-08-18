@@ -6,6 +6,7 @@ import { getSiteSettings } from "@/lib/site-settings";
 import { EXPORT_TABLES } from "@/lib/export";
 import SiteSettingsForm from "./SiteSettingsForm";
 import MediaManager from "./MediaManager";
+import LeadStatusCustomizer from "./LeadStatusCustomizer";
 
 export default async function SiteSettingsPage() {
   const me = await currentAdmin();
@@ -33,10 +34,13 @@ export default async function SiteSettingsPage() {
           <div>
             <h1 className="text-2xl font-bold leading-tight" style={{ fontFamily: "var(--font-playfair)" }}>Site settings</h1>
             <p className="text-white/45 text-sm">
-              The starting price and contact numbers shown across the website.
+              The starting price, contact numbers, and CRM lead statuses.
             </p>
           </div>
         </div>
+
+        {/* Lead Status Customization Card */}
+        <LeadStatusCustomizer initialStatuses={settings.leadStatuses} />
 
         <SiteSettingsForm current={settings} />
         <MediaManager media={settings.media} />
