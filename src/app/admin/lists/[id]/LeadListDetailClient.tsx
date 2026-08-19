@@ -4,6 +4,7 @@ import { useState, useTransition, useMemo, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Edit, Plus, Trash2, UploadCloud, RotateCcw, CheckCircle2, MapPin } from "lucide-react";
 import AdminBackButton from "@/components/AdminBackButton";
+import { useHighlightedLead, markLeadViewed } from "@/lib/useHighlightedLead";
 import LeadStatusControl from "../../LeadStatusControl";
 import DeleteLeadListButton from "../DeleteLeadListButton";
 import RecycleLeadsModal from "../RecycleLeadsModal";
@@ -62,6 +63,7 @@ export default function LeadListDetailClient({
   leadStatuses?: CustomLeadStatus[];
 }) {
   const [leads, setLeads] = useState<LeadForList[]>(initialLeads);
+  const highlightedLeadId = useHighlightedLead();
   const [recycleModalOpen, setRecycleModalOpen] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -672,17 +674,28 @@ export default function LeadListDetailClient({
               </tr>
             </thead>
             <tbody>
-              {filteredLeads.map((lead, index) => (
-                <tr key={lead.id} className="border-t border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{index + 1}</td>
-                  <td className="px-3 py-2">
-                    <Link
-                      href={`/admin/${lead.id}?returnTo=${encodeURIComponent(`/admin/lists/${list.id}`)}&fromListName=${encodeURIComponent(list.name)}`}
-                      className="hover:text-[#C9A84C] hover:underline font-medium text-white"
-                    >
-                      {lead.name ?? "(unnamed)"}
-                    </Link>
-                  </td>
+              {filteredLeads.map((lead, index) => {
+                const isHighlighted = lead.id === highlightedLeadId;
+                return (
+                  <tr
+                    key={lead.id}
+                    id={`lead-row-${lead.id}`}
+                    className={`border-t border-white/5 transition-all duration-700 ${
+                      isHighlighted
+                        ? "bg-[#C9A84C]/20 ring-1 ring-[#C9A84C]/60 shadow-[0_0_15px_rgba(201,168,76,0.25)]"
+                        : "hover:bg-white/[0.02]"
+                    }`}
+                  >
+                    <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{index + 1}</td>
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/admin/${lead.id}?returnTo=${encodeURIComponent(`/admin/lists/${list.id}`)}&fromListName=${encodeURIComponent(list.name)}`}
+                        onClick={() => markLeadViewed(lead.id)}
+                        className="hover:text-[#C9A84C] hover:underline font-medium text-white"
+                      >
+                        {lead.name ?? "(unnamed)"}
+                      </Link>
+                    </td>
 
                   {colPrefs.isVisible("phone") && (
                     <td className="px-3 py-2">
@@ -750,7 +763,8 @@ export default function LeadListDetailClient({
                     </td>
                   )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useHighlightedLead, markLeadViewed } from "@/lib/useHighlightedLead";
 import {
   ListPlus,
   Phone,
@@ -93,6 +94,7 @@ export default function LeadBulkListTable({
   const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   const searchParams = useSearchParams();
+  const highlightedLeadId = useHighlightedLead();
   const returnToParam = useMemo(() => {
     const q = searchParams ? searchParams.toString() : "";
     const returnUrl = q ? `/admin?${q}` : "/admin";
@@ -259,11 +261,16 @@ export default function LeadBulkListTable({
 
                 const sourceInfo = getLeadSourceInfo(lead);
 
+                const isHighlighted = lead.id === highlightedLeadId;
+
                 return (
                   <tr
                     key={lead.id}
-                    className={`group transition-colors ${
-                      isSelected
+                    id={`lead-row-${lead.id}`}
+                    className={`group transition-all duration-700 ${
+                      isHighlighted
+                        ? "bg-[#C9A84C]/20 ring-1 ring-[#C9A84C]/60 shadow-[0_0_15px_rgba(201,168,76,0.25)]"
+                        : isSelected
                         ? "bg-[#C9A84C]/10"
                         : "hover:bg-white/[0.02]"
                     }`}
@@ -290,6 +297,7 @@ export default function LeadBulkListTable({
                       <div className="flex items-center gap-2">
                         <Link
                           href={`/admin/${lead.id}${returnToParam}`}
+                          onClick={() => markLeadViewed(lead.id)}
                           className="font-semibold text-white group-hover:text-[#E8CC7A] transition-colors text-sm"
                         >
                           {lead.name || "(Unnamed Lead)"}

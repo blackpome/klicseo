@@ -25,6 +25,7 @@ import {
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
 import AdminBackButton from "@/components/AdminBackButton";
+import TrackViewedLead from "./TrackViewedLead";
 import LeadStatusControl from "../LeadStatusControl";
 import LeadNotesEditor from "./LeadNotesEditor";
 import DeleteLeadButton from "./DeleteLeadButton";
@@ -192,6 +193,7 @@ export default async function LeadDetailPage({
 
   return (
     <AdminShell require="leads.view">
+      <TrackViewedLead id={lead.id} />
       <div className="space-y-6">
         {/* Navigation & Header Toolbar */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
