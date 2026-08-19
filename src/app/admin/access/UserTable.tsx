@@ -89,7 +89,7 @@ export default function UserTable({
         <table className="w-full text-sm min-w-[560px]">
           <thead className="bg-white/[0.03] text-white/45 text-[11px] uppercase tracking-wider">
             <tr>
-              <th className="text-left font-semibold px-4 py-2.5">User</th>
+              <th className="sticky left-0 bg-[#071228] z-20 text-left font-semibold px-4 py-2.5 min-w-[200px] border-r border-white/[0.04]">User</th>
               <th className="text-left font-semibold px-4 py-2.5">Role</th>
               <th className="text-left font-semibold px-4 py-2.5">Access</th>
               <th className="text-right font-semibold px-4 py-2.5">Actions</th>
@@ -104,9 +104,9 @@ export default function UserTable({
 
               return (
                 <tbody key={u.id} className="border-t border-white/5">
-                  <tr className="hover:bg-white/[0.02]">
+                  <tr className="hover:bg-white/[0.02] group">
                     {/* User */}
-                    <td className="px-4 py-3">
+                    <td className="sticky left-0 z-10 min-w-[200px] bg-[#050E21] group-hover:bg-[#091733] px-4 py-3 border-r border-white/[0.04] transition-colors">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
                           className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[10px] font-bold"

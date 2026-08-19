@@ -153,7 +153,7 @@ export default function EmployeeBulkTable({
           <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
             <tr>
               {canManageEmployees && (
-                <th className="px-3 py-2 text-left font-semibold">
+                <th className="sticky left-0 bg-[#071228] z-20 px-3 py-2 text-left font-semibold w-10 min-w-[40px] border-r border-white/[0.04]">
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -163,7 +163,7 @@ export default function EmployeeBulkTable({
                   />
                 </th>
               )}
-              <th className="text-left px-3 py-2 font-semibold">#</th>
+              <th className={`${canManageEmployees ? "sticky left-10" : "sticky left-0"} bg-[#071228] z-20 text-left px-3 py-2 font-semibold w-12 min-w-[48px] border-r border-white/[0.04]`}>#</th>
               <th className="text-left px-3 py-2 font-semibold">Submitted (IST)</th>
               <th className="text-left px-3 py-2 font-semibold">Name</th>
               <th className="text-left px-3 py-2 font-semibold">Phone</th>
@@ -174,9 +174,9 @@ export default function EmployeeBulkTable({
           </thead>
           <tbody>
             {employees.map((e, i) => (
-              <tr key={e.id} className="border-t border-white/5 hover:bg-white/[0.02]">
+              <tr key={e.id} className="group border-t border-white/5 hover:bg-white/[0.02]">
                 {canManageEmployees && (
-                  <td className={`px-3 py-2 ${
+                  <td className={`sticky left-0 z-10 w-10 min-w-[40px] bg-[#050E21] group-hover:bg-[#091733] border-r border-white/[0.04] px-3 py-2 ${
                     rangeMode && rangeStartId === e.id
                       ? "bg-amber-500/10 border border-amber-500/30 rounded"
                       : ""
@@ -193,7 +193,9 @@ export default function EmployeeBulkTable({
                     />
                   </td>
                 )}
-                <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{i + 1}</td>
+                <td className={`${canManageEmployees ? "sticky left-10" : "sticky left-0"} z-10 w-12 min-w-[48px] bg-[#050E21] group-hover:bg-[#091733] border-r border-white/[0.04] px-3 py-2 text-white/40 text-xs tabular-nums`}>
+                  {i + 1}
+                </td>
                 <td className="px-3 py-2 whitespace-nowrap text-xs">
                   <div className="text-white/80 font-medium">
                     {new Date(e.created_at).toLocaleString("en-IN", {

@@ -179,7 +179,7 @@ export default function BulkCarsSheet({
         <table className="w-full text-sm min-w-[800px]">
           <thead className="bg-white/[0.03] text-white/45 text-[10px] uppercase tracking-wider">
             <tr>
-              <th className="text-right font-semibold px-2 py-2 w-10">#</th>
+              <th className="sticky left-0 bg-[#071228] z-20 text-right font-semibold px-2 py-2 w-10 min-w-[40px] border-r border-white/[0.04]">#</th>
               <th className="text-left font-semibold px-2 py-2">Brand *</th>
               <th className="text-left font-semibold px-2 py-2">Model *</th>
               <th className="text-left font-semibold px-2 py-2">Body type</th>
@@ -192,8 +192,8 @@ export default function BulkCarsSheet({
             {rows.map((r, i) => {
               const modelList = modelsByBrand.get(r.brand.trim().toLowerCase()) ?? [];
               return (
-                <tr key={r.rid} className="border-t border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-2 py-1 text-right text-white/35 tabular-nums">{i + 1}</td>
+                <tr key={r.rid} className="group border-t border-white/5 hover:bg-white/[0.02]">
+                  <td className="sticky left-0 z-10 w-10 min-w-[40px] bg-[#050E21] group-hover:bg-[#091733] px-2 py-1 text-right text-white/35 tabular-nums border-r border-white/[0.04]">{i + 1}</td>
                   <td className="px-2 py-1">
                     <input
                       value={r.brand}

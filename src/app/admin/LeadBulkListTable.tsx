@@ -221,7 +221,7 @@ export default function LeadBulkListTable({
             <thead>
               <tr className="border-b border-white/[0.08] bg-white/[0.02] text-white/40 text-[10px] font-bold uppercase tracking-[0.15em]">
                 {canManageLists && (
-                  <th className="px-4 py-3.5 w-10 text-center">
+                  <th className="sticky left-0 bg-[#071228] z-20 px-4 py-3.5 w-12 min-w-[48px] text-center border-r border-white/[0.04]">
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -231,7 +231,7 @@ export default function LeadBulkListTable({
                     />
                   </th>
                 )}
-                <th className="px-3 py-3.5 w-12">#</th>
+                <th className={`${canManageLists ? "sticky left-12" : "sticky left-0"} bg-[#071228] z-20 px-3 py-3.5 w-12 min-w-[48px] border-r border-white/[0.04]`}>#</th>
                 <th className="px-4 py-3.5">Customer & Vehicle</th>
                 {colPrefs.isVisible("contact") && <th className="px-4 py-3.5">Contact & Actions</th>}
                 {colPrefs.isVisible("location") && <th className="px-4 py-3.5">Location / Locality</th>}
@@ -277,7 +277,13 @@ export default function LeadBulkListTable({
                   >
                     {/* Checkbox */}
                     {canManageLists && (
-                      <td className="px-4 py-3 text-center">
+                      <td className={`sticky left-0 z-10 w-12 min-w-[48px] px-4 py-3 text-center border-r border-white/[0.04] transition-colors ${
+                        isHighlighted
+                          ? "bg-[#252015]"
+                          : isSelected
+                          ? "bg-[#1b1912]"
+                          : "bg-[#071228] group-hover:bg-[#0c1a36]"
+                      }`}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -288,7 +294,13 @@ export default function LeadBulkListTable({
                     )}
 
                     {/* Row Index */}
-                    <td className="px-3 py-3 text-white/30 text-[11px] font-mono tabular-nums">
+                    <td className={`${canManageLists ? "sticky left-12" : "sticky left-0"} z-10 w-12 min-w-[48px] px-3 py-3 text-white/30 text-[11px] font-mono tabular-nums border-r border-white/[0.04] transition-colors ${
+                      isHighlighted
+                        ? "bg-[#252015]"
+                        : isSelected
+                        ? "bg-[#1b1912]"
+                        : "bg-[#071228] group-hover:bg-[#0c1a36]"
+                    }`}>
                       {i + 1}
                     </td>
 

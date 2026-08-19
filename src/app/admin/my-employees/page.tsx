@@ -138,7 +138,7 @@ export default async function MyEmployeesPage({
           <table className="w-full text-sm">
             <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold">#</th>
+                <th className="sticky left-0 bg-[#071228] z-20 px-3 py-2 text-left font-semibold w-12 min-w-[48px] border-r border-white/[0.04]">#</th>
                 <th className="px-3 py-2 text-left font-semibold">Name</th>
                 <th className="px-3 py-2 text-left font-semibold">Phone</th>
                 <th className="px-3 py-2 text-left font-semibold">Role</th>
@@ -147,8 +147,8 @@ export default async function MyEmployeesPage({
             </thead>
             <tbody>
               {employees.map((e, i) => (
-                <tr key={e.id} className="border-t border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{i + 1}</td>
+                <tr key={e.id} className="group border-t border-white/5 hover:bg-white/[0.02]">
+                  <td className="sticky left-0 z-10 w-12 min-w-[48px] bg-[#050E21] group-hover:bg-[#091733] border-r border-white/[0.04] px-3 py-2 text-white/40 text-xs tabular-nums">{i + 1}</td>
                   <td className="px-3 py-2">
                     <Link href={`/admin/employees/${e.id}`} className="hover:text-[#C9A84C] hover:underline">
                       {e.name}

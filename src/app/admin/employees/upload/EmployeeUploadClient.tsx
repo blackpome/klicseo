@@ -628,6 +628,7 @@ export default function EmployeeUploadClient({ adminUsers, availableJobs }: Prop
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-white/[0.08] bg-white/[0.02] text-white/40 text-[10px] font-bold uppercase tracking-wider">
+                    <th className="sticky left-0 bg-[#071228] z-20 py-2.5 px-3 w-12 min-w-[48px] border-r border-white/[0.04]">#</th>
                     <th className="py-2.5 px-3">Status</th>
                     <th className="py-2.5 px-3">Name</th>
                     <th className="py-2.5 px-3">Mobile</th>
@@ -639,7 +640,8 @@ export default function EmployeeUploadClient({ adminUsers, availableJobs }: Prop
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">
                   {normalizedRows.slice(0, 10).map((r, idx) => (
-                    <tr key={idx} className="hover:bg-white/[0.01]">
+                    <tr key={idx} className="group hover:bg-white/[0.01]">
+                      <td className="sticky left-0 z-10 w-12 min-w-[48px] bg-[#050E21] group-hover:bg-[#091733] py-2.5 px-3 text-white/30 border-r border-white/[0.04]">{idx + 1}</td>
                       <td className="py-2.5 px-3">
                         {r.isValid ? (
                           <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400">

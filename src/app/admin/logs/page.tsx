@@ -168,7 +168,7 @@ export default async function LogsPage({
             <table className="w-full text-sm min-w-[640px]">
               <thead className="bg-white/[0.03] text-white/45 text-[11px] uppercase tracking-wider">
                 <tr>
-                  <th className="text-left font-semibold px-3 py-2.5">When</th>
+                  <th className="sticky left-0 bg-[#071228] z-20 text-left font-semibold px-3 py-2.5 min-w-[140px] border-r border-white/[0.04]">When</th>
                   <th className="text-left font-semibold px-3 py-2.5">Who</th>
                   <th className="text-left font-semibold px-3 py-2.5">Action</th>
                   <th className="text-left font-semibold px-3 py-2.5">Details</th>
@@ -179,8 +179,8 @@ export default async function LogsPage({
                   const diff = (l.metadata?.diff ?? null) as Record<string, { from: unknown; to: unknown }> | null;
                   const hasDiff = !!diff && Object.keys(diff).length > 0;
                   return (
-                    <tr key={l.id} className="border-t border-white/5 hover:bg-white/[0.02] align-top">
-                      <td className="px-3 py-2 whitespace-nowrap text-white/55 text-xs">
+                    <tr key={l.id} className="group border-t border-white/5 hover:bg-white/[0.02] align-top">
+                      <td className="sticky left-0 z-10 min-w-[140px] bg-[#050E21] group-hover:bg-[#091733] px-3 py-2 whitespace-nowrap text-white/55 text-xs border-r border-white/[0.04] transition-colors">
                         {new Date(l.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}
                       </td>
                       <td className="px-3 py-2 text-xs">

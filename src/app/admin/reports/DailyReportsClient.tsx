@@ -409,7 +409,7 @@ export default function DailyReportsClient({ initialSummary }: Props) {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-white/[0.08] bg-white/[0.02] text-white/40 font-bold text-[10px] uppercase tracking-wider">
-                <th className="py-3.5 pl-6 pr-3">Staff / Telecaller</th>
+                <th className="sticky left-0 bg-[#071228] z-20 py-3.5 pl-6 pr-3 min-w-[200px] border-r border-white/[0.04]">Staff / Telecaller</th>
                 <th className="py-3.5 px-3">Calls Made</th>
                 <th className="py-3.5 px-3 text-emerald-300">🏆 Booked</th>
                 <th className="py-3.5 px-3 text-sky-300">🔄 Contacted</th>
@@ -443,7 +443,7 @@ export default function DailyReportsClient({ initialSummary }: Props) {
                       onClick={() => setSelectedStaff(staff)}
                     >
                       {/* Staff Name & Rank */}
-                      <td className="py-4 pl-6 pr-3">
+                      <td className="sticky left-0 z-10 min-w-[200px] bg-[#071228] group-hover:bg-[#0c1a36] py-4 pl-6 pr-3 border-r border-white/[0.04] transition-colors">
                         <div className="flex items-center gap-3">
                           <span className="w-5 text-center font-extrabold text-sm tabular-nums text-white/30 group-hover:text-amber-400 transition-colors">
                             {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`}

@@ -663,7 +663,7 @@ export default function LeadListDetailClient({
             <table className="w-full text-sm">
             <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold">#</th>
+                <th className="sticky left-0 bg-[#071228] z-20 px-3 py-2 text-left font-semibold w-12 min-w-[48px] border-r border-white/[0.04]">#</th>
                 <th className="px-3 py-2 text-left font-semibold">Name</th>
                 {colPrefs.isVisible("phone") && <th className="px-3 py-2 text-left font-semibold">Phone</th>}
                 {colPrefs.isVisible("location") && <th className="px-3 py-2 text-left font-semibold">Location / Locality</th>}
@@ -680,13 +680,17 @@ export default function LeadListDetailClient({
                   <tr
                     key={lead.id}
                     id={`lead-row-${lead.id}`}
-                    className={`border-t border-white/5 transition-all duration-700 ${
+                    className={`group border-t border-white/5 transition-all duration-700 ${
                       isHighlighted
                         ? "bg-[#C9A84C]/20 ring-1 ring-[#C9A84C]/60 shadow-[0_0_15px_rgba(201,168,76,0.25)]"
                         : "hover:bg-white/[0.02]"
                     }`}
                   >
-                    <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{index + 1}</td>
+                    <td className={`sticky left-0 z-10 w-12 min-w-[48px] px-3 py-2 text-white/40 text-xs tabular-nums border-r border-white/[0.04] transition-colors ${
+                      isHighlighted ? "bg-[#252015]" : "bg-[#071228] group-hover:bg-[#0c1a36]"
+                    }`}>
+                      {index + 1}
+                    </td>
                     <td className="px-3 py-2">
                       <Link
                         href={`/admin/${lead.id}?returnTo=${encodeURIComponent(`/admin/lists/${list.id}`)}&fromListName=${encodeURIComponent(list.name)}`}
