@@ -32,18 +32,35 @@ export async function areaFromPincode(pincode: string | null | undefined): Promi
   return map.get(p) ?? null;
 }
 
+// In-memory cache for area counts to prevent full-table scans on every /admin load
+let cachedAreas: { data: Array<{ area: string; count: number }>; expires: number } | null = null;
+
+export function invalidateAreaCountsCache(): void {
+  cachedAreas = null;
+}
+
 /** Distinct areas + lead counts, for the filter pill bar on /admin. */
 export async function listAreasWithCounts(): Promise<Array<{ area: string; count: number }>> {
-  const { data, error } = await supabase().from("leads").select("area").not("area", "is", null);
+  const now = Date.now();
+  if (cachedAreas && cachedAreas.expires > now) {
+    return cachedAreas.data;
+  }
+  const { data, error } = await supabase()
+    .from("leads")
+    .select("area")
+    .not("area", "is", null)
+    .limit(5000);
   if (error) throw error;
   const counts = new Map<string, number>();
   for (const r of (data ?? []) as { area: string | null }[]) {
     if (!r.area) continue;
     counts.set(r.area, (counts.get(r.area) ?? 0) + 1);
   }
-  return [...counts.entries()]
+  const res = [...counts.entries()]
     .map(([area, count]) => ({ area, count }))
     .sort((a, b) => b.count - a.count || a.area.localeCompare(b.area));
+  cachedAreas = { data: res, expires: now + 30_000 };
+  return res;
 }
 
 /** Canonical area list from the lookup table — used for autocomplete suggestions

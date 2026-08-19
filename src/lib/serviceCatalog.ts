@@ -16,6 +16,12 @@ export type {
   CatalogPriceLine,
 } from "./serviceCatalog-shared";
 
+let catalogCache: { data: ServiceCatalog; expires: number } | null = null;
+
+export function invalidateCatalogCache(): void {
+  catalogCache = null;
+}
+
 /**
  * The whole dynamic catalog in one round-trip, React-cached per request so
  * downstream call sites can use it freely. During the migration this exists
@@ -23,6 +29,11 @@ export type {
  * pricing.ts will derive its enums from this.
  */
 export const getServiceCatalog = cache(async (): Promise<ServiceCatalog> => {
+  const now = Date.now();
+  if (catalogCache && catalogCache.expires > now) {
+    return catalogCache.data;
+  }
+
   const sb = supabase();
   const [cats, opts, lines] = await Promise.all([
     sb.from("service_categories").select("*").order("sort_order").order("label"),
@@ -40,7 +51,9 @@ export const getServiceCatalog = cache(async (): Promise<ServiceCatalog> => {
   const byLegacyLine: Record<string, CatalogPriceLine> = {};
   for (const l of priceLines) if (l.legacy_line) byLegacyLine[l.legacy_line] = l;
 
-  return { categories, options, priceLines, byLegacyLine };
+  const res = { categories, options, priceLines, byLegacyLine };
+  catalogCache = { data: res, expires: now + 60_000 };
+  return res;
 });
 
 /** A `{ legacy_line → amount }` map for a single tier, from price_tier_amounts. */
@@ -90,6 +103,7 @@ export interface CategoryPatch {
 }
 
 export async function updateCategory(id: string, patch: CategoryPatch): Promise<void> {
+  invalidateCatalogCache();
   const { error } = await supabase()
     .from("service_categories")
     .update({ ...patch, updated_at: new Date().toISOString() })
@@ -107,6 +121,7 @@ export interface OptionPatch {
 }
 
 export async function updateOption(id: string, patch: OptionPatch): Promise<void> {
+  invalidateCatalogCache();
   const { error } = await supabase()
     .from("service_options")
     .update({ ...patch, updated_at: new Date().toISOString() })
@@ -116,6 +131,7 @@ export async function updateOption(id: string, patch: OptionPatch): Promise<void
 
 /** Apply sort_order to a list of categories in one round-trip (one row each). */
 export async function reorderCategories(orderedIds: string[]): Promise<void> {
+  invalidateCatalogCache();
   const sb = supabase();
   await Promise.all(
     orderedIds.map((id, idx) =>
@@ -126,6 +142,7 @@ export async function reorderCategories(orderedIds: string[]): Promise<void> {
 
 /** Apply sort_order to a list of options within one category. */
 export async function reorderOptions(orderedIds: string[]): Promise<void> {
+  invalidateCatalogCache();
   const sb = supabase();
   await Promise.all(
     orderedIds.map((id, idx) =>
@@ -171,6 +188,7 @@ export interface NewCategory {
 }
 
 export async function createCategory(input: NewCategory): Promise<string> {
+  invalidateCatalogCache();
   const sb = supabase();
   const slug = await uniqueSlug("service_categories", slugify(input.label));
   const { data, error } = await sb
@@ -184,6 +202,7 @@ export async function createCategory(input: NewCategory): Promise<string> {
 
 /** Deletes the category and (via FK cascade) all its options + price_lines + amounts. */
 export async function deleteCategory(id: string): Promise<void> {
+  invalidateCatalogCache();
   const { error } = await supabase().from("service_categories").delete().eq("id", id);
   if (error) throw error;
 }
@@ -213,6 +232,7 @@ export interface NewOption {
  * Admins can still set their tier prices via the existing tier editor.
  */
 export async function createOption(input: NewOption): Promise<string> {
+  invalidateCatalogCache();
   const sb = supabase();
   const isAddon = input.isAddon === true;
   const slug = await uniqueSlug("service_options", slugify(input.label));
@@ -274,6 +294,7 @@ export async function createOption(input: NewOption): Promise<string> {
 
 /** Deletes the option and (via FK cascade) its price_lines + their tier/car amounts. */
 export async function deleteOption(id: string): Promise<void> {
+  invalidateCatalogCache();
   const { error } = await supabase().from("service_options").delete().eq("id", id);
   if (error) throw error;
 }

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition, type ChangeEvent } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ListPlus,
   Phone,
@@ -90,6 +91,13 @@ export default function LeadBulkListTable({
   const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const searchParams = useSearchParams();
+  const returnToParam = useMemo(() => {
+    const q = searchParams ? searchParams.toString() : "";
+    const returnUrl = q ? `/admin?${q}` : "/admin";
+    return `?returnTo=${encodeURIComponent(returnUrl)}`;
+  }, [searchParams]);
 
   const colPrefs = useColumnPreferences(
     "klicseo_master_leads_columns_v1",
@@ -281,7 +289,7 @@ export default function LeadBulkListTable({
                     <td className="px-4 py-3 min-w-[200px]">
                       <div className="flex items-center gap-2">
                         <Link
-                          href={`/admin/${lead.id}`}
+                          href={`/admin/${lead.id}${returnToParam}`}
                           className="font-semibold text-white group-hover:text-[#E8CC7A] transition-colors text-sm"
                         >
                           {lead.name || "(Unnamed Lead)"}

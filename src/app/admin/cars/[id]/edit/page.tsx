@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import AdminShell from "../../../AdminShell";
+import AdminBackButton from "@/components/AdminBackButton";
 import { currentAdmin } from "@/lib/admin-auth";
 import { getCar } from "@/lib/cars";
 import { listTiersWithCounts } from "@/lib/priceTiers";
@@ -19,9 +18,7 @@ export default async function EditCarPage({ params }: { params: Promise<{ id: st
   return (
     <AdminShell>
       <div className="space-y-4">
-        <Link href="/admin/cars" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white">
-          <ArrowLeft size={15} /> Pricing tiers
-        </Link>
+        <AdminBackButton fallbackHref="/admin/cars" label="Pricing tiers" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white" iconSize={15} />
         <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>
           {car.brand} {car.model}
         </h1>

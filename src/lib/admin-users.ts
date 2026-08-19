@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { supabase } from "./supabase";
 import { supabaseAuth } from "./supabase-auth";
 import {
@@ -30,28 +31,51 @@ function rowToRow(data: Record<string, unknown>): AdminUserRow {
   };
 }
 
+// In-memory short TTL cache across rapid requests
+const adminUserCache = new Map<string, { data: AdminUserRow | null; expires: number }>();
+let listAdminUsersCache: { data: AdminUserRow[]; expires: number } | null = null;
+
+export function invalidateAdminUsersCache(): void {
+  adminUserCache.clear();
+  listAdminUsersCache = null;
+}
+
 // --- read ---------------------------------------------------------------
 
-export async function getAdminUser(email: string): Promise<AdminUserRow | null> {
+export const getAdminUser = cache(async (email: string): Promise<AdminUserRow | null> => {
+  const norm = normalizeEmail(email);
+  const now = Date.now();
+  const cached = adminUserCache.get(norm);
+  if (cached && cached.expires > now) {
+    return cached.data;
+  }
   const { data, error } = await supabase()
     .from(TABLE)
     .select("*, employees:employee_id (name)")
-    .eq("email", normalizeEmail(email))
+    .eq("email", norm)
     .maybeSingle();
   if (error) throw error;
-  return data ? rowToRow(data) : null;
-}
+  const res = data ? rowToRow(data) : null;
+  adminUserCache.set(norm, { data: res, expires: now + 30_000 });
+  return res;
+});
 
-export async function listAdminUsers(): Promise<AdminUserRow[]> {
+export const listAdminUsers = cache(async (): Promise<AdminUserRow[]> => {
+  const now = Date.now();
+  if (listAdminUsersCache && listAdminUsersCache.expires > now) {
+    return listAdminUsersCache.data;
+  }
   const { data, error } = await supabase()
     .from(TABLE)
     .select("*, employees:employee_id (name)")
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map(rowToRow);
-}
+  const res = (data ?? []).map(rowToRow);
+  listAdminUsersCache = { data: res, expires: now + 30_000 };
+  return res;
+});
 
-export async function listAssignableAdminUsers(): Promise<Array<{ id: string; employee_id?: string | null; email: string; name: string }>> {
+export const listAssignableAdminUsers = cache(async (): Promise<Array<{ id: string; employee_id?: string | null; email: string; name: string }>> => {
   const users = await listAdminUsers();
   return users
     .filter((u) => u.status === "active")
@@ -64,12 +88,12 @@ export async function listAssignableAdminUsers(): Promise<Array<{ id: string; em
         name,
       };
     });
-}
+});
 
 // Resolve the allowlist row into a principal, applying the env super-admin
 // pin and the implicit "admins hold every permission" rule. Returns null when
 // the email is not allowed in (no row, revoked, and not the env super-admin).
-export async function resolvePrincipal(email: string): Promise<AdminPrincipal | null> {
+export const resolvePrincipal = cache(async (email: string): Promise<AdminPrincipal | null> => {
   const e = normalizeEmail(email);
 
   if (superAdminEmail() && e === superAdminEmail()) {
@@ -85,7 +109,7 @@ export async function resolvePrincipal(email: string): Promise<AdminPrincipal | 
       : [...EVERY_PERMISSION];
 
   return { email: e, role: row.role, permissions };
-}
+});
 
 // --- write (used by the access-management actions) ----------------------
 
@@ -106,6 +130,7 @@ export interface GrantInput {
 export async function grantAccess(
   input: GrantInput,
 ): Promise<{ emailSent: boolean; emailError?: string }> {
+  invalidateAdminUsersCache();
   const email = normalizeEmail(input.email);
   const permissions = input.role === "staff" ? expandPermissions(input.permissions) : [];
 
@@ -133,6 +158,7 @@ export async function grantAccess(
 }
 
 export async function updateAccessEmployee(email: string, employeeId: string | null): Promise<void> {
+  invalidateAdminUsersCache();
   const { error } = await supabase()
     .from(TABLE)
     .update({ employee_id: employeeId })
@@ -142,6 +168,7 @@ export async function updateAccessEmployee(email: string, employeeId: string | n
 }
 
 export async function updatePermissions(email: string, permissions: Permission[]): Promise<void> {
+  invalidateAdminUsersCache();
   const { error } = await supabase()
     .from(TABLE)
     .update({ permissions: expandPermissions(permissions) })
@@ -154,6 +181,7 @@ export async function updatePermissions(email: string, permissions: Permission[]
 // cleanly later. The auth-user deletion is best-effort (swallowed on failure)
 // since the row deletion alone already blocks all access.
 export async function deleteAccess(email: string): Promise<void> {
+  invalidateAdminUsersCache();
   const e = normalizeEmail(email);
 
   // Unlink any employees assigned to this admin user before deleting the row,
@@ -182,6 +210,7 @@ export async function deleteAccess(email: string): Promise<void> {
 /** Flip a user's status active ↔ revoked (block / unblock). When blocking we
  *  also bump `signed_out_after` so the live session is killed immediately. */
 export async function setUserStatus(email: string, status: "active" | "revoked"): Promise<void> {
+  invalidateAdminUsersCache();
   const e = normalizeEmail(email);
   const patch: Record<string, unknown> = { status };
   if (status === "revoked") patch.signed_out_after = new Date().toISOString();
@@ -193,6 +222,7 @@ export async function setUserStatus(email: string, status: "active" | "revoked")
  *  downgrading from admin to staff, permissions are cleared so the user
  *  starts from zero and the super-admin can re-grant explicitly. */
 export async function changeUserRole(email: string, role: AdminRole): Promise<void> {
+  invalidateAdminUsersCache();
   const e = normalizeEmail(email);
   if (role === "super_admin") throw new Error("Cannot promote to super_admin via this action.");
   const patch: Record<string, unknown> = {
@@ -211,6 +241,7 @@ export async function changeUserRole(email: string, role: AdminRole): Promise<vo
  * log in again with their password — this only invalidates the live session.
  */
 export async function forceSignOut(email: string): Promise<void> {
+  invalidateAdminUsersCache();
   const { error } = await supabase()
     .from(TABLE)
     .update({ signed_out_after: new Date().toISOString() })
@@ -223,6 +254,7 @@ export async function forceSignOut(email: string): Promise<void> {
  * the caller themselves). Returns the number of rows affected.
  */
 export async function forceSignOutAll(keepEmails: string[]): Promise<number> {
+  invalidateAdminUsersCache();
   const keep = keepEmails.map(normalizeEmail);
   let q = supabase().from(TABLE).update({ signed_out_after: new Date().toISOString() }).select("email");
   if (keep.length > 0) q = q.not("email", "in", `(${keep.map((e) => `"${e}"`).join(",")})`);

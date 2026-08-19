@@ -69,7 +69,8 @@ export default async function LogsPage({
     );
   }
 
-  await pruneOldAuditLogs();
+  // Pruning runs in background without blocking page render
+  void pruneOldAuditLogs();
 
   const { q, entity, from, to } = await searchParams;
   let logs: AuditLog[] = [];

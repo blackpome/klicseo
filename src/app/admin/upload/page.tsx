@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, UploadCloud } from "lucide-react";
+import { UploadCloud } from "lucide-react";
 import AdminShell from "../AdminShell";
+import AdminBackButton from "@/components/AdminBackButton";
 import { currentAdmin } from "@/lib/admin-auth";
 import { listLeadLists } from "@/lib/leadLists";
 import { listAdminUsers } from "@/lib/admin-users";
@@ -26,17 +26,18 @@ export default async function LeadUploadPage({
   ]);
 
   const activeAdmins = adminUsers.filter((u) => u.status === "active");
+  const fallbackHref = listId ? `/admin/lists/${listId}` : "/admin";
+  const backLabel = listId ? "Back to list" : "Back to Leads";
 
   return (
     <AdminShell require="leads.manage">
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <Link
-            href="/admin"
+          <AdminBackButton
+            fallbackHref={fallbackHref}
+            label={backLabel}
             className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white transition-colors"
-          >
-            <ArrowLeft size={13} /> Back to Leads
-          </Link>
+          />
         </div>
 
         <div className="flex items-start gap-3.5">

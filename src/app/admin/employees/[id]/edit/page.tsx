@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import AdminShell from "../../../AdminShell";
 import AdminError from "../../../AdminError";
+import AdminBackButton from "@/components/AdminBackButton";
 import EmployeeForm from "../../EmployeeForm";
 import { updateEmployeeAction } from "../../actions";
 import { getEmployee, assertEmployeeInScope } from "@/lib/employees";
@@ -41,12 +40,11 @@ export default async function EditEmployeePage({
   return (
     <AdminShell require="employees.manage" section="employees">
       <div className="max-w-5xl">
-        <Link
-          href={`/admin/employees/${id}`}
+        <AdminBackButton
+          fallbackHref={`/admin/employees/${id}`}
+          label="Back to employee"
           className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4"
-        >
-          <ArrowLeft size={13} /> Back to employee
-        </Link>
+        />
         <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
           Edit Employee
         </h1>

@@ -26,14 +26,12 @@ export default async function AccessPage() {
     );
   }
 
-  let users: AdminUserRow[];
-  let employees: EmployeeRow[];
+  let users: AdminUserRow[] = [];
+  let employees: EmployeeRow[] = [];
   try {
-    [users, employees] = await Promise.all([listAdminUsers(), listEmployees()]);
-    // Only surface employees who are linked from the admin allowlist
-    // (i.e. those who were invited via the admin panel and have creds).
+    users = await listAdminUsers();
     const linkedIds = new Set(users.map((u) => u.employee_id).filter(Boolean) as string[]);
-    employees = employees.filter((e) => linkedIds.has(e.id));
+    employees = linkedIds.size > 0 ? (await listEmployees({ limit: 100 })).filter((e) => linkedIds.has(e.id)) : [];
   } catch (err) {
     return (
       <AdminShell>

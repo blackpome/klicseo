@@ -146,7 +146,10 @@ export default function PaymentRow({
       <div className="flex items-center gap-3 flex-wrap">
         {/* Customer */}
         <div className="min-w-[160px] flex-1">
-          <Link href={`/admin/${customer.id}`} className="text-sm font-medium hover:text-[#C9A84C]">
+          <Link
+            href={`/admin/${customer.id}?returnTo=${encodeURIComponent("/admin/payments")}`}
+            className="text-sm font-medium hover:text-[#C9A84C]"
+          >
             {customer.name || "(unnamed)"}
           </Link>
           <div className="text-[11px] text-white/35 flex items-center gap-1.5 mt-0.5 flex-wrap">

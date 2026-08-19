@@ -3,6 +3,7 @@
 import { useState, useTransition, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import AdminBackButton from "@/components/AdminBackButton";
 import {
   UploadCloud,
   FileSpreadsheet,
@@ -190,12 +191,11 @@ export default function EmployeeUploadClient({ adminUsers, availableJobs }: Prop
       <div className="flex items-center justify-between gap-4 flex-wrap border-b border-white/[0.08] pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <Link
-              href="/admin/employees"
+            <AdminBackButton
+              fallbackHref="/admin/employees"
+              label="Back to Employees"
               className="text-xs text-white/50 hover:text-white inline-flex items-center gap-1 transition-colors"
-            >
-              <ArrowLeft size={13} /> Back to Employees
-            </Link>
+            />
           </div>
           <h1
             className="text-2xl md:text-3xl font-bold tracking-tight text-white mt-1"

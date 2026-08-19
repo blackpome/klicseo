@@ -7,7 +7,7 @@ import { deleteLeadAction } from "../actions";
 // Using a real <form> + server action (rather than useTransition) so Next's
 // server-action runtime processes the redirect() and revalidatePath() calls.
 // The confirm prompt runs in onSubmit and aborts the submission on cancel.
-export default function DeleteLeadButton({ id }: { id: string }) {
+export default function DeleteLeadButton({ id, returnTo }: { id: string; returnTo?: string }) {
   return (
     <form
       action={deleteLeadAction}
@@ -18,6 +18,7 @@ export default function DeleteLeadButton({ id }: { id: string }) {
       }}
     >
       <input type="hidden" name="id" value={id} />
+      {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
       <SubmitButton />
     </form>
   );

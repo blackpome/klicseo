@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import AdminShell from "../../../AdminShell";
+import AdminBackButton from "@/components/AdminBackButton";
 import { currentAdmin } from "@/lib/admin-auth";
 import { getJob } from "@/lib/jobs";
 import JobForm from "../../JobForm";
@@ -18,9 +17,7 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
   return (
     <AdminShell>
       <div className="space-y-4">
-        <Link href="/admin/jobs" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white">
-          <ArrowLeft size={15} /> Jobs
-        </Link>
+        <AdminBackButton fallbackHref="/admin/jobs" label="Back to jobs" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white" iconSize={15} />
         <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)" }}>{job.title}</h1>
         <JobForm job={job} />
       </div>

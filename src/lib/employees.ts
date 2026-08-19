@@ -55,7 +55,17 @@ export async function signedUrlFor(
   return data?.signedUrl ?? null;
 }
 
+// In-memory short TTL caches for employee reminders and job counts
+const employeeRemindersCache = new Map<string, { data: CallReminder[]; expires: number }>();
+const jobCountsCache = new Map<string, { data: Array<{ job_role: string; count: number }>; expires: number }>();
+
+export function invalidateEmployeeCaches(): void {
+  employeeRemindersCache.clear();
+  jobCountsCache.clear();
+}
+
 export async function insertEmployee(emp: NewEmployee): Promise<EmployeeRow> {
+  invalidateEmployeeCaches();
   const payload: Record<string, unknown> = { ...emp, status: emp.status ?? "applied" };
   payload.phone_hash = phoneHash(emp.phone);
   const sealed = sealFields(payload, ENCRYPTED_EMPLOYEE_FIELDS);
@@ -139,6 +149,7 @@ export async function getEmployee(id: string): Promise<EmployeeRow | null> {
 }
 
 export async function updateEmployee(id: string, patch: EmployeeUpdate): Promise<void> {
+  invalidateEmployeeCaches();
   const payload: Record<string, unknown> = { ...patch };
   if ("phone" in payload) payload.phone_hash = phoneHash(payload.phone as string | null);
   const sealed = sealFields(payload, ENCRYPTED_EMPLOYEE_FIELDS);
@@ -147,11 +158,13 @@ export async function updateEmployee(id: string, patch: EmployeeUpdate): Promise
 }
 
 export async function updateEmployeeStatus(id: string, status: EmployeeStatus): Promise<void> {
+  invalidateEmployeeCaches();
   const { error } = await supabase().from("employees").update({ status }).eq("id", id);
   if (error) throw error;
 }
 
 export async function deleteEmployee(id: string): Promise<void> {
+  invalidateEmployeeCaches();
   const { error } = await supabase().from("employees").delete().eq("id", id);
   if (error) throw error;
 }
@@ -182,6 +195,13 @@ export async function assertEmployeeInScope(employeeId: string, scope: EmployeeS
  */
 export async function listEmployeeCallReminders(opts: { limit?: number; assignedAdminUserId?: string } = {}): Promise<CallReminder[]> {
   const { limit = 50, assignedAdminUserId } = opts;
+  const cacheKey = `${assignedAdminUserId || "all"}_${limit}`;
+  const now = Date.now();
+  const cached = employeeRemindersCache.get(cacheKey);
+  if (cached && cached.expires > now) {
+    return cached.data;
+  }
+
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const sb = supabase();
 
@@ -244,23 +264,34 @@ export async function listEmployeeCallReminders(opts: { limit?: number; assigned
     });
   }
 
-  return out.slice(0, limit);
+  const res = out.slice(0, limit);
+  employeeRemindersCache.set(cacheKey, { data: res, expires: now + 15_000 });
+  return res;
 }
 
 /** Distinct job_role values + counts for the employee filter pill bar. */
 export async function listJobCounts(opts: { assignedAdminUserId?: string } = {}): Promise<Array<{ job_role: string; count: number }>> {
+  const cacheKey = opts.assignedAdminUserId || "all";
+  const now = Date.now();
+  const cached = jobCountsCache.get(cacheKey);
+  if (cached && cached.expires > now) {
+    return cached.data;
+  }
+
   let q = supabase().from("employees").select("job_role");
   if (opts.assignedAdminUserId) q = q.eq("assigned_admin_user_id", opts.assignedAdminUserId);
-  const { data, error } = await q;
+  const { data, error } = await q.limit(5000);
   if (error) throw error;
   const counts = new Map<string, number>();
   for (const r of (data ?? []) as { job_role: string | null }[]) {
     if (!r.job_role) continue;
     counts.set(r.job_role, (counts.get(r.job_role) ?? 0) + 1);
   }
-  return [...counts.entries()]
+  const res = [...counts.entries()]
     .map(([job_role, count]) => ({ job_role, count }))
     .sort((a, b) => b.count - a.count || a.job_role.localeCompare(b.job_role));
+  jobCountsCache.set(cacheKey, { data: res, expires: now + 20_000 });
+  return res;
 }
 
 export interface BulkInsertEmployeesOptions {
@@ -285,6 +316,7 @@ export async function bulkInsertEmployees(
   employees: NewEmployee[],
   options: BulkInsertEmployeesOptions = {},
 ): Promise<BulkInsertEmployeesResult> {
+  invalidateEmployeeCaches();
   const duplicateStrategy = options.duplicateStrategy ?? "skip";
   const assignedAdminUserId = options.assignedAdminUserId || null;
 

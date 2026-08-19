@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft,
   Phone,
   MapPin,
   User,
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import AdminShell from "../../AdminShell";
 import AdminError from "../../AdminError";
+import AdminBackButton from "@/components/AdminBackButton";
 import EmployeeStatusControl from "../EmployeeStatusControl";
 import DeleteEmployeeButton from "./DeleteEmployeeButton";
 import WhatsAppLink from "@/components/WhatsAppLink";
@@ -74,28 +74,31 @@ function Section({
 
 export default async function EmployeeDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ returnTo?: string }>;
 }) {
   const { id } = await params;
+  const { returnTo } = (await searchParams) ?? {};
   const me = await currentAdmin();
+  if (!me) notFound();
 
   let emp;
   try {
     emp = await getEmployee(id);
+    if (!emp) notFound();
+    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+    await assertEmployeeInScope(id, scope);
   } catch (err) {
     return (
       <AdminShell require="employees.view" section="employees">
-        <AdminError err={err} />
+        <div className="max-w-3xl space-y-4">
+          <AdminBackButton fallbackHref="/admin/employees" label="Back" />
+          <AdminError err={err} />
+        </div>
       </AdminShell>
     );
-  }
-  if (!emp) notFound();
-
-  // Scope guard: non-super-admins may only open employees assigned to them.
-  if (me) {
-    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
-    if (!(await assertEmployeeInScope(id, scope))) notFound();
   }
 
   const [aadhaarUrl, profileUrl, signatureUrl] = await Promise.all([
@@ -109,16 +112,31 @@ export default async function EmployeeDetailPage({
     listLeadLists({ assignedAdminUserId: emp.assigned_admin_user_id ?? undefined }).catch(() => []),
   ]);
 
+  const fallbackHref =
+    returnTo && returnTo.startsWith("/admin")
+      ? returnTo
+      : me?.role === "super_admin"
+      ? "/admin/employees"
+      : "/admin/my-employees";
+
+  const backLabel =
+    returnTo?.includes("my-employees")
+      ? "Back to My Employees"
+      : me?.role === "super_admin"
+      ? "All employees"
+      : "My employees";
+
   return (
     <AdminShell require="employees.view" section="employees">
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
-        <Link href="/admin/employees" className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white">
-          <ArrowLeft size={13} /> {me?.role === "super_admin" ? "All employees" : "My employees"}
-        </Link>
+        <AdminBackButton
+          fallbackHref={fallbackHref}
+          label={backLabel}
+        />
         <div className="flex items-center gap-3">
           <EmployeeStatusControl id={emp.id} status={emp.status} color={STATUS_COLOR[emp.status]} />
           <Link
-            href={`/admin/employees/${emp.id}/edit`}
+            href={`/admin/employees/${emp.id}/edit${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 text-white/80 hover:text-white hover:border-white/30"
           >
             <Pencil size={12} /> Edit

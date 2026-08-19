@@ -26,9 +26,20 @@ export interface DiscountConfig {
   badgesByLineId: Record<string, boolean>;
 }
 
+let discountCache: { data: DiscountConfig; expires: number } | null = null;
+
+export function invalidateDiscountCache(): void {
+  discountCache = null;
+}
+
 // Per-line discount % + badge on/off from service_discounts. Deduped per
 // request. Falls back to zeros / badges-on if the table is unreadable.
 export const getDiscountConfig = cache(async (): Promise<DiscountConfig> => {
+  const now = Date.now();
+  if (discountCache && discountCache.expires > now) {
+    return discountCache.data;
+  }
+
   const percents: ServiceDiscounts = { ...ZERO_DISCOUNTS };
   const badges: BadgeFlags = allBadgesOn();
   const percentsByLineId: Record<string, number> = {};
@@ -51,7 +62,9 @@ export const getDiscountConfig = cache(async (): Promise<DiscountConfig> => {
   } catch {
     // leave defaults
   }
-  return { percents, badges, percentsByLineId, badgesByLineId };
+  const res = { percents, badges, percentsByLineId, badgesByLineId };
+  discountCache = { data: res, expires: now + 60_000 };
+  return res;
 });
 
 /**
@@ -75,6 +88,7 @@ export async function setServiceDiscount(
   percent: number,
   badgeEnabled: boolean,
 ): Promise<void> {
+  invalidateDiscountCache();
   if (!lineId) throw new Error("Missing line id.");
   const pct = Math.max(0, Math.min(100, Math.round(percent)));
   const { error } = await supabase()

@@ -1,8 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import AdminShell from "../../../AdminShell";
 import AdminError from "../../../AdminError";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import AdminBackButton from "@/components/AdminBackButton";
 import { getLeadList } from "@/lib/leadLists";
 import { updateLeadListAction } from "../../actions";
 import { listAssignableAdminUsers } from "@/lib/admin-users";
@@ -47,12 +46,11 @@ export default async function EditLeadListPage({
   return (
     <AdminShell require="leads.manage">
       <div className="max-w-5xl">
-        <Link
-          href={`/admin/lists/${id}`}
+        <AdminBackButton
+          fallbackHref={`/admin/lists/${id}`}
+          label="Back to list"
           className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4"
-        >
-          <ArrowLeft size={13} /> Back to list
-        </Link>
+        />
         <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
           Edit Lead List
         </h1>

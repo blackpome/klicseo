@@ -177,14 +177,25 @@ export async function getLeadList(listId: string): Promise<LeadListRow | null> {
 export async function addLeadsToList(listId: string, leadIds: string[]): Promise<void> {
   if (leadIds.length === 0) return;
 
-  const items = leadIds.map(leadId => ({
+  const uniqueLeadIds = Array.from(new Set(leadIds));
+
+  // 1. Enforce exclusive 1-to-1 list rule: remove these leads from any previous lists
+  const { error: delError } = await supabase()
+    .from("lead_list_items")
+    .delete()
+    .in("lead_id", uniqueLeadIds);
+
+  if (delError) throw delError;
+
+  // 2. Insert into target list
+  const items = uniqueLeadIds.map((leadId) => ({
     list_id: listId,
-    lead_id: leadId
+    lead_id: leadId,
   }));
 
   const { error } = await supabase()
     .from("lead_list_items")
-    .upsert(items, { onConflict: "list_id,lead_id", ignoreDuplicates: true });
+    .insert(items);
 
   if (error) throw error;
 }

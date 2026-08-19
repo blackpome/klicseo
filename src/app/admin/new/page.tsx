@@ -1,4 +1,5 @@
 import AdminShell from "../AdminShell";
+import AdminBackButton from "@/components/AdminBackButton";
 import NewLeadForm from "./NewLeadForm";
 import { listKnownAreas } from "@/lib/area";
 import { listLeadLists } from "@/lib/leadLists";
@@ -21,6 +22,11 @@ export default async function NewLeadPage() {
   return (
     <AdminShell require="leads.manage">
       <div className="max-w-5xl">
+        <AdminBackButton
+          fallbackHref={isSuperAdmin ? "/admin" : "/admin/my-lists"}
+          label={isSuperAdmin ? "Back to all leads" : "Back to my lists"}
+          className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4"
+        />
         <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
           Add Lead
         </h1>

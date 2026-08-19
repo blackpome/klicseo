@@ -244,7 +244,18 @@ function parseBooking(raw: string): BookingConfig {
   return out;
 }
 
+let siteSettingsCache: { data: SiteSettings; expires: number } | null = null;
+
+export function invalidateSiteSettingsCache(): void {
+  siteSettingsCache = null;
+}
+
 export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
+  const now = Date.now();
+  if (siteSettingsCache && siteSettingsCache.expires > now) {
+    return siteSettingsCache.data;
+  }
+
   const out: SiteSettings = { ...SITE_DEFAULTS };
   // Pull the dynamic catalog in parallel. A failure here shouldn't break
   // the rest of site settings — leave catalog as null and consumers fall
@@ -295,11 +306,13 @@ export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
     // keep defaults
   }
   out.catalog = await catalogPromise;
+  siteSettingsCache = { data: out, expires: now + 60_000 };
   return out;
 });
 
 // Save custom lead statuses configured by admin
 export async function setLeadStatusSettings(statuses: CustomLeadStatus[]): Promise<void> {
+  invalidateSiteSettingsCache();
   const row = {
     key: KEYS.leadStatuses,
     value: JSON.stringify(statuses),
@@ -313,6 +326,7 @@ export async function setLeadStatusSettings(statuses: CustomLeadStatus[]): Promi
 export async function setSiteSettings(
   s: Pick<SiteSettings, "startPrice" | "startPriceSuffix" | "phone" | "whatsapp" | "cardPrices" | "social" | "footerLocation">,
 ): Promise<void> {
+  invalidateSiteSettingsCache();
   const rows = [
     { key: KEYS.startPrice, value: String(Math.max(0, Math.round(s.startPrice))) },
     { key: "start_price_suffix", value: s.startPriceSuffix.trim() },
@@ -334,6 +348,7 @@ async function getServiceRadius(): Promise<ServiceRadius> {
 }
 
 async function saveServiceRadius(r: ServiceRadius): Promise<void> {
+  invalidateSiteSettingsCache();
   const { error } = await supabase()
     .from("app_settings")
     .upsert({ key: KEYS.serviceRadius, value: JSON.stringify(r), updated_at: new Date().toISOString() }, { onConflict: "key" });
@@ -363,6 +378,7 @@ export { SERVICE_RADIUS_KEYS };
 // --- message templates --------------------------------------------------
 
 export async function setMessageTemplates(t: MessageTemplates): Promise<void> {
+  invalidateSiteSettingsCache();
   // Filter to known keys only; tolerate unknowns the admin might post.
   const safe: Record<string, string> = {};
   for (const def of MESSAGE_TEMPLATE_DEFS) {
@@ -382,6 +398,7 @@ export async function setMessageTemplates(t: MessageTemplates): Promise<void> {
 // --- booking wizard config ---------------------------------------------
 
 export async function setBookingConfig(booking: BookingConfig): Promise<void> {
+  invalidateSiteSettingsCache();
   const { error } = await supabase()
     .from("app_settings")
     .upsert({ key: KEYS.booking, value: JSON.stringify(booking), updated_at: new Date().toISOString() }, { onConflict: "key" });
@@ -396,6 +413,7 @@ async function getMedia(): Promise<Media> {
 }
 
 async function saveMedia(media: Media): Promise<void> {
+  invalidateSiteSettingsCache();
   const { error } = await supabase()
     .from("app_settings")
     .upsert({ key: KEYS.media, value: JSON.stringify(media), updated_at: new Date().toISOString() }, { onConflict: "key" });

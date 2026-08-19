@@ -14,7 +14,7 @@ import {
   removeLeadFromList,
   getLeadsInList,
 } from "@/lib/leadLists";
-import { listLeads } from "@/lib/leads";
+import { listLeads, mapLeadIdsToLists } from "@/lib/leads";
 import { listAssignableAdminUsers } from "@/lib/admin-users";
 import { logAudit } from "@/lib/audit";
 import type { LeadStatus } from "@/lib/leads-shared";
@@ -143,6 +143,8 @@ export async function addLeadsToListAction(formData: FormData): Promise<{ error?
     });
 
     revalidatePath(`/admin/lists/${listId}`);
+    revalidatePath("/admin/lists");
+    revalidatePath("/admin/my-lists");
     revalidatePath("/admin"); // Revalidate leads list in case we show list info there
     return { error: undefined };
   } catch (err) {
@@ -261,10 +263,16 @@ export async function searchLeadsForListAction(search: string): Promise<any[]> {
   if (!q) return [];
 
   try {
-    return await listLeads({
+    const leads = await listLeads({
       search: q,
       limit: 20,
     });
+    if (leads.length === 0) return [];
+    const listMap = await mapLeadIdsToLists(leads.map((l) => l.id));
+    return leads.map((l) => ({
+      ...l,
+      currentListNames: listMap.get(l.id) ?? [],
+    }));
   } catch (err) {
     console.error("Failed to search leads for list:", err);
     return [];

@@ -30,20 +30,27 @@ export async function setStatusAction(formData: FormData) {
   await updateLeadStatus(id, status);
   await logAudit("lead.status", { entity: "lead", entityId: id, summary: `Set lead status → ${status}` });
   
-  // Trigger Serverless Queue Auto-Refill check immediately
-  await processQueueAutoRefills();
+  // Trigger Serverless Queue Auto-Refill in the background without blocking the UI response
+  void processQueueAutoRefills();
 
   revalidatePath("/admin");
+  revalidatePath(`/admin/${id}`);
+  revalidatePath("/admin/lists");
+  revalidatePath("/admin/my-lists");
 }
 
 export async function deleteLeadAction(formData: FormData) {
   await requirePermission("leads.manage");
   const id = String(formData.get("id") ?? "");
+  const returnTo = String(formData.get("returnTo") ?? "");
   if (!id) return;
   await deleteLead(id);
   await logAudit("lead.delete", { entity: "lead", entityId: id, summary: "Deleted lead" });
   revalidatePath("/admin");
-  redirect("/admin");
+  revalidatePath("/admin/lists");
+  revalidatePath("/admin/my-lists");
+  const target = returnTo && returnTo.startsWith("/admin") ? returnTo : "/admin";
+  redirect(target);
 }
 
 export async function updateLeadNotesAction(formData: FormData) {
@@ -181,6 +188,7 @@ export async function createLeadAction(
 export async function updateLeadAction(_prev: { error?: string }, formData: FormData) {
   await requirePermission("leads.manage");
   const id = String(formData.get("id") ?? "");
+  const returnTo = String(formData.get("returnTo") ?? "");
   if (!id) return { error: "Missing lead id." };
 
   const data = readLeadFromForm(formData, await getServiceDiscounts());
@@ -198,7 +206,10 @@ export async function updateLeadAction(_prev: { error?: string }, formData: Form
   });
   revalidatePath("/admin");
   revalidatePath(`/admin/${id}`);
-  redirect(`/admin/${id}`);
+  revalidatePath("/admin/lists");
+  revalidatePath("/admin/my-lists");
+  const target = `/admin/${id}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
+  redirect(target);
 }
 
 export interface BulkImportActionPayload {

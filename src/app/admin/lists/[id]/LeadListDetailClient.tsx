@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
-import { useRef, useEffect } from "react";
+import { useState, useTransition, useMemo, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Edit, Plus, Trash2, UploadCloud, RotateCcw, CheckCircle2, MapPin } from "lucide-react";
+import AdminBackButton from "@/components/AdminBackButton";
 import LeadStatusControl from "../../LeadStatusControl";
 import DeleteLeadListButton from "../DeleteLeadListButton";
 import RecycleLeadsModal from "../RecycleLeadsModal";
@@ -35,6 +35,7 @@ type LeadForList = {
   pincode?: string | null;
   address?: string | null;
   status: LeadStatus;
+  currentListNames?: string[];
 };
 
 const LIST_DETAIL_COLUMNS: ColumnDefinition[] = [
@@ -353,9 +354,11 @@ export default function LeadListDetailClient({
         </div>
       )}
 
-      <Link href={isSuperAdmin ? "/admin/lists" : "/admin/my-lists"} className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4">
-        <ArrowLeft size={13} /> {isSuperAdmin ? "Back to all lists" : "Back to my lists"}
-      </Link>
+      <AdminBackButton
+        fallbackHref={isSuperAdmin ? "/admin/lists" : "/admin/my-lists"}
+        label={isSuperAdmin ? "Back to all lists" : "Back to my lists"}
+        className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4"
+      />
 
       <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
         <div>
@@ -574,7 +577,18 @@ export default function LeadListDetailClient({
                         {alreadyInList || isSelected ? <Check size={12} /> : null}
                       </span>
                       <span className="flex-1 ml-3">
-                        <span className="block text-white/80 font-medium">{lead.name ?? "(unnamed)"}</span>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="block text-white/80 font-medium">{lead.name ?? "(unnamed)"}</span>
+                          {alreadyInList ? (
+                            <span className="text-[9px] text-white/40 italic">(In this list)</span>
+                          ) : lead.currentListNames && lead.currentListNames.length > 0 ? (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/25 text-amber-300">
+                              In &quot;{lead.currentListNames[0]}&quot; (will move)
+                            </span>
+                          ) : (
+                            <span className="text-[9px] text-white/30">Unassigned</span>
+                          )}
+                        </div>
                         <span className="block text-white/50 text-[10px]">
                           {lead.phone ?? "-"} | {lead.service ?? "-"} | {lead.vehicle_type ?? "-"}
                         </span>
@@ -662,7 +676,10 @@ export default function LeadListDetailClient({
                 <tr key={lead.id} className="border-t border-white/5 hover:bg-white/[0.02]">
                   <td className="px-3 py-2 text-white/40 text-xs tabular-nums">{index + 1}</td>
                   <td className="px-3 py-2">
-                    <Link href={`/admin/${lead.id}`} className="hover:text-[#C9A84C] hover:underline font-medium text-white">
+                    <Link
+                      href={`/admin/${lead.id}?returnTo=${encodeURIComponent(`/admin/lists/${list.id}`)}&fromListName=${encodeURIComponent(list.name)}`}
+                      className="hover:text-[#C9A84C] hover:underline font-medium text-white"
+                    >
                       {lead.name ?? "(unnamed)"}
                     </Link>
                   </td>

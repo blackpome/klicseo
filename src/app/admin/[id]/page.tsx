@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
+import AdminBackButton from "@/components/AdminBackButton";
 import LeadStatusControl from "../LeadStatusControl";
 import LeadNotesEditor from "./LeadNotesEditor";
 import DeleteLeadButton from "./DeleteLeadButton";
@@ -126,10 +127,13 @@ function DetailRow({
 
 export default async function LeadDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ returnTo?: string; fromListName?: string }>;
 }) {
   const { id } = await params;
+  const { returnTo, fromListName } = (await searchParams) ?? {};
   const me = await currentAdmin();
   if (!me) notFound();
 
@@ -143,9 +147,7 @@ export default async function LeadDetailPage({
     return (
       <AdminShell require="leads.view">
         <div className="max-w-3xl space-y-4">
-          <Link href="/admin" className="text-xs text-white/50 hover:text-white inline-flex items-center gap-1">
-            <ArrowLeft size={13} /> Back
-          </Link>
+          <AdminBackButton fallbackHref="/admin" label="Back" />
           <AdminError err={err} />
         </div>
       </AdminShell>
@@ -170,17 +172,33 @@ export default async function LeadDetailPage({
       ? "Evening Shift (8 PM – 11 PM)"
       : "—";
 
+  const fallbackHref =
+    returnTo && returnTo.startsWith("/admin")
+      ? returnTo
+      : me?.role === "super_admin"
+      ? "/admin"
+      : "/admin/my-lists";
+
+  const backLabel =
+    fromListName
+      ? `Back to ${fromListName}`
+      : returnTo?.includes("my-lists")
+      ? "Back to My Lists"
+      : returnTo?.includes("/lists/")
+      ? "Back to List"
+      : me?.role === "super_admin"
+      ? "All Leads"
+      : "My Leads";
+
   return (
     <AdminShell require="leads.view">
       <div className="space-y-6">
         {/* Navigation & Header Toolbar */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <Link
-            href="/admin"
-            className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white transition-colors"
-          >
-            <ArrowLeft size={13} /> {me?.role === "super_admin" ? "All Leads" : "My Leads"}
-          </Link>
+          <AdminBackButton
+            fallbackHref={fallbackHref}
+            label={backLabel}
+          />
 
           <div className="flex items-center gap-2.5">
             <LeadStatusControl
@@ -191,13 +209,13 @@ export default async function LeadDetailPage({
             />
 
             <Link
-              href={`/admin/${lead.id}/edit`}
+              href={`/admin/${lead.id}/edit${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 text-white/80 hover:text-white hover:bg-white/10 transition-all"
             >
               <Pencil size={13} /> Edit
             </Link>
 
-            <DeleteLeadButton id={lead.id} />
+            <DeleteLeadButton id={lead.id} returnTo={fallbackHref} />
           </div>
         </div>
 

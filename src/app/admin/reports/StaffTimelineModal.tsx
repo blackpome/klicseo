@@ -211,7 +211,7 @@ export default function StaffTimelineModal({ isOpen, onClose, staff, date }: Pro
                       {evt.leadId && (
                         <div className="pt-1 flex justify-end">
                           <Link
-                            href={`/admin/${evt.leadId}`}
+                            href={`/admin/${evt.leadId}?returnTo=${encodeURIComponent("/admin/reports")}`}
                             target="_blank"
                             className="inline-flex items-center gap-1 text-[11px] text-amber-300 hover:text-amber-200 font-medium transition-colors"
                           >

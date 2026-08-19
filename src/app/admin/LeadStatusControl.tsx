@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { LEAD_STATUSES, LEAD_STATUS_LABEL, type LeadStatus } from "@/lib/leads-shared";
 import type { CustomLeadStatus } from "@/lib/site-settings-shared";
 import { setStatusAction } from "./actions";
@@ -17,10 +17,16 @@ export default function LeadStatusControl({
   customStatuses?: CustomLeadStatus[];
 }) {
   const [pending, start] = useTransition();
+  const [currentStatus, setCurrentStatus] = useState<LeadStatus>(status);
+
+  // Keep in sync if server props change externally
+  useEffect(() => {
+    setCurrentStatus(status);
+  }, [status]);
 
   const activeColor =
     color ||
-    customStatuses?.find((s) => s.id === status)?.color ||
+    customStatuses?.find((s) => s.id === currentStatus)?.color ||
     "#C9A84C";
 
   const options =
@@ -34,16 +40,26 @@ export default function LeadStatusControl({
 
   return (
     <select
-      value={status}
+      value={currentStatus}
       disabled={pending}
       onChange={(e) => {
         const next = e.target.value as LeadStatus;
+        setCurrentStatus(next);
         const fd = new FormData();
         fd.append("id", id);
         fd.append("status", next);
-        start(() => setStatusAction(fd));
+        start(async () => {
+          try {
+            await setStatusAction(fd);
+          } catch (err) {
+            console.error("Failed to update status:", err);
+            setCurrentStatus(status); // Revert to previous status on failure
+          }
+        });
       }}
-      className="text-xs font-semibold rounded-md px-2 py-1 bg-transparent border focus:outline-none cursor-pointer"
+      className={`text-xs font-semibold rounded-md px-2 py-1 bg-transparent border focus:outline-none cursor-pointer transition-opacity ${
+        pending ? "opacity-60" : "opacity-100"
+      }`}
       style={{ borderColor: `${activeColor}80`, color: activeColor }}
     >
       {options.map((s) => (

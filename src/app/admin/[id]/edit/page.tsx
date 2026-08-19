@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import AdminShell from "../../AdminShell";
 import AdminError from "../../AdminError";
+import AdminBackButton from "@/components/AdminBackButton";
 import LeadForm from "../../LeadForm";
 import { updateLeadAction } from "../../actions";
 import { getLead, assertLeadInScope } from "@/lib/leads";
@@ -11,10 +10,13 @@ import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 
 export default async function EditLeadPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ returnTo?: string }>;
 }) {
   const { id } = await params;
+  const { returnTo } = (await searchParams) ?? {};
   const me = await currentAdmin();
 
   let lead;
@@ -36,20 +38,25 @@ export default async function EditLeadPage({
   }
   const knownAreas = await listKnownAreas();
 
-  // useActionState passes (prevState, formData) — bind the id so the action
-  // knows which row to patch without needing a hidden input on the client.
+  const fallbackHref = `/admin/${id}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
+
+  // useActionState passes (prevState, formData) — bind the id and returnTo so the action
+  // knows which row to patch and where to return without needing client changes.
   async function action(prev: { error?: string }, formData: FormData) {
     "use server";
     formData.set("id", id);
+    if (returnTo) formData.set("returnTo", returnTo);
     return updateLeadAction(prev, formData);
   }
 
   return (
     <AdminShell require="leads.manage">
       <div className="max-w-5xl">
-        <Link href={`/admin/${id}`} className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4">
-          <ArrowLeft size={13} /> Back to lead
-        </Link>
+        <AdminBackButton
+          fallbackHref={fallbackHref}
+          label="Back to lead"
+          className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4"
+        />
         <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
           Edit Lead
         </h1>

@@ -46,6 +46,13 @@ vi.mock("@/lib/supabase", () => ({
 
       if (table === "lead_list_items") {
         return {
+          delete: () => ({
+            in: () => Promise.resolve({ error: null }),
+          }),
+          insert: (data: unknown) => {
+            mockInsert(data);
+            return Promise.resolve({ error: null });
+          },
           upsert: (data: unknown, opts: unknown) => {
             mockUpsert(data, opts);
             return Promise.resolve({ error: null });
@@ -116,12 +123,10 @@ describe("bulkInsertLeads", () => {
     expect(res.total).toBe(1);
     expect(res.inserted).toBe(1);
     expect(res.skipped).toBe(0);
-    expect(mockInsert).toHaveBeenCalled();
-    expect(mockUpsert).toHaveBeenCalledWith(
+    expect(mockInsert).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({ list_id: "test-list-123", lead_id: "new-lead-1" }),
       ]),
-      expect.anything(),
     );
   });
 });

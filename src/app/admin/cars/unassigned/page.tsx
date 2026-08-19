@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Car as CarIcon } from "lucide-react";
+import { Car as CarIcon } from "lucide-react";
 import AdminShell from "../../AdminShell";
 import AdminError from "../../AdminError";
+import AdminBackButton from "@/components/AdminBackButton";
 import { currentAdmin } from "@/lib/admin-auth";
 import { listUnassignedCars } from "@/lib/cars";
 import { listTiersWithCounts, type PriceTier } from "@/lib/priceTiers";
@@ -41,9 +41,7 @@ export default async function UnassignedCarsPage({
   return (
     <AdminShell>
       <div className="space-y-5">
-        <Link href="/admin/cars" className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white">
-          <ArrowLeft size={13} /> Back to tiers
-        </Link>
+        <AdminBackButton fallbackHref="/admin/cars" label="Back to tiers" className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white" />
 
         <div className="flex items-start gap-3">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#C9A84C]/15 ring-1 ring-[#C9A84C]/25">

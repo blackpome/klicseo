@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import AdminShell from "../../AdminShell";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import AdminBackButton from "@/components/AdminBackButton";
 import { createLeadListAction } from "../actions";
 import LeadListForm from "../LeadListForm";
 import { listAssignableAdminUsers } from "@/lib/admin-users";
@@ -23,9 +22,11 @@ export default async function NewLeadListPage() {
   return (
     <AdminShell require="leads.manage">
       <div className="max-w-5xl">
-        <Link href="/admin/lists" className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4">
-          <ArrowLeft size={13} /> Back to lists
-        </Link>
+        <AdminBackButton
+          fallbackHref="/admin/lists"
+          label="Back to lists"
+          className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4"
+        />
         <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--font-playfair)" }}>
           Create Lead List
         </h1>

@@ -1,7 +1,7 @@
 import "server-only";
 import { supabase } from "./supabase";
 import { sealFields, unsealFields, unseal, phoneHash, normalizePhone } from "./crypto";
-import { areaFromPincode } from "./area";
+import { areaFromPincode, invalidateAreaCountsCache } from "./area";
 import type { CallReminder, LeadStatus, LeadSource } from "./leads-shared";
 import type { LeadScope } from "./admin-auth";
 
@@ -18,6 +18,18 @@ export const ENCRYPTED_LEAD_FIELDS = [
   "gate_access_notes",
   "notes",
 ] as const;
+
+// In-memory short TTL caches for aggregate metrics to prevent massive DB scans on every click
+const statusSummaryCache = new Map<string, { data: LeadStatusSummary; expires: number }>();
+const serviceCountsCache = new Map<string, { data: Array<{ service: string; count: number }>; expires: number }>();
+const callRemindersCache = new Map<string, { data: CallReminder[]; expires: number }>();
+
+export function invalidateLeadCaches(): void {
+  statusSummaryCache.clear();
+  serviceCountsCache.clear();
+  callRemindersCache.clear();
+  invalidateAreaCountsCache();
+}
 
 export interface LeadRow {
   id: string;
@@ -79,6 +91,7 @@ export type NewLead = Omit<LeadRow, "id" | "created_at" | "status" | "price_base
 };
 
 export async function insertLead(lead: NewLead): Promise<LeadRow> {
+  invalidateLeadCaches();
   const payload: Record<string, unknown> = { ...lead, status: lead.status ?? "new" };
   // For leads inserted directly (not via draft promotion), submitted_at = now.
   // Drafts get submitted_at stamped at promotion time instead.
@@ -123,6 +136,13 @@ function sanitizeSearch(raw: string): string {
 
 /** Distinct service values + counts for the lead filter pill bar. */
 export async function listServiceCounts(assignedAdminUserId?: string): Promise<Array<{ service: string; count: number }>> {
+  const cacheKey = assignedAdminUserId || "all";
+  const now = Date.now();
+  const cached = serviceCountsCache.get(cacheKey);
+  if (cached && cached.expires > now) {
+    return cached.data;
+  }
+
   // If scoped, first resolve the lead ids the admin can see.
   let allowedLeadIds: string[] | null = null;
   if (assignedAdminUserId) {
@@ -139,7 +159,7 @@ export async function listServiceCounts(assignedAdminUserId?: string): Promise<A
 
   let q = supabase().from("leads").select("service");
   if (allowedLeadIds) q = q.in("id", allowedLeadIds);
-  const { data, error } = await q.limit(10000);
+  const { data, error } = await q.limit(5000);
   if (error) throw error;
 
   const counts = new Map<string, number>();
@@ -147,9 +167,11 @@ export async function listServiceCounts(assignedAdminUserId?: string): Promise<A
     if (!r.service) continue;
     counts.set(r.service, (counts.get(r.service) ?? 0) + 1);
   }
-  return [...counts.entries()]
+  const res = [...counts.entries()]
     .map(([service, count]) => ({ service, count }))
     .sort((a, b) => b.count - a.count || a.service.localeCompare(b.service));
+  serviceCountsCache.set(cacheKey, { data: res, expires: now + 20_000 });
+  return res;
 }
 
 export interface LeadStatusSummary {
@@ -168,6 +190,13 @@ export interface LeadStatusSummary {
 export async function listLeadStatusSummary(
   assignedAdminUserId?: string,
 ): Promise<LeadStatusSummary> {
+  const cacheKey = assignedAdminUserId || "all";
+  const now = Date.now();
+  const cached = statusSummaryCache.get(cacheKey);
+  if (cached && cached.expires > now) {
+    return cached.data;
+  }
+
   let allowedLeadIds: string[] | null = null;
   if (assignedAdminUserId) {
     const { data: items, error: itemsErr } = await supabase()
@@ -185,7 +214,7 @@ export async function listLeadStatusSummary(
 
   let q = supabase().from("leads").select("status");
   if (allowedLeadIds) q = q.in("id", allowedLeadIds);
-  const { data, error } = await q.limit(10000);
+  const { data, error } = await q.limit(5000);
   if (error) throw error;
 
   const summary: LeadStatusSummary = {
@@ -205,6 +234,7 @@ export async function listLeadStatusSummary(
     summary.total++;
   }
 
+  statusSummaryCache.set(cacheKey, { data: summary, expires: now + 20_000 });
   return summary;
 }
 
@@ -337,6 +367,7 @@ export async function getLead(id: string): Promise<LeadRow | null> {
 export type LeadUpdate = Partial<Omit<LeadRow, "id" | "created_at" | "source">>;
 
 export async function updateLead(id: string, patch: LeadUpdate): Promise<void> {
+  invalidateLeadCaches();
   const payload: Record<string, unknown> = { ...patch };
   // Keep phone_hash in lock-step with any phone update.
   if ("phone" in payload) payload.phone_hash = phoneHash(payload.phone as string | null);
@@ -350,11 +381,13 @@ export async function updateLead(id: string, patch: LeadUpdate): Promise<void> {
 }
 
 export async function updateLeadStatus(id: string, status: LeadStatus): Promise<void> {
+  invalidateLeadCaches();
   const { error } = await supabase().from("leads").update({ status }).eq("id", id);
   if (error) throw error;
 }
 
 export async function deleteLead(id: string): Promise<void> {
+  invalidateLeadCaches();
   const { error } = await supabase().from("leads").delete().eq("id", id);
   if (error) throw error;
 }
@@ -424,6 +457,7 @@ export async function updateLeadDraft(id: string, patch: LeadUpdate): Promise<bo
  *  when the final submit includes a draftId). Returns the updated lead, or
  *  null if the draft no longer exists / isn't a draft. */
 export async function promoteLeadDraft(id: string, patch: LeadUpdate): Promise<LeadRow | null> {
+  invalidateLeadCaches();
   const { data, error } = await supabase().from("leads").select("status").eq("id", id).maybeSingle();
   if (error) throw error;
   if (!data || (data as { status: string }).status !== "draft") return null;
@@ -505,6 +539,12 @@ function scheduledMs(date: string | null, time: string | null, tz = "Asia/Kolkat
 // A callback scheduled for a future date stays hidden until that day.
 export async function listCallReminders(opts: { limit?: number; assignedAdminUserId?: string } = {}): Promise<CallReminder[]> {
   const { limit = 50, assignedAdminUserId } = opts;
+  const cacheKey = `${assignedAdminUserId || "all"}_${limit}`;
+  const now = Date.now();
+  const cached = callRemindersCache.get(cacheKey);
+  if (cached && cached.expires > now) {
+    return cached.data;
+  }
 
   // When scoped, first resolve the lead ids the admin is allowed to see, then
   // fetch only those leads' reminders.
@@ -519,16 +559,17 @@ export async function listCallReminders(opts: { limit?: number; assignedAdminUse
     if (allowedLeadIds.size === 0) return [];
   }
 
+  const today = todayIST();
   let q = supabase()
     .from("leads")
     .select("id,name,phone,status,callback_date,callback_time,client_timezone,created_at")
+    .or(`status.eq.new,and(callback_date.not.is.null,callback_date.lte.${today})`)
     .order("created_at", { ascending: false })
-    .limit(300);
+    .limit(limit * 2);
   if (allowedLeadIds) q = q.in("id", Array.from(allowedLeadIds));
   const { data, error } = await q;
   if (error) throw error;
 
-  const today = todayIST();
   type Row = {
     id: string; name: string | null; phone: string | null;
     status: LeadStatus; callback_date: string | null; callback_time: string | null;
@@ -569,7 +610,9 @@ export async function listCallReminders(opts: { limit?: number; assignedAdminUse
   const dueClean: CallReminder[] = due.map((r) => ({
     id: r.id, name: r.name, phone: r.phone, reason: r.reason, kind: r.kind, href: r.href,
   }));
-  return [...dueClean, ...fresh].slice(0, limit);
+  const res = [...dueClean, ...fresh].slice(0, limit);
+  callRemindersCache.set(cacheKey, { data: res, expires: now + 15_000 });
+  return res;
 }
 
 // --- Bulk Import Engine -----------------------------------------------------
@@ -595,6 +638,7 @@ export async function bulkInsertLeads(
     listId?: string | null;
   } = {},
 ): Promise<BulkInsertLeadResult> {
+  invalidateLeadCaches();
   const { duplicateStrategy = "skip", listId } = opts;
   const errors: string[] = [];
   const createdLeadIds: string[] = [];
@@ -716,22 +760,32 @@ export async function bulkInsertLeads(
     }
   }
 
-  // 5. Link all touched leads to target list if specified
+  // 5. Link all touched leads to target list if specified (exclusive 1-to-1 list membership)
   if (listId && allLeadIds.length > 0) {
     const uniqueIds = Array.from(new Set(allLeadIds));
-    const items = uniqueIds.map((leadId) => ({
-      list_id: listId,
-      lead_id: leadId,
-    }));
-    // Batch upsert into lead_list_items
-    for (let i = 0; i < items.length; i += 200) {
-      const itemChunk = items.slice(i, i + 200);
-      const { error } = await supabase()
+    try {
+      // Remove from any previous lists first
+      await supabase()
         .from("lead_list_items")
-        .upsert(itemChunk, { onConflict: "list_id,lead_id", ignoreDuplicates: true });
-      if (error) {
-        errors.push(`Failed to attach leads to list: ${error.message}`);
+        .delete()
+        .in("lead_id", uniqueIds);
+
+      const items = uniqueIds.map((leadId) => ({
+        list_id: listId,
+        lead_id: leadId,
+      }));
+
+      for (let i = 0; i < items.length; i += 200) {
+        const itemChunk = items.slice(i, i + 200);
+        const { error } = await supabase()
+          .from("lead_list_items")
+          .insert(itemChunk);
+        if (error) {
+          errors.push(`Failed to attach leads to list: ${error.message}`);
+        }
       }
+    } catch (err) {
+      errors.push(`Failed to attach leads to list: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
