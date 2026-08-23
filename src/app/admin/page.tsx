@@ -30,7 +30,7 @@ import { getSiteSettings } from "@/lib/site-settings";
 import { DEFAULT_LEAD_STATUS_ITEMS, type CustomLeadStatus } from "@/lib/site-settings-shared";
 import { listLeadLists } from "@/lib/leadLists";
 import type { LeadListRow } from "@/lib/leadLists-shared";
-import { currentAdmin } from "@/lib/admin-auth";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 import { getAdminUser } from "@/lib/admin-users";
 import ExportToolbar from "@/components/ExportToolbar";
 import Pagination from "@/components/Pagination";
@@ -98,11 +98,8 @@ export default async function AdminLeadsPage({
   const pageSize = Math.max(1, Math.min(100, parseInt(pageSizeParam ?? "25", 10) || 25));
 
   const isSuperAdmin = me?.role === "super_admin";
-  const assignedAdminUserId = isSuperAdmin
-    ? undefined
-    : me
-    ? (await getAdminUser(me.email))?.id ?? undefined
-    : undefined;
+  const scope = me ? ((await resolveScope(me)) ?? { kind: "all" as const }) : { kind: "all" as const };
+  const assignedAdminUserId = scope.kind === "assigned" ? scope.adminUserId : undefined;
 
   let paginated;
   let statusSummary;
@@ -123,10 +120,15 @@ export default async function AdminLeadsPage({
         page,
         pageSize,
       }),
-      listLeadStatusSummary(assignedAdminUserId),
-      listAreasWithCounts(),
+      listLeadStatusSummary({
+        assignedAdminUserId,
+        search: q,
+        area: areaFilter,
+        service: serviceFilter,
+      }),
+      listAreasWithCounts(assignedAdminUserId),
       canManageLists ? listLeadLists({ assignedAdminUserId }) : Promise.resolve([]),
-      listServiceCounts(assignedAdminUserId),
+      listServiceCounts({ assignedAdminUserId, area: areaFilter }),
     ]);
 
     if (isSuperAdmin && paginated.leads.length > 0) {

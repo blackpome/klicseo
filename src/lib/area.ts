@@ -40,27 +40,38 @@ export function invalidateAreaCountsCache(): void {
 }
 
 /** Distinct areas + lead counts, for the filter pill bar on /admin. */
-export async function listAreasWithCounts(): Promise<Array<{ area: string; count: number }>> {
-  const now = Date.now();
-  if (cachedAreas && cachedAreas.expires > now) {
-    return cachedAreas.data;
+export async function listAreasWithCounts(
+  assignedAdminUserId?: string,
+): Promise<Array<{ area: string; count: number }>> {
+  let allowedLeadIds: string[] | null = null;
+  if (assignedAdminUserId) {
+    const { data: items, error: itemsErr } = await supabase()
+      .from("lead_list_items")
+      .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
+      .eq("lead_lists.assigned_admin_user_id", assignedAdminUserId);
+    if (itemsErr) throw itemsErr;
+    allowedLeadIds = Array.from(
+      new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id)),
+    );
+    if (allowedLeadIds.length === 0) return [];
   }
-  const { data, error } = await supabase()
+
+  let q = supabase()
     .from("leads")
     .select("area")
-    .not("area", "is", null)
-    .limit(5000);
+    .not("area", "is", null);
+  if (allowedLeadIds) q = q.in("id", allowedLeadIds);
+
+  const { data, error } = await q;
   if (error) throw error;
   const counts = new Map<string, number>();
   for (const r of (data ?? []) as { area: string | null }[]) {
     if (!r.area) continue;
     counts.set(r.area, (counts.get(r.area) ?? 0) + 1);
   }
-  const res = [...counts.entries()]
+  return [...counts.entries()]
     .map(([area, count]) => ({ area, count }))
     .sort((a, b) => b.count - a.count || a.area.localeCompare(b.area));
-  cachedAreas = { data: res, expires: now + 30_000 };
-  return res;
 }
 
 /** Canonical area list from the lookup table — used for autocomplete suggestions

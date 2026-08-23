@@ -134,22 +134,25 @@ function sanitizeSearch(raw: string): string {
   return raw.replace(/[,()"'\\*]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+export interface ListServiceCountsOptions {
+  assignedAdminUserId?: string;
+  area?: string;
+}
+
 /** Distinct service values + counts for the lead filter pill bar. */
-export async function listServiceCounts(assignedAdminUserId?: string): Promise<Array<{ service: string; count: number }>> {
-  const cacheKey = assignedAdminUserId || "all";
-  const now = Date.now();
-  const cached = serviceCountsCache.get(cacheKey);
-  if (cached && cached.expires > now) {
-    return cached.data;
-  }
+export async function listServiceCounts(
+  opts: ListServiceCountsOptions | string = {},
+): Promise<Array<{ service: string; count: number }>> {
+  const options: ListServiceCountsOptions =
+    typeof opts === "string" ? { assignedAdminUserId: opts } : opts;
 
   // If scoped, first resolve the lead ids the admin can see.
   let allowedLeadIds: string[] | null = null;
-  if (assignedAdminUserId) {
+  if (options.assignedAdminUserId) {
     const { data: items, error: itemsErr } = await supabase()
       .from("lead_list_items")
       .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
-      .eq("lead_lists.assigned_admin_user_id", assignedAdminUserId);
+      .eq("lead_lists.assigned_admin_user_id", options.assignedAdminUserId);
     if (itemsErr) throw itemsErr;
     allowedLeadIds = Array.from(
       new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id)),
@@ -159,7 +162,8 @@ export async function listServiceCounts(assignedAdminUserId?: string): Promise<A
 
   let q = supabase().from("leads").select("service");
   if (allowedLeadIds) q = q.in("id", allowedLeadIds);
-  const { data, error } = await q.limit(5000);
+  if (options.area && options.area !== "all") q = q.eq("area", options.area);
+  const { data, error } = await q;
   if (error) throw error;
 
   const counts = new Map<string, number>();
@@ -167,11 +171,9 @@ export async function listServiceCounts(assignedAdminUserId?: string): Promise<A
     if (!r.service) continue;
     counts.set(r.service, (counts.get(r.service) ?? 0) + 1);
   }
-  const res = [...counts.entries()]
+  return [...counts.entries()]
     .map(([service, count]) => ({ service, count }))
     .sort((a, b) => b.count - a.count || a.service.localeCompare(b.service));
-  serviceCountsCache.set(cacheKey, { data: res, expires: now + 20_000 });
-  return res;
 }
 
 export interface LeadStatusSummary {
@@ -186,23 +188,29 @@ export interface LeadStatusSummary {
   draft: number;
 }
 
+export interface ListStatusSummaryOptions {
+  assignedAdminUserId?: string;
+  search?: string;
+  area?: string;
+  service?: string;
+  serviceOption?: string;
+  fromIso?: string;
+  toIso?: string;
+}
+
 /** Aggregate counts by status for top-level KPI metrics & tab counters */
 export async function listLeadStatusSummary(
-  assignedAdminUserId?: string,
+  opts: ListStatusSummaryOptions | string = {},
 ): Promise<LeadStatusSummary> {
-  const cacheKey = assignedAdminUserId || "all";
-  const now = Date.now();
-  const cached = statusSummaryCache.get(cacheKey);
-  if (cached && cached.expires > now) {
-    return cached.data;
-  }
+  const options: ListStatusSummaryOptions =
+    typeof opts === "string" ? { assignedAdminUserId: opts } : opts;
 
   let allowedLeadIds: string[] | null = null;
-  if (assignedAdminUserId) {
+  if (options.assignedAdminUserId) {
     const { data: items, error: itemsErr } = await supabase()
       .from("lead_list_items")
       .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
-      .eq("lead_lists.assigned_admin_user_id", assignedAdminUserId);
+      .eq("lead_lists.assigned_admin_user_id", options.assignedAdminUserId);
     if (itemsErr) throw itemsErr;
     allowedLeadIds = Array.from(
       new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id)),
@@ -214,7 +222,25 @@ export async function listLeadStatusSummary(
 
   let q = supabase().from("leads").select("status");
   if (allowedLeadIds) q = q.in("id", allowedLeadIds);
-  const { data, error } = await q.limit(5000);
+  if (options.area && options.area !== "all") q = q.eq("area", options.area);
+  if (options.service && options.service !== "all") q = q.eq("service", options.service);
+  if (options.serviceOption && options.serviceOption !== "all") q = q.eq("service_option", options.serviceOption);
+  if (options.fromIso) q = q.gte("created_at", options.fromIso);
+  if (options.toIso) q = q.lte("created_at", options.toIso);
+
+  if (options.search) {
+    const s = sanitizeSearch(options.search);
+    if (s) {
+      const orParts = SEARCH_FIELDS.map((f) => `${f}.ilike.%${s}%`);
+      const ph = phoneHash(options.search);
+      if (ph && normalizePhone(options.search).length >= 7) {
+        orParts.push(`phone_hash.eq.${ph}`);
+      }
+      q = q.or(orParts.join(","));
+    }
+  }
+
+  const { data, error } = await q;
   if (error) throw error;
 
   const summary: LeadStatusSummary = {
@@ -234,7 +260,6 @@ export async function listLeadStatusSummary(
     summary.total++;
   }
 
-  statusSummaryCache.set(cacheKey, { data: summary, expires: now + 20_000 });
   return summary;
 }
 
