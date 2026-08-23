@@ -85,6 +85,8 @@ export default function AnalyticsDashboardClient({
     router.push(`${pathname}${qs ? `?${qs}` : ""}`);
   };
 
+  const [chartMetric, setChartMetric] = useState<"stacked" | "booked" | "follow_up" | "contacted" | "cnr" | "new">("stacked");
+
   // Filtered Area Metrics based on search & threshold
   const filteredAreaMetrics = useMemo(() => {
     return areaMetrics.filter((a) => {
@@ -609,67 +611,257 @@ export default function AnalyticsDashboardClient({
               </div>
             </div>
 
-            {/* 2. Top Localities Visual Gradient Pillars */}
-            <div className="lg:col-span-2 p-5 sm:p-6 rounded-2xl border border-white/10 bg-[#07142A] shadow-xl flex flex-col justify-between">
+            {/* 2. Top Localities Visual Multi-Status Pillars */}
+            <div className="lg:col-span-2 p-5 sm:p-6 rounded-2xl border border-white/10 bg-[#07142A] shadow-xl flex flex-col justify-between relative">
               <div>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                   <div>
                     <h3 className="text-base font-bold text-white flex items-center gap-2">
                       <BarChart2 size={16} className="text-[#C9A84C]" />
-                      Top Localities by Lead Volume & Booked Ratio
+                      Top Localities: All Lead Statuses Breakdown
                     </h3>
                     <p className="text-xs text-white/60">
-                      Comparing lead density with booked conversions across top target zones.
+                      Visual multi-status breakdown across Booked, Follow-Up, Contacted, CNR, and New leads.
                     </p>
+                  </div>
+
+                  {/* Status Metric Filter Toggle */}
+                  <div className="flex items-center gap-1 p-1 bg-white/5 rounded-xl border border-white/10 overflow-x-auto text-[11px] font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setChartMetric("stacked")}
+                      className={`px-2 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                        chartMetric === "stacked"
+                          ? "bg-[#C9A84C] text-[#050E21] font-bold shadow-sm"
+                          : "text-white/60 hover:text-white"
+                      }`}
+                    >
+                      🌈 All Stacked
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartMetric("booked")}
+                      className={`px-2 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                        chartMetric === "booked"
+                          ? "bg-emerald-500 text-[#050E21] font-bold shadow-sm"
+                          : "text-emerald-400 hover:bg-emerald-500/10"
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Booked
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartMetric("follow_up")}
+                      className={`px-2 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                        chartMetric === "follow_up"
+                          ? "bg-amber-500 text-[#050E21] font-bold shadow-sm"
+                          : "text-amber-400 hover:bg-amber-500/10"
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Follow-Up
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartMetric("contacted")}
+                      className={`px-2 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                        chartMetric === "contacted"
+                          ? "bg-sky-500 text-[#050E21] font-bold shadow-sm"
+                          : "text-sky-400 hover:bg-sky-500/10"
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-sky-400" /> Contacted
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartMetric("cnr")}
+                      className={`px-2 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                        chartMetric === "cnr"
+                          ? "bg-purple-500 text-[#050E21] font-bold shadow-sm"
+                          : "text-purple-400 hover:bg-purple-500/10"
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400" /> CNR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartMetric("new")}
+                      className={`px-2 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                        chartMetric === "new"
+                          ? "bg-slate-300 text-[#050E21] font-bold shadow-sm"
+                          : "text-slate-400 hover:bg-slate-500/10"
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> New
+                    </button>
                   </div>
                 </div>
 
-                {/* Vertical Visual Pillars */}
-                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-3 items-end h-56 pt-6 pb-2 border-b border-white/10">
+                {/* Vertical Visual Multi-Status Pillars */}
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-3 items-end h-60 pt-6 pb-2 border-b border-white/10">
                   {top8ChartAreas.map((a) => {
-                    const heightPct = Math.max(15, (a.total / maxAreaTotal) * 100);
+                    const total = a.total || 1;
+                    const bPct = (a.booked / total) * 100;
+                    const fuPct = (a.followUp / total) * 100;
+                    const cPct = (a.contacted / total) * 100;
+                    const cnrPct = (a.callNotResponded / total) * 100;
+                    const newPct = ((a.new + a.draft) / total) * 100;
+
+                    let focusValue = a.booked;
+                    let badgeLabel = `${a.booked} Booked`;
+                    let badgeBg = "bg-emerald-500 text-[#050E21]";
+
+                    if (chartMetric === "follow_up") {
+                      focusValue = a.followUp;
+                      badgeLabel = `${a.followUp} Follow-Up`;
+                      badgeBg = "bg-amber-500 text-[#050E21]";
+                    } else if (chartMetric === "contacted") {
+                      focusValue = a.contacted;
+                      badgeLabel = `${a.contacted} Contacted`;
+                      badgeBg = "bg-sky-500 text-[#050E21]";
+                    } else if (chartMetric === "cnr") {
+                      focusValue = a.callNotResponded;
+                      badgeLabel = `${a.callNotResponded} CNR`;
+                      badgeBg = "bg-purple-500 text-white";
+                    } else if (chartMetric === "new") {
+                      focusValue = a.new + a.draft;
+                      badgeLabel = `${a.new + a.draft} New`;
+                      badgeBg = "bg-slate-500 text-white";
+                    } else {
+                      badgeLabel = `${a.booked}b (${a.conversionRate}%)`;
+                      badgeBg = a.booked > 0 ? "bg-emerald-500 text-[#050E21]" : "bg-white/10 text-white/50";
+                    }
+
+                    const heightPct = Math.max(20, (a.total / maxAreaTotal) * 100);
                     const isHovered = hoveredArea === a.area;
+
                     return (
                       <div
                         key={a.area}
                         onMouseEnter={() => setHoveredArea(a.area)}
                         onMouseLeave={() => setHoveredArea(null)}
                         onClick={() => updateParam("area", a.area)}
-                        className="flex flex-col items-center h-full justify-end group cursor-pointer"
+                        className="flex flex-col items-center h-full justify-end group cursor-pointer relative"
                       >
-                        {/* Top Booked Badge */}
+                        {/* Top Metric Badge */}
                         <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md mb-1.5 transition-all ${
-                            a.booked > 0
-                              ? "bg-emerald-500 text-[#050E21] font-black shadow-lg shadow-emerald-500/20"
-                              : "bg-white/10 text-white/40"
-                          }`}
+                          className={`text-[10px] font-black px-1.5 py-0.5 rounded-md mb-1.5 transition-all shadow-md ${badgeBg}`}
                         >
-                          {a.booked}b
+                          {badgeLabel}
                         </span>
 
-                        {/* Gradient Pillar */}
-                        <div className="w-full max-w-[36px] bg-white/5 rounded-t-lg overflow-hidden flex flex-col justify-end p-0.5 relative group-hover:ring-2 group-hover:ring-[#C9A84C] transition-all">
-                          <div
-                            style={{ height: `${heightPct}%` }}
-                            className={`w-full rounded-t-md transition-all duration-500 ${
-                              isHovered
-                                ? "bg-gradient-to-t from-sky-600 via-teal-500 to-[#C9A84C]"
-                                : "bg-gradient-to-t from-sky-900/80 via-sky-600/70 to-teal-400"
-                            }`}
-                          />
+                        {/* Multi-Status Stacked Pillar */}
+                        <div
+                          style={{ height: `${heightPct}%` }}
+                          className={`w-full max-w-[40px] bg-white/5 rounded-t-lg overflow-hidden flex flex-col justify-end relative transition-all duration-300 border border-white/10 ${
+                            isHovered ? "ring-2 ring-[#C9A84C] scale-105" : ""
+                          }`}
+                        >
+                          {chartMetric === "stacked" ? (
+                            <>
+                              {/* 1. New / Draft (Top) */}
+                              {newPct > 0 && (
+                                <div
+                                  style={{ height: `${newPct}%` }}
+                                  className="w-full bg-slate-600/80 hover:bg-slate-500 transition-colors"
+                                  title={`New/Draft: ${a.new + a.draft}`}
+                                />
+                              )}
+                              {/* 2. CNR */}
+                              {cnrPct > 0 && (
+                                <div
+                                  style={{ height: `${cnrPct}%` }}
+                                  className="w-full bg-purple-500 hover:bg-purple-400 transition-colors"
+                                  title={`CNR: ${a.callNotResponded}`}
+                                />
+                              )}
+                              {/* 3. Contacted */}
+                              {cPct > 0 && (
+                                <div
+                                  style={{ height: `${cPct}%` }}
+                                  className="w-full bg-sky-500 hover:bg-sky-400 transition-colors"
+                                  title={`Contacted: ${a.contacted}`}
+                                />
+                              )}
+                              {/* 4. Follow-Up */}
+                              {fuPct > 0 && (
+                                <div
+                                  style={{ height: `${fuPct}%` }}
+                                  className="w-full bg-amber-500 hover:bg-amber-400 transition-colors"
+                                  title={`Follow-Up: ${a.followUp}`}
+                                />
+                              )}
+                              {/* 5. Booked (Bottom foundation) */}
+                              {bPct > 0 && (
+                                <div
+                                  style={{ height: `${bPct}%` }}
+                                  className="w-full bg-emerald-500 hover:bg-emerald-400 transition-colors"
+                                  title={`Booked: ${a.booked}`}
+                                />
+                              )}
+                            </>
+                          ) : (
+                            /* Single Focused Metric Highlight */
+                            <div
+                              style={{
+                                height: `${Math.max(10, (focusValue / (a.total || 1)) * 100)}%`,
+                              }}
+                              className={`w-full rounded-t-md transition-all duration-500 ${
+                                chartMetric === "booked"
+                                  ? "bg-gradient-to-t from-emerald-700 to-emerald-400"
+                                  : chartMetric === "follow_up"
+                                  ? "bg-gradient-to-t from-amber-700 to-amber-400"
+                                  : chartMetric === "contacted"
+                                  ? "bg-gradient-to-t from-sky-700 to-sky-400"
+                                  : chartMetric === "cnr"
+                                  ? "bg-gradient-to-t from-purple-700 to-purple-400"
+                                  : "bg-gradient-to-t from-slate-700 to-slate-400"
+                              }`}
+                            />
+                          )}
                         </div>
 
                         {/* Label */}
                         <span
-                          className={`text-[10px] mt-2 truncate w-full text-center font-semibold transition-colors ${
-                            isHovered ? "text-[#E8CC7A]" : "text-white/70"
+                          className={`text-[10px] mt-2 truncate w-full text-center font-bold transition-colors ${
+                            isHovered ? "text-[#E8CC7A]" : "text-white/80"
                           }`}
                           title={a.area}
                         >
                           {a.area}
                         </span>
                         <span className="text-[9px] text-white/40 font-mono">{a.total}L</span>
+
+                        {/* Floating Tooltip Card for All Statuses */}
+                        {isHovered && (
+                          <div className="absolute bottom-full mb-8 z-30 w-48 p-3 rounded-xl bg-[#050E21] border border-[#C9A84C]/40 shadow-2xl pointer-events-none text-left backdrop-blur-md">
+                            <div className="font-bold text-white text-xs border-b border-white/10 pb-1.5 mb-2 flex items-center justify-between">
+                              <span className="text-[#E8CC7A] truncate">{a.area}</span>
+                              <span className="text-white/50 text-[10px]">{a.total} Leads</span>
+                            </div>
+                            <div className="space-y-1 text-[11px]">
+                              <div className="flex justify-between text-emerald-400">
+                                <span>🟢 Booked:</span>
+                                <span className="font-bold">{a.booked} ({a.conversionRate}%)</span>
+                              </div>
+                              <div className="flex justify-between text-amber-400">
+                                <span>🟡 Follow-Up:</span>
+                                <span className="font-bold">{a.followUp}</span>
+                              </div>
+                              <div className="flex justify-between text-sky-400">
+                                <span>🔵 Contacted:</span>
+                                <span className="font-bold">{a.contacted}</span>
+                              </div>
+                              <div className="flex justify-between text-purple-400">
+                                <span>🟣 CNR:</span>
+                                <span className="font-bold">{a.callNotResponded}</span>
+                              </div>
+                              <div className="flex justify-between text-slate-400">
+                                <span>⚪ New/Draft:</span>
+                                <span className="font-bold">{a.new + a.draft}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -677,12 +869,26 @@ export default function AnalyticsDashboardClient({
               </div>
 
               {/* Chart Legend Footer */}
-              <div className="mt-4 flex items-center justify-between text-xs text-white/60 pt-2">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-emerald-500" /> Booked leads count shown on top of pillar
-                </span>
+              <div className="mt-4 flex flex-wrap items-center justify-between text-xs text-white/60 pt-2 gap-2">
+                <div className="flex items-center gap-3 text-[11px] font-semibold flex-wrap">
+                  <span className="inline-flex items-center gap-1 text-emerald-400">
+                    <span className="w-2.5 h-2.5 rounded bg-emerald-500" /> Booked
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-amber-400">
+                    <span className="w-2.5 h-2.5 rounded bg-amber-500" /> Follow-Up
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-sky-400">
+                    <span className="w-2.5 h-2.5 rounded bg-sky-500" /> Contacted
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-purple-400">
+                    <span className="w-2.5 h-2.5 rounded bg-purple-500" /> CNR
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-slate-400">
+                    <span className="w-2.5 h-2.5 rounded bg-slate-600" /> New / Draft
+                  </span>
+                </div>
                 <span className="text-[#E8CC7A] font-bold text-[11px]">
-                  Click any pillar to filter locality →
+                  Hover pillar for full status breakdown →
                 </span>
               </div>
             </div>
