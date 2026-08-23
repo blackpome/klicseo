@@ -64,7 +64,7 @@ function buildLeadsHref(args: {
   if (args.area && args.area !== "all") params.set("area", args.area);
   if (args.service && args.service !== "all") params.set("service", args.service);
   if (args.folder && args.folder !== "all") params.set("folder", args.folder);
-  if (args.view && args.view !== "cards") params.set("view", args.view);
+  if (args.view && args.view !== "table") params.set("view", args.view);
   if (args.year && args.year !== "all") params.set("year", args.year);
   if (args.source && args.source !== "all") params.set("source", args.source);
   if (args.page && args.page > 1) params.set("page", String(args.page));
@@ -127,7 +127,7 @@ export default async function AdminLeadsPage({
   const filter = statusTabs.find((t) => t.id === status)?.id ?? "all";
   const areaFilter = area && area !== "all" ? area : undefined;
   const serviceFilter = service && service !== "all" ? service : undefined;
-  const currentView = view === "table" ? "table" : "cards";
+  const currentView = view === "cards" ? "cards" : "table";
 
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const pageSize = Math.max(1, Math.min(100, parseInt(pageSizeParam ?? "25", 10) || 25));
