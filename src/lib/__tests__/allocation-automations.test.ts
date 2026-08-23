@@ -241,11 +241,15 @@ import {
   recycleAndReassignLeads,
   listStaffWorkload,
   getLeadAllocationHistory,
+  invalidateAssignedLeadsCache,
 } from "../lead-routing";
+import { invalidateAreaCountsCache } from "../area";
 
 describe("Allocation Automations Full Test Suite", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    invalidateAreaCountsCache();
+    invalidateAssignedLeadsCache();
     mockSchedulesData = [];
     mockLeadListItemsData = [];
     mockLeadListsData = [];

@@ -350,13 +350,15 @@ interface LocationIndexCache {
 }
 
 let locationIndexCache: LocationIndexCache | null = null;
+let inFlightLocationIndexPromise: Promise<LocationIndexCache> | null = null;
 
 export function invalidateAreaCountsCache(): void {
   locationIndexCache = null;
+  inFlightLocationIndexPromise = null;
 }
 
 /**
- * Fast cached index of all lead locations, built once per 60s.
+ * Fast parallel-cached index of all lead locations with in-flight request de-duplication.
  */
 export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
   const now = Date.now();
@@ -364,68 +366,92 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
     return locationIndexCache;
   }
 
-  const allRows: Array<{
-    id: string;
-    area: string | null;
-    address: string | null;
-    pincode: string | null;
-    service: string | null;
-    price_total: number | null;
-    status: string | null;
-  }> = [];
-  let from = 0;
-  const batchSize = 1000;
-
-  while (true) {
-    const { data, error } = await supabase()
-      .from("leads")
-      .select("id, area, address, pincode, service, price_total, status")
-      .range(from, from + batchSize - 1);
-    if (error || !data || data.length === 0) break;
-    allRows.push(...data);
-    if (data.length < batchSize) break;
-    from += batchSize;
+  if (inFlightLocationIndexPromise) {
+    return inFlightLocationIndexPromise;
   }
 
-  const leadMap = new Map<string, LeadLocationSummary>();
-  const areaToLeadIds = new Map<string, string[]>();
-  const allLeads: LeadLocationSummary[] = [];
+  inFlightLocationIndexPromise = (async () => {
+    try {
+      // 1. Get exact total count to fire parallel chunk requests
+      const { count } = await supabase()
+        .from("leads")
+        .select("*", { count: "exact", head: true });
 
-  for (const r of allRows) {
-    const plainAddress = unseal(r.address);
-    const primary = await resolvePrimaryLocality(r.area, plainAddress, r.pincode);
-    const resolved = primary || "Unspecified";
-    const norm = resolved.toLowerCase();
+      const total = count || 13000;
+      const batchSize = 1000;
+      const chunkCount = Math.ceil(total / batchSize);
 
-    const summary: LeadLocationSummary = {
-      id: r.id,
-      primaryLocality: resolved,
-      area: r.area,
-      pincode: r.pincode,
-      service: r.service,
-      price_total: r.price_total,
-      status: r.status,
-    };
-
-    leadMap.set(r.id, summary);
-    allLeads.push(summary);
-
-    if (resolved !== "Unspecified") {
-      if (!areaToLeadIds.has(norm)) {
-        areaToLeadIds.set(norm, []);
+      const chunkPromises = [];
+      for (let i = 0; i < chunkCount; i++) {
+        const start = i * batchSize;
+        chunkPromises.push(
+          supabase()
+            .from("leads")
+            .select("id, area, address, pincode, service, price_total, status")
+            .range(start, start + batchSize - 1),
+        );
       }
-      areaToLeadIds.get(norm)!.push(r.id);
+
+      const chunkResults = await Promise.all(chunkPromises);
+      const allRows: Array<{
+        id: string;
+        area: string | null;
+        address: string | null;
+        pincode: string | null;
+        service: string | null;
+        price_total: number | null;
+        status: string | null;
+      }> = [];
+
+      for (const res of chunkResults) {
+        if (res.data) allRows.push(...res.data);
+      }
+
+      const leadMap = new Map<string, LeadLocationSummary>();
+      const areaToLeadIds = new Map<string, string[]>();
+      const allLeads: LeadLocationSummary[] = [];
+
+      for (const r of allRows) {
+        const plainAddress = unseal(r.address);
+        const primary = await resolvePrimaryLocality(r.area, plainAddress, r.pincode);
+        const resolved = primary || "Unspecified";
+        const norm = resolved.toLowerCase();
+
+        const summary: LeadLocationSummary = {
+          id: r.id,
+          primaryLocality: resolved,
+          area: r.area,
+          pincode: r.pincode,
+          service: r.service,
+          price_total: r.price_total,
+          status: r.status,
+        };
+
+        leadMap.set(r.id, summary);
+        allLeads.push(summary);
+
+        if (resolved !== "Unspecified") {
+          if (!areaToLeadIds.has(norm)) {
+            areaToLeadIds.set(norm, []);
+          }
+          areaToLeadIds.get(norm)!.push(r.id);
+        }
+      }
+
+      locationIndexCache = {
+        expires: Date.now() + 120000, // 2-minute in-memory TTL
+        leadMap,
+        areaToLeadIds,
+        allLeads,
+      };
+
+      return locationIndexCache;
+    } finally {
+      inFlightLocationIndexPromise = null;
     }
-  }
+  })();
 
-  locationIndexCache = {
-    expires: now + 60000, // 60-second in-memory TTL
-    leadMap,
-    areaToLeadIds,
-    allLeads,
-  };
-
-  return locationIndexCache;
+  return inFlightLocationIndexPromise;
 }
 
 /** Distinct areas + lead counts across ALL leads in the database, for the filter pill bar on /admin. */

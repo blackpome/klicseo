@@ -81,35 +81,55 @@ export function matchesFilter(
 }
 
 let assignedLeadIdsCache: { set: Set<string>; expires: number } | null = null;
+let inFlightAssignedPromise: Promise<Set<string>> | null = null;
 
 export function invalidateAssignedLeadsCache(): void {
   assignedLeadIdsCache = null;
+  inFlightAssignedPromise = null;
+}
+
+export function markLeadsAsAssigned(leadIds: string[]): void {
+  if (assignedLeadIdsCache) {
+    for (const id of leadIds) assignedLeadIdsCache.set.add(id);
+  }
 }
 
 /**
- * Fetch all assigned lead IDs in batches with in-memory 15s caching for instant response times.
+ * Fetch all assigned lead IDs with in-memory 30s caching and in-flight de-duplication.
  */
 export async function getAllAssignedLeadIds(): Promise<Set<string>> {
   if (assignedLeadIdsCache && assignedLeadIdsCache.expires > Date.now()) {
     return assignedLeadIdsCache.set;
   }
-  const set = new Set<string>();
-  let from = 0;
-  const batchSize = 1000;
-  while (true) {
-    const { data, error } = await supabase()
-      .from("lead_list_items")
-      .select("lead_id")
-      .range(from, from + batchSize - 1);
-    if (error || !data || data.length === 0) break;
-    for (const item of data) {
-      if (item.lead_id) set.add(item.lead_id);
-    }
-    if (data.length < batchSize) break;
-    from += batchSize;
+  if (inFlightAssignedPromise) {
+    return inFlightAssignedPromise;
   }
-  assignedLeadIdsCache = { set, expires: Date.now() + 15000 };
-  return set;
+
+  inFlightAssignedPromise = (async () => {
+    try {
+      const set = new Set<string>();
+      let from = 0;
+      const batchSize = 1000;
+      while (true) {
+        const { data, error } = await supabase()
+          .from("lead_list_items")
+          .select("lead_id")
+          .range(from, from + batchSize - 1);
+        if (error || !data || data.length === 0) break;
+        for (const item of data) {
+          if (item.lead_id) set.add(item.lead_id);
+        }
+        if (data.length < batchSize) break;
+        from += batchSize;
+      }
+      assignedLeadIdsCache = { set, expires: Date.now() + 30000 };
+      return set;
+    } finally {
+      inFlightAssignedPromise = null;
+    }
+  })();
+
+  return inFlightAssignedPromise;
 }
 
 /**
@@ -352,9 +372,8 @@ export async function executeLeadAllocation(req: {
     }
   }
 
-  // Invalidate in-memory caches so subsequent views update immediately
-  invalidateAssignedLeadsCache();
-  invalidateAreaCountsCache();
+  // Incrementally update assigned leads cache (0ms) so subsequent modal queries never experience cold cache reloads
+  markLeadsAsAssigned(selectedLeadIds);
 
   return {
     allocatedCount: selectedLeadIds.length,
