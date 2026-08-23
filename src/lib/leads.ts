@@ -160,7 +160,7 @@ export async function listServiceCounts(
     if (allowedLeadIds.length === 0) return [];
   }
 
-  let q = supabase().from("leads").select("service");
+  let q = supabase().from("leads").select("service").range(0, 49999);
   if (allowedLeadIds) q = q.in("id", allowedLeadIds);
   if (options.area && options.area !== "all") q = q.eq("area", options.area);
   const { data, error } = await q;
@@ -198,6 +198,32 @@ export interface ListStatusSummaryOptions {
   toIso?: string;
 }
 
+function applyLeadFilters(
+  q: any,
+  options: ListStatusSummaryOptions,
+  allowedLeadIds: string[] | null,
+) {
+  if (allowedLeadIds) q = q.in("id", allowedLeadIds);
+  if (options.area && options.area !== "all") q = q.eq("area", options.area);
+  if (options.service && options.service !== "all") q = q.eq("service", options.service);
+  if (options.serviceOption && options.serviceOption !== "all") q = q.eq("service_option", options.serviceOption);
+  if (options.fromIso) q = q.gte("created_at", options.fromIso);
+  if (options.toIso) q = q.lte("created_at", options.toIso);
+
+  if (options.search) {
+    const s = sanitizeSearch(options.search);
+    if (s) {
+      const orParts = SEARCH_FIELDS.map((f) => `${f}.ilike.%${s}%`);
+      const ph = phoneHash(options.search);
+      if (ph && normalizePhone(options.search).length >= 7) {
+        orParts.push(`phone_hash.eq.${ph}`);
+      }
+      q = q.or(orParts.join(","));
+    }
+  }
+  return q;
+}
+
 /** Aggregate counts by status for top-level KPI metrics & tab counters */
 export async function listLeadStatusSummary(
   opts: ListStatusSummaryOptions | string = {},
@@ -220,31 +246,34 @@ export async function listLeadStatusSummary(
     }
   }
 
-  let q = supabase().from("leads").select("status");
-  if (allowedLeadIds) q = q.in("id", allowedLeadIds);
-  if (options.area && options.area !== "all") q = q.eq("area", options.area);
-  if (options.service && options.service !== "all") q = q.eq("service", options.service);
-  if (options.serviceOption && options.serviceOption !== "all") q = q.eq("service_option", options.serviceOption);
-  if (options.fromIso) q = q.gte("created_at", options.fromIso);
-  if (options.toIso) q = q.lte("created_at", options.toIso);
+  const statuses = [
+    "new",
+    "contacted",
+    "follow_up",
+    "call_not_responded",
+    "booked",
+    "cancelled",
+    "draft",
+  ] as const;
 
-  if (options.search) {
-    const s = sanitizeSearch(options.search);
-    if (s) {
-      const orParts = SEARCH_FIELDS.map((f) => `${f}.ilike.%${s}%`);
-      const ph = phoneHash(options.search);
-      if (ph && normalizePhone(options.search).length >= 7) {
-        orParts.push(`phone_hash.eq.${ph}`);
-      }
-      q = q.or(orParts.join(","));
-    }
-  }
+  const totalPromise = applyLeadFilters(
+    supabase().from("leads").select("*", { count: "exact", head: true }),
+    options,
+    allowedLeadIds,
+  );
 
-  const { data, error } = await q;
-  if (error) throw error;
+  const statusPromises = statuses.map((st) =>
+    applyLeadFilters(
+      supabase().from("leads").select("*", { count: "exact", head: true }).eq("status", st),
+      options,
+      allowedLeadIds,
+    ),
+  );
+
+  const [totalRes, ...statusResults] = await Promise.all([totalPromise, ...statusPromises]);
 
   const summary: LeadStatusSummary = {
-    total: 0,
+    total: totalRes.count ?? 0,
     new: 0,
     contacted: 0,
     follow_up: 0,
@@ -254,11 +283,9 @@ export async function listLeadStatusSummary(
     draft: 0,
   };
 
-  for (const r of (data ?? []) as { status: string }[]) {
-    const s = r.status || "new";
-    summary[s] = (summary[s] ?? 0) + 1;
-    summary.total++;
-  }
+  statuses.forEach((st, idx) => {
+    summary[st] = statusResults[idx].count ?? 0;
+  });
 
   return summary;
 }

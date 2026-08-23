@@ -59,7 +59,8 @@ export async function listAreasWithCounts(
   let q = supabase()
     .from("leads")
     .select("area")
-    .not("area", "is", null);
+    .not("area", "is", null)
+    .range(0, 49999);
   if (allowedLeadIds) q = q.in("id", allowedLeadIds);
 
   const { data, error } = await q;

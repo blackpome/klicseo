@@ -105,7 +105,8 @@ export async function listLeadLists(opts: {
     const { data: allItems, error: itemsErr } = await supabase()
       .from("lead_list_items")
       .select("list_id, lead_id, leads:lead_id (status)")
-      .in("list_id", listIds);
+      .in("list_id", listIds)
+      .range(0, 49999);
 
     if (!itemsErr && allItems) {
       for (const item of allItems) {
