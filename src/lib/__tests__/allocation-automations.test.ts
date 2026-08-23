@@ -82,18 +82,18 @@ vi.mock("@/lib/supabase", () => ({
       }
 
       if (table === "leads") {
+        const leadChain: any = {
+          in: (field: string, vals: any[]) => leadChain,
+          neq: (field: string, val: any) => leadChain,
+          order: () => leadChain,
+          gte: () => leadChain,
+          range: () => Promise.resolve({ data: mockLeadsData, error: null }),
+          limit: () => Promise.resolve({ data: mockLeadsData, error: null }),
+          then: (resolve: any) => resolve({ data: mockLeadsData, error: null }),
+        };
+
         return {
-          select: (cols?: string) => ({
-            in: (field: string, vals: any[]) => ({
-              order: () => ({
-                range: () => Promise.resolve({ data: mockLeadsData, error: null }),
-                limit: () => Promise.resolve({ data: mockLeadsData, error: null }),
-              }),
-              range: () => Promise.resolve({ data: mockLeadsData, error: null }),
-              limit: () => Promise.resolve({ data: mockLeadsData, error: null }),
-              then: (resolve: any) => resolve({ data: mockLeadsData, error: null }),
-            }),
-          }),
+          select: (cols?: string) => leadChain,
           update: (patch: any) => ({
             in: (field: string, vals: string[]) => {
               mockUpdate(patch, field, vals);

@@ -71,6 +71,7 @@ export default function LeadAllocationModal({
   // 1. Lead Count
   const [leadCount, setLeadCount] = useState<number>(20);
   const [availableCount, setAvailableCount] = useState<number | null>(null);
+  const [totalUnallocatedPool, setTotalUnallocatedPool] = useState<number | null>(null);
   const [isCounting, setIsCounting] = useState(false);
 
   // 2. Conditions
@@ -108,6 +109,7 @@ export default function LeadAllocationModal({
         min_price: minPrice ? Number(minPrice) : null,
       });
       setAvailableCount(res.count);
+      setTotalUnallocatedPool(res.totalUnallocated);
       setIsCounting(false);
     }, 200);
 
@@ -291,18 +293,27 @@ export default function LeadAllocationModal({
                 1. Number of Leads to Allocate {scheduleMode === "daily_recurring" ? "Per Day" : scheduleMode === "queue_replenish" ? "Per Refill" : ""}
               </label>
 
-              <div className="flex items-center gap-2 text-xs bg-white/[0.03] px-3 py-1 rounded-xl border border-white/5">
-                <span className="text-white/40">Available Pool:</span>
+              <div className="flex items-center gap-2 text-xs bg-white/[0.03] px-3 py-1.5 rounded-xl border border-white/5">
+                <span className="text-white/40">
+                  {hasActiveFilters ? "Matching Filter Pool:" : "Total Unallocated Pool:"}
+                </span>
                 {isCounting ? (
                   <Loader2 size={12} className="animate-spin text-[#C9A84C]" />
                 ) : (
-                  <strong
-                    className={`font-mono ${
-                      (availableCount ?? 0) > 0 ? "text-emerald-400" : "text-amber-400"
-                    }`}
-                  >
-                    {availableCount ?? 0} leads match filters
-                  </strong>
+                  <div className="flex items-center gap-1.5">
+                    <strong
+                      className={`font-mono ${
+                        (availableCount ?? 0) > 0 ? "text-emerald-400" : "text-amber-400"
+                      }`}
+                    >
+                      {availableCount ?? 0} leads
+                    </strong>
+                    {hasActiveFilters && totalUnallocatedPool != null && (
+                      <span className="text-white/40 text-[11px]">
+                        (out of {totalUnallocatedPool} total unallocated)
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

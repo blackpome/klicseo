@@ -65,9 +65,11 @@ export function matchesFilter(
 }
 
 /**
- * Count matching unallocated leads available in the pool (excluding already-assigned leads).
+ * Count matching unallocated leads available in the pool (excluding already-assigned leads and booked leads).
  */
-export async function countMatchingLeads(filter: LeadAllocationFilter): Promise<number> {
+export async function countMatchingLeads(
+  filter: LeadAllocationFilter,
+): Promise<{ count: number; totalUnallocated: number }> {
   try {
     // 1. Query leads that are already assigned to any list
     const { data: assignedItems } = await supabase()
@@ -76,11 +78,11 @@ export async function countMatchingLeads(filter: LeadAllocationFilter): Promise<
       .range(0, 49999);
     const assignedSet = new Set((assignedItems ?? []).map((item) => item.lead_id));
 
-    // 2. Query candidates
+    // 2. Query all unbooked candidates across the database
     let query = supabase()
       .from("leads")
-      .select("id, area, pincode, service, price_total")
-      .in("status", ["new", "draft", "call_not_responded", "cancelled"])
+      .select("id, area, pincode, service, price_total, status")
+      .neq("status", "booked")
       .range(0, 49999);
 
     if (filter.min_price != null && filter.min_price > 0) {
@@ -90,16 +92,18 @@ export async function countMatchingLeads(filter: LeadAllocationFilter): Promise<
     const { data, error } = await query;
     if (error) throw error;
 
-    if (!data) return 0;
+    if (!data) return { count: 0, totalUnallocated: 0 };
+
+    // All unallocated leads in DB (not assigned to any active list)
+    const unallocated = data.filter((lead) => !assignedSet.has(lead.id));
+    const totalUnallocated = unallocated.length;
 
     // Filter unallocated leads matching criteria
-    const matching = data.filter(
-      (lead) => !assignedSet.has(lead.id) && matchesFilter(lead, filter),
-    );
-    return matching.length;
+    const matching = unallocated.filter((lead) => matchesFilter(lead, filter));
+    return { count: matching.length, totalUnallocated };
   } catch (err) {
     console.error("countMatchingLeads error:", err);
-    return 0;
+    return { count: 0, totalUnallocated: 0 };
   }
 }
 
@@ -176,11 +180,11 @@ export async function executeLeadAllocation(req: {
     assignedSet = new Set((allAssigned ?? []).map((i) => i.lead_id));
   }
 
-  // 2. Fetch candidate leads from pool (scans full candidate pool up to 50000 rows)
+  // 2. Fetch candidate leads from pool (scans full candidate pool up to 50000 rows, excluding booked)
   let query = supabase()
     .from("leads")
-    .select("id, area, pincode, service, price_total")
-    .in("status", ["new", "draft", "call_not_responded", "cancelled"])
+    .select("id, area, pincode, service, price_total, status")
+    .neq("status", "booked")
     .order("created_at", { ascending: false })
     .range(0, 49999);
 

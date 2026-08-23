@@ -23,14 +23,13 @@ import {
  */
 export async function previewMatchingLeadsAction(
   filter: LeadAllocationFilter,
-): Promise<{ count: number }> {
+): Promise<{ count: number; totalUnallocated: number }> {
   try {
     await requirePermission("leads.view");
-    const count = await countMatchingLeads(filter);
-    return { count };
+    return await countMatchingLeads(filter);
   } catch (err) {
     console.error("previewMatchingLeadsAction error:", err);
-    return { count: 0 };
+    return { count: 0, totalUnallocated: 0 };
   }
 }
 
