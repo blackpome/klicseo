@@ -65,42 +65,91 @@ export function matchesFilter(
 }
 
 /**
+ * Fetch all assigned lead IDs in batches to avoid PostgREST max_rows limits.
+ */
+export async function getAllAssignedLeadIds(): Promise<Set<string>> {
+  const set = new Set<string>();
+  let from = 0;
+  const batchSize = 1000;
+  while (true) {
+    const { data, error } = await supabase()
+      .from("lead_list_items")
+      .select("lead_id")
+      .range(from, from + batchSize - 1);
+    if (error || !data || data.length === 0) break;
+    for (const item of data) {
+      if (item.lead_id) set.add(item.lead_id);
+    }
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
+  return set;
+}
+
+/**
  * Count matching unallocated leads available in the pool (excluding already-assigned leads and booked leads).
  */
 export async function countMatchingLeads(
   filter: LeadAllocationFilter,
 ): Promise<{ count: number; totalUnallocated: number }> {
   try {
-    // 1. Query leads that are already assigned to any list
-    const { data: assignedItems } = await supabase()
-      .from("lead_list_items")
-      .select("lead_id")
-      .range(0, 49999);
-    const assignedSet = new Set((assignedItems ?? []).map((item) => item.lead_id));
+    const hasFilters = Boolean(
+      (filter.areas && filter.areas.length > 0) ||
+      (filter.pincodes && filter.pincodes.length > 0) ||
+      (filter.services && filter.services.length > 0) ||
+      (filter.min_price != null && filter.min_price > 0),
+    );
 
-    // 2. Query all unbooked candidates across the database
+    // 1. Get total unbooked leads in the DB
+    const { count: totalLeadsCount } = await supabase()
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .neq("status", "booked");
+
+    // 2. Fetch all assigned lead IDs across all lists
+    const assignedSet = await getAllAssignedLeadIds();
+    const totalUnallocated = Math.max(0, (totalLeadsCount ?? 0) - assignedSet.size);
+
+    if (!hasFilters) {
+      return { count: totalUnallocated, totalUnallocated };
+    }
+
+    // 3. Count leads matching the filter
     let query = supabase()
       .from("leads")
       .select("id, area, pincode, service, price_total, status")
-      .neq("status", "booked")
-      .range(0, 49999);
+      .neq("status", "booked");
 
+    if (filter.areas && filter.areas.length > 0) {
+      query = query.in("area", filter.areas);
+    }
+    if (filter.pincodes && filter.pincodes.length > 0) {
+      query = query.in("pincode", filter.pincodes);
+    }
+    if (filter.services && filter.services.length > 0) {
+      query = query.in("service", filter.services);
+    }
     if (filter.min_price != null && filter.min_price > 0) {
       query = query.gte("price_total", filter.min_price);
     }
 
-    const { data, error } = await query;
-    if (error) throw error;
+    // Query in batches to get all matching candidates without 1000 row cap
+    let matchingCandidates: any[] = [];
+    let from = 0;
+    const batchSize = 1000;
+    while (true) {
+      const { data, error } = await query.range(from, from + batchSize - 1);
+      if (error || !data || data.length === 0) break;
+      matchingCandidates.push(...data);
+      if (data.length < batchSize) break;
+      from += batchSize;
+    }
 
-    if (!data) return { count: 0, totalUnallocated: 0 };
+    const availableMatching = matchingCandidates.filter(
+      (lead) => !assignedSet.has(lead.id) && matchesFilter(lead, filter),
+    ).length;
 
-    // All unallocated leads in DB (not assigned to any active list)
-    const unallocated = data.filter((lead) => !assignedSet.has(lead.id));
-    const totalUnallocated = unallocated.length;
-
-    // Filter unallocated leads matching criteria
-    const matching = unallocated.filter((lead) => matchesFilter(lead, filter));
-    return { count: matching.length, totalUnallocated };
+    return { count: availableMatching, totalUnallocated };
   } catch (err) {
     console.error("countMatchingLeads error:", err);
     return { count: 0, totalUnallocated: 0 };
@@ -173,34 +222,47 @@ export async function executeLeadAllocation(req: {
     assignedSet = new Set((existingInList ?? []).map((i) => i.lead_id));
   } else {
     // If assigning directly to staff rosters, exclude leads assigned to any active list
-    const { data: allAssigned } = await supabase()
-      .from("lead_list_items")
-      .select("lead_id")
-      .range(0, 49999);
-    assignedSet = new Set((allAssigned ?? []).map((i) => i.lead_id));
+    assignedSet = await getAllAssignedLeadIds();
   }
 
-  // 2. Fetch candidate leads from pool (scans full candidate pool up to 50000 rows, excluding booked)
-  let query = supabase()
-    .from("leads")
-    .select("id, area, pincode, service, price_total, status")
-    .neq("status", "booked")
-    .order("created_at", { ascending: false })
-    .range(0, 49999);
+  // 2. Fetch candidate leads from pool matching conditions
+  const selectedLeadIds: string[] = [];
+  let from = 0;
+  const batchSize = Math.max(req.lead_count * 2, 500);
 
-  if (req.conditions.min_price != null && req.conditions.min_price > 0) {
-    query = query.gte("price_total", req.conditions.min_price);
+  while (selectedLeadIds.length < req.lead_count) {
+    let query = supabase()
+      .from("leads")
+      .select("id, area, pincode, service, price_total, status")
+      .neq("status", "booked")
+      .order("created_at", { ascending: false });
+
+    if (req.conditions.areas && req.conditions.areas.length > 0) {
+      query = query.in("area", req.conditions.areas);
+    }
+    if (req.conditions.pincodes && req.conditions.pincodes.length > 0) {
+      query = query.in("pincode", req.conditions.pincodes);
+    }
+    if (req.conditions.services && req.conditions.services.length > 0) {
+      query = query.in("service", req.conditions.services);
+    }
+    if (req.conditions.min_price != null && req.conditions.min_price > 0) {
+      query = query.gte("price_total", req.conditions.min_price);
+    }
+
+    const { data, error } = await query.range(from, from + batchSize - 1);
+    if (error || !data || data.length === 0) break;
+
+    for (const lead of data) {
+      if (!assignedSet.has(lead.id) && matchesFilter(lead, req.conditions)) {
+        selectedLeadIds.push(lead.id);
+        if (selectedLeadIds.length >= req.lead_count) break;
+      }
+    }
+
+    if (data.length < batchSize) break;
+    from += batchSize;
   }
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  // Filter unassigned leads matching conditions
-  const candidateLeads = (data ?? []).filter(
-    (lead) => !assignedSet.has(lead.id) && matchesFilter(lead, req.conditions),
-  );
-  const selectedLeads = candidateLeads.slice(0, req.lead_count);
-  const selectedLeadIds = selectedLeads.map((l) => l.id);
 
   if (selectedLeadIds.length === 0) {
     return { allocatedCount: 0, leadIds: [] };
