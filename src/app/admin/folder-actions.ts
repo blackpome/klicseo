@@ -100,3 +100,36 @@ export async function removeLeadFromFolderAction(
     return { ok: false, error: err.message || "Failed to remove lead from folder." };
   }
 }
+
+export async function bulkMoveLeadsToFolderAction(
+  leadIds: string[],
+  targetListId: string,
+): Promise<{ ok: boolean; count?: number; error?: string }> {
+  const me = await currentAdmin();
+  if (!me || !me.permissions.includes("leads.manage")) {
+    return { ok: false, error: "Unauthorized" };
+  }
+
+  if (!leadIds || leadIds.length === 0) {
+    return { ok: false, error: "No leads selected." };
+  }
+
+  try {
+    await addLeadsToList(targetListId, leadIds);
+    markLeadsAsAssigned(leadIds);
+
+    await logAudit("update", {
+      entity: "lead_lists",
+      entityId: targetListId,
+      summary: `Moved ${leadIds.length} leads to folder`,
+      metadata: { count: leadIds.length },
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/lists");
+    return { ok: true, count: leadIds.length };
+  } catch (err: any) {
+    console.error("bulkMoveLeadsToFolderAction error:", err);
+    return { ok: false, error: err.message || "Failed to move leads to folder." };
+  }
+}
