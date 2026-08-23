@@ -96,14 +96,16 @@ export default function StaffDatewiseLeadListsView({
 
     // Include all known admin staff members even if they currently have 0 lists
     for (const u of adminUsers) {
-      staffMap.set(u.id, { name: u.name, email: u.email, lists: [] });
+      if (u?.id) {
+        staffMap.set(u.id, { name: u.name || u.email || "Staff Member", email: u.email || "", lists: [] });
+      }
     }
 
-    // Always include current user
-    if (!staffMap.has(currentUser.id)) {
+    // Always include current user if valid id
+    if (currentUser?.id && currentUser.id !== "super_admin" && !staffMap.has(currentUser.id)) {
       staffMap.set(currentUser.id, {
-        name: currentUser.name,
-        email: currentUser.email,
+        name: currentUser.name || currentUser.email || "Staff Member",
+        email: currentUser.email || "",
         lists: [],
       });
     }
@@ -174,9 +176,13 @@ export default function StaffDatewiseLeadListsView({
       });
     };
 
+    const seenStaffIds = new Set<string>();
     const builtStaffList: StaffGroup[] = [];
 
     for (const [sId, sData] of staffMap.entries()) {
+      if (!sId || seenStaffIds.has(sId)) continue;
+      seenStaffIds.add(sId);
+
       const dateGroups = helperBuildDateGroups(sData.lists);
       const totalLists = sData.lists.length;
       const totalLeads = sData.lists.reduce((sum, l) => sum + (l.lead_count ?? 0), 0);
@@ -199,7 +205,8 @@ export default function StaffDatewiseLeadListsView({
     }
 
     // Add unassigned if any
-    if (unassignedLists.length > 0) {
+    if (unassignedLists.length > 0 && !seenStaffIds.has("unassigned")) {
+      seenStaffIds.add("unassigned");
       const dateGroups = helperBuildDateGroups(unassignedLists);
       const totalLeads = unassignedLists.reduce((sum, l) => sum + (l.lead_count ?? 0), 0);
       const completedLeads = unassignedLists.reduce((sum, l) => sum + (l.completed_count ?? 0), 0);
@@ -356,12 +363,12 @@ export default function StaffDatewiseLeadListsView({
 
           {/* STAFF CARDS GRID */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {staffList.map((staff) => {
+            {staffList.map((staff, idx) => {
               const initial = staff.staffName.charAt(0).toUpperCase();
 
               return (
                 <div
-                  key={staff.staffId}
+                  key={`staff-${staff.staffId || idx}`}
                   onClick={() => setSelectedStaffId(staff.staffId)}
                   className="group cursor-pointer rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 hover:border-[#C9A84C]/50 hover:bg-white/[0.02] transition-all shadow-lg flex flex-col justify-between"
                 >
@@ -596,12 +603,12 @@ export default function StaffDatewiseLeadListsView({
             </div>
           ) : (
             <div className="space-y-6">
-              {activeDateGroups.map((dateGroup) => {
+              {activeDateGroups.map((dateGroup, dIdx) => {
                 const isCollapsed = collapsedDates.has(dateGroup.dateKey);
 
                 return (
                   <div
-                    key={dateGroup.dateKey}
+                    key={`date-group-${dateGroup.dateKey || dIdx}`}
                     className={`rounded-3xl border transition-all ${
                       dateGroup.isToday
                         ? "border-[#C9A84C]/40 bg-[#071228]/95 shadow-xl shadow-[#C9A84C]/5"
@@ -761,7 +768,7 @@ export default function StaffDatewiseLeadListsView({
 
                           {/* BATCH LEADS GRID */}
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-                        {dateGroup.lists.map((batch) => {
+                        {dateGroup.lists.map((batch, bIdx) => {
                           const count = batch.lead_count ?? 0;
                           const completed = batch.completed_count ?? 0;
                           const pending = batch.pending_count ?? 0;
@@ -770,7 +777,7 @@ export default function StaffDatewiseLeadListsView({
 
                           return (
                             <div
-                              key={batch.id}
+                              key={`batch-card-${batch.id || bIdx}`}
                               className="group rounded-2xl border border-white/[0.08] bg-[#050E21] p-5 space-y-4 hover:border-[#C9A84C]/40 hover:bg-white/[0.01] transition-all shadow-lg flex flex-col justify-between"
                             >
                               {/* Batch Header */}

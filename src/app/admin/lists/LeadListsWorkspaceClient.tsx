@@ -278,7 +278,7 @@ export default function LeadListsWorkspaceClient({
             </div>
           ) : (
             <div className="space-y-3">
-              {initialSchedules.map((item) => {
+              {initialSchedules.map((item, idx) => {
                 const targetNames = (item.assignee_ids ?? [])
                   .map((id) => adminUsers.find((u) => u.id === id)?.name)
                   .filter(Boolean);
@@ -287,7 +287,7 @@ export default function LeadListsWorkspaceClient({
 
                 return (
                   <div
-                    key={item.id}
+                    key={`sched-${item.id || idx}`}
                     className={`rounded-2xl border p-5 transition-all shadow-md space-y-3 ${
                       isPendingSchedule
                         ? "border-[#C9A84C]/30 bg-[#071228]"
@@ -432,9 +432,9 @@ export default function LeadListsWorkspaceClient({
                         <span className="text-white/40">Assigned Telecallers:</span>
                         {targetNames.length > 0 ? (
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {targetNames.map((name) => (
+                            {targetNames.map((name, nIdx) => (
                               <span
-                                key={name}
+                                key={`telecaller-${name}-${nIdx}`}
                                 className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-white/90 text-[11px] font-medium"
                               >
                                 {name}
@@ -495,13 +495,13 @@ export default function LeadListsWorkspaceClient({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {initialStaffWorkload.map((staff) => {
+            {initialStaffWorkload.map((staff, sIdx) => {
               const isAllDone = staff.totalLeadsCount > 0 && staff.overallCompletionRate === 100;
               const isHighOutput = staff.overallCompletionRate >= 75 && !isAllDone;
 
               return (
                 <div
-                  key={staff.adminUserId}
+                  key={`workload-${staff.adminUserId || sIdx}`}
                   className="rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 shadow-lg flex flex-col justify-between"
                 >
                   <div className="space-y-3.5">
@@ -578,9 +578,9 @@ export default function LeadListsWorkspaceClient({
 
                       {staff.assignedLists && staff.assignedLists.length > 0 ? (
                         <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                          {staff.assignedLists.map((l) => (
+                          {staff.assignedLists.map((l, lIdx) => (
                             <Link
-                              key={l.id}
+                              key={`assigned-list-${l.id || lIdx}`}
                               href={`/admin/lists/${l.id}`}
                               className="group/item block p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-[#C9A84C]/30 transition-all text-xs space-y-1.5"
                             >

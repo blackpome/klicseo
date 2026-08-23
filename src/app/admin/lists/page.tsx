@@ -29,6 +29,12 @@ export default async function LeadListsPage({
       listAssignableAdminUsers(),
     ]);
 
+    const currentAdminUser = adminUsers.find(
+      (u) => u.email.toLowerCase() === me.email.toLowerCase(),
+    );
+    const currentUserId = currentAdminUser?.id || me.email;
+    const currentUserName = currentAdminUser?.name || me.email.split("@")[0];
+
     return (
       <AdminShell require="leads.view">
         <LeadListsWorkspaceClient
@@ -36,7 +42,7 @@ export default async function LeadListsPage({
           initialSchedules={schedules}
           initialStaffWorkload={staffWorkload}
           adminUsers={adminUsers.map((u) => ({ id: u.id, email: u.email, name: u.name }))}
-          currentUser={{ id: me.id, email: me.email, name: me.name || me.email, role: me.role }}
+          currentUser={{ id: currentUserId, email: me.email, name: currentUserName, role: me.role }}
           searchQuery={q ?? ""}
         />
       </AdminShell>
