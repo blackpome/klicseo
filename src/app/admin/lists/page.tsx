@@ -36,6 +36,7 @@ export default async function LeadListsPage({
           initialSchedules={schedules}
           initialStaffWorkload={staffWorkload}
           adminUsers={adminUsers.map((u) => ({ id: u.id, email: u.email, name: u.name }))}
+          currentUser={{ id: me.id, email: me.email, name: me.name || me.email, role: me.role }}
           searchQuery={q ?? ""}
         />
       </AdminShell>

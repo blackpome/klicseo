@@ -49,6 +49,7 @@ interface Props {
   initialSchedules: LeadAllocationSchedule[];
   initialStaffWorkload: StaffWorkloadSummary[];
   adminUsers: { id: string; email: string; name: string }[];
+  currentUser?: { id: string; email: string; name: string; role: string };
   searchQuery?: string;
 }
 
@@ -59,6 +60,7 @@ export default function LeadListsWorkspaceClient({
   initialSchedules,
   initialStaffWorkload,
   adminUsers,
+  currentUser,
   searchQuery = "",
 }: Props) {
   const router = useRouter();
@@ -228,7 +230,7 @@ export default function LeadListsWorkspaceClient({
       {tab === "campaigns" && (
         <StaffDatewiseLeadListsView
           lists={initialLists}
-          currentUser={{ id: "super_admin", email: "admin@klicseo.com", name: "Super Admin", role: "super_admin" }}
+          currentUser={currentUser ?? { id: "super_admin", email: "admin@klicseo.com", name: "Super Admin", role: "super_admin" }}
           isSuperAdmin={true}
           adminUsers={adminUsers}
         />
