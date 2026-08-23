@@ -31,10 +31,10 @@ import { DEFAULT_LEAD_STATUS_ITEMS, type CustomLeadStatus } from "@/lib/site-set
 import { listLeadLists } from "@/lib/leadLists";
 import type { LeadListRow } from "@/lib/leadLists-shared";
 import { currentAdmin, resolveScope } from "@/lib/admin-auth";
-import { getAdminUser } from "@/lib/admin-users";
 import ExportToolbar from "@/components/ExportToolbar";
 import Pagination from "@/components/Pagination";
 import LeadBulkListTable from "./LeadBulkListTable";
+import AreaFilterSelect from "./AreaFilterSelect";
 
 function buildLeadsHref(args: {
   status?: string;
@@ -399,26 +399,13 @@ export default async function AdminLeadsPage({
 
                     {/* Full Area Selector dropdown if more than 6 areas */}
                     {areaCounts.length > 6 && (
-                      <form className="inline-block">
-                        {filter !== "all" && <input type="hidden" name="status" value={filter} />}
-                        {q && <input type="hidden" name="q" value={q} />}
-                        {serviceFilter && <input type="hidden" name="service" value={serviceFilter} />}
-                        <select
-                          name="area"
-                          defaultValue={areaFilter ?? ""}
-                          onChange={(e) => {
-                            if (e.target.form) e.target.form.submit();
-                          }}
-                          className="bg-[#050E21] border border-white/10 text-white/80 rounded-lg px-2 py-1 text-[11px] focus:outline-none focus:border-[#C9A84C]"
-                        >
-                          <option value="">All {areaCounts.length} Captured Areas...</option>
-                          {areaCounts.map((a) => (
-                            <option key={a.area} value={a.area}>
-                              {a.area} ({a.count})
-                            </option>
-                          ))}
-                        </select>
-                      </form>
+                      <AreaFilterSelect
+                        areaCounts={areaCounts}
+                        currentArea={areaFilter}
+                        status={filter}
+                        q={q}
+                        service={serviceFilter}
+                      />
                     )}
                   </div>
                 </div>
