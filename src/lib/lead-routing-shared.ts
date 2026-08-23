@@ -17,6 +17,7 @@ export interface LeadAllocationFilter {
   areas?: string[];
   pincodes?: string[];
   services?: string[];
+  statuses?: string[];
   min_price?: number | null;
 }
 

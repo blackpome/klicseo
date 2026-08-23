@@ -8,6 +8,7 @@ import {
   MapPin,
   Car,
   Check,
+  CheckCircle2,
   AlertCircle,
   Loader2,
   Calendar,
@@ -34,6 +35,15 @@ interface Props {
   onClose: () => void;
   onSuccess: (message: string) => void;
 }
+
+const ALL_STATUS_OPTIONS = [
+  { id: "new", label: "New Leads", color: "from-blue-500/20 to-blue-500/5 text-blue-300 border-blue-500/40" },
+  { id: "draft", label: "Draft", color: "from-amber-500/20 to-amber-500/5 text-amber-300 border-amber-500/40" },
+  { id: "call_not_responded", label: "Call Not Responded", color: "from-orange-500/20 to-orange-500/5 text-orange-300 border-orange-500/40" },
+  { id: "follow_up", label: "Follow Up", color: "from-purple-500/20 to-purple-500/5 text-purple-300 border-purple-500/40" },
+  { id: "contacted", label: "Contacted", color: "from-teal-500/20 to-teal-500/5 text-teal-300 border-teal-500/40" },
+  { id: "cancelled", label: "Cancelled", color: "from-rose-500/20 to-rose-500/5 text-rose-300 border-rose-500/40" },
+];
 
 const COMMON_AREAS = [
   "Velachery",
@@ -77,6 +87,8 @@ export default function LeadAllocationModal({
   const [isCounting, setIsCounting] = useState(false);
 
   // 2. Conditions
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(["new", "draft"]);
+
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
   const [customAreaInput, setCustomAreaInput] = useState("");
 
@@ -105,6 +117,7 @@ export default function LeadAllocationModal({
 
     const timer = setTimeout(async () => {
       const res = await previewMatchingLeadsAction({
+        statuses: selectedStatuses.length > 0 ? selectedStatuses : undefined,
         areas: selectedAreas.length > 0 ? selectedAreas : undefined,
         pincodes: selectedPincodes.length > 0 ? selectedPincodes : undefined,
         services: selectedServices.length > 0 ? selectedServices : undefined,
@@ -113,12 +126,19 @@ export default function LeadAllocationModal({
       setAvailableCount(res.count);
       setTotalUnallocatedPool(res.totalUnallocated);
       setIsCounting(false);
-    }, 200);
+    }, 150);
 
     return () => clearTimeout(timer);
-  }, [isOpen, selectedAreas, selectedPincodes, selectedServices, minPrice]);
+  }, [isOpen, selectedStatuses, selectedAreas, selectedPincodes, selectedServices, minPrice]);
 
   if (!isOpen) return null;
+
+  // Handlers for Status
+  const toggleStatus = (statusId: string) => {
+    setSelectedStatuses((prev) =>
+      prev.includes(statusId) ? prev.filter((s) => s !== statusId) : [...prev, statusId],
+    );
+  };
 
   // Handlers for Area
   const toggleArea = (area: string) => {
@@ -182,6 +202,7 @@ export default function LeadAllocationModal({
 
   // Clear All Filters
   const clearAllFilters = () => {
+    setSelectedStatuses(["new", "draft"]);
     setSelectedAreas([]);
     setSelectedPincodes([]);
     setSelectedServices([]);
@@ -189,6 +210,9 @@ export default function LeadAllocationModal({
   };
 
   const hasActiveFilters =
+    selectedStatuses.length !== 2 ||
+    !selectedStatuses.includes("new") ||
+    !selectedStatuses.includes("draft") ||
     selectedAreas.length > 0 ||
     selectedPincodes.length > 0 ||
     selectedServices.length > 0 ||
@@ -222,6 +246,7 @@ export default function LeadAllocationModal({
         schedule_mode: scheduleMode,
         lead_count: Number(leadCount),
         conditions: {
+          statuses: selectedStatuses.length > 0 ? selectedStatuses : ["new", "draft"],
           areas: selectedAreas.length > 0 ? selectedAreas : undefined,
           pincodes: selectedPincodes.length > 0 ? selectedPincodes : undefined,
           services: selectedServices.length > 0 ? selectedServices : undefined,
@@ -382,8 +407,51 @@ export default function LeadAllocationModal({
               )}
             </div>
 
-            {/* A. Areas / Localities */}
+            {/* A. Lead Statuses (Default: New & Draft) */}
             <div className="space-y-2 pt-1 border-t border-white/[0.04]">
+              <div className="flex items-center justify-between">
+                <label className="text-white/70 font-semibold flex items-center gap-1.5 text-xs">
+                  <CheckCircle2 size={12} className="text-emerald-400" />
+                  <span>Lead Statuses</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-emerald-400 font-semibold">
+                    {selectedStatuses.length} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatuses(["new", "draft"])}
+                    className="text-[10px] text-white/40 hover:text-white underline"
+                  >
+                    Reset (New & Draft)
+                  </button>
+                </div>
+              </div>
+
+              {/* Status Option Chips */}
+              <div className="flex flex-wrap gap-1.5">
+                {ALL_STATUS_OPTIONS.map((status) => {
+                  const isSelected = selectedStatuses.includes(status.id);
+                  return (
+                    <button
+                      key={status.id}
+                      type="button"
+                      onClick={() => toggleStatus(status.id)}
+                      className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${
+                        isSelected
+                          ? `bg-gradient-to-br ${status.color} shadow-sm ring-1 ring-white/10 font-semibold`
+                          : "bg-white/[0.03] border-white/10 text-white/50 hover:text-white hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      {isSelected ? `✓ ${status.label}` : `+ ${status.label}`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* B. Areas / Localities */}
+            <div className="space-y-2 pt-2 border-t border-white/[0.04]">
               <div className="flex items-center justify-between">
                 <label className="text-white/70 font-semibold flex items-center gap-1.5">
                   <MapPin size={12} className="text-[#C9A84C]" />

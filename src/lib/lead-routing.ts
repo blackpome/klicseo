@@ -24,13 +24,21 @@ export function matchesFilter(
     address?: string | null;
     pincode?: string | null;
     service?: string | null;
+    status?: string | null;
     price_total?: number | null;
   },
   filter: LeadAllocationFilter,
 ): boolean {
   if (!filter) return true;
 
-  // 1. Area (checks both area column and permanent address text with unseal & canonical matching)
+  // 1. Status Filter (defaults to new & draft leads)
+  const allowedStatuses = filter.statuses && filter.statuses.length > 0 ? filter.statuses : ["new", "draft"];
+  const leadStatus = (lead.status ?? "new").toLowerCase().trim();
+  if (!allowedStatuses.some((s) => s.toLowerCase().trim() === leadStatus)) {
+    return false;
+  }
+
+  // 2. Area (checks both area column and permanent address text with unseal & canonical matching)
   if (filter.areas && filter.areas.length > 0) {
     const plainAddress = unseal(lead.address);
     const leadArea = String(lead.area ?? "").toLowerCase().trim();
@@ -45,14 +53,14 @@ export function matchesFilter(
     if (!matched) return false;
   }
 
-  // 2. Pincodes
+  // 3. Pincodes
   if (filter.pincodes && filter.pincodes.length > 0) {
     const leadPin = String(lead.pincode ?? "").trim();
     const matched = filter.pincodes.some((pin) => leadPin.includes(pin.trim()));
     if (!matched) return false;
   }
 
-  // 3. Service
+  // 4. Service
   if (filter.services && filter.services.length > 0) {
     const leadService = String(lead.service ?? "").toLowerCase().trim();
     if (!leadService) return false;
@@ -63,7 +71,7 @@ export function matchesFilter(
     if (!matched) return false;
   }
 
-  // 4. Minimum Order Price
+  // 5. Minimum Order Price
   if (filter.min_price != null && filter.min_price > 0) {
     const price = lead.price_total ?? 0;
     if (price < filter.min_price) return false;
@@ -112,7 +120,7 @@ export async function countMatchingLeads(
   filter: LeadAllocationFilter,
 ): Promise<{ count: number; totalUnallocated: number }> {
   try {
-    const hasFilters = Boolean(
+    const hasExplicitFilters = Boolean(
       (filter.areas && filter.areas.length > 0) ||
       (filter.pincodes && filter.pincodes.length > 0) ||
       (filter.services && filter.services.length > 0) ||
@@ -124,14 +132,20 @@ export async function countMatchingLeads(
       getAllAssignedLeadIds(),
     ]);
 
-    const unbookedLeads = locationIndex.allLeads.filter((l) => l.status !== "booked");
-    const totalUnallocated = unbookedLeads.filter((l) => !assignedSet.has(l.id)).length;
+    const allowedStatuses = filter.statuses && filter.statuses.length > 0 ? filter.statuses : ["new", "draft"];
+    const statusFilteredLeads = locationIndex.allLeads.filter((l) => {
+      if (l.status === "booked") return false;
+      const s = (l.status ?? "new").toLowerCase().trim();
+      return allowedStatuses.some((allowed) => allowed.toLowerCase().trim() === s);
+    });
 
-    if (!hasFilters) {
+    const totalUnallocated = statusFilteredLeads.filter((l) => !assignedSet.has(l.id)).length;
+
+    if (!hasExplicitFilters) {
       return { count: totalUnallocated, totalUnallocated };
     }
 
-    const availableMatching = unbookedLeads.filter((lead) => {
+    const availableMatching = statusFilteredLeads.filter((lead) => {
       if (assignedSet.has(lead.id)) return false;
 
       // 1. Area filter
@@ -249,9 +263,20 @@ export async function executeLeadAllocation(req: {
   }
 
   // 2. Select matching candidate leads directly from index
+  const allowedStatuses =
+    req.conditions.statuses && req.conditions.statuses.length > 0
+      ? req.conditions.statuses
+      : ["new", "draft"];
+
   const candidateLeads = locationIndex.allLeads.filter((lead) => {
     if (lead.status === "booked") return false;
     if (assignedSet.has(lead.id)) return false;
+
+    // 0. Status filter
+    const leadStatus = (lead.status ?? "new").toLowerCase().trim();
+    if (!allowedStatuses.some((s) => s.toLowerCase().trim() === leadStatus)) {
+      return false;
+    }
 
     // 1. Area filter
     if (req.conditions.areas && req.conditions.areas.length > 0) {
