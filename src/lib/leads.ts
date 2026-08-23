@@ -1,7 +1,7 @@
 import "server-only";
 import { supabase } from "./supabase";
 import { sealFields, unsealFields, unseal, phoneHash, normalizePhone } from "./crypto";
-import { areaFromPincode, extractAreaFromAddress, invalidateAreaCountsCache } from "./area";
+import { areaFromPincode, extractAreaFromAddress, listAreasWithCounts, resolveLeadIdsForArea, invalidateAreaCountsCache } from "./area";
 import type { CallReminder, LeadStatus, LeadSource } from "./leads-shared";
 import type { LeadScope } from "./admin-auth";
 
@@ -224,14 +224,6 @@ function applyLeadFilters(
   allowedLeadIds: string[] | null,
 ) {
   if (allowedLeadIds) q = q.in("id", allowedLeadIds);
-  if (options.area && options.area !== "all") {
-    const sArea = sanitizeSearch(options.area);
-    if (sArea) {
-      q = q.or(`area.eq.${options.area},address.ilike.%${sArea}%`);
-    } else {
-      q = q.eq("area", options.area);
-    }
-  }
   if (options.service && options.service !== "all") q = q.eq("service", options.service);
   if (options.serviceOption && options.serviceOption !== "all") q = q.eq("service_option", options.serviceOption);
   if (options.fromIso) q = q.gte("created_at", options.fromIso);
@@ -271,6 +263,14 @@ export async function listLeadStatusSummary(
     if (allowedLeadIds.length === 0) {
       return { total: 0, new: 0, contacted: 0, follow_up: 0, call_not_responded: 0, booked: 0, cancelled: 0, draft: 0 };
     }
+  }
+
+  if (options.area && options.area !== "all") {
+    const areaMatchingIds = await resolveLeadIdsForArea(options.area, allowedLeadIds);
+    if (areaMatchingIds.length === 0) {
+      return { total: 0, new: 0, contacted: 0, follow_up: 0, call_not_responded: 0, booked: 0, cancelled: 0, draft: 0 };
+    }
+    allowedLeadIds = areaMatchingIds;
   }
 
   const statuses = [
@@ -359,14 +359,21 @@ export async function listPaginatedLeads(
   } else if (opts.excludeStatuses && opts.excludeStatuses.length) {
     q = q.not("status", "in", `(${opts.excludeStatuses.join(",")})`);
   }
-  if (opts.area && opts.area !== "all") {
-    const sArea = sanitizeSearch(opts.area);
-    if (sArea) {
-      q = q.or(`area.eq.${opts.area},address.ilike.%${sArea}%`);
-    } else {
-      q = q.eq("area", opts.area);
+  if (opts.assignedAdminUserId) {
+    const { data: assignedLeadIds, error: listErr } = await supabase()
+      .from("lead_list_items")
+      .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
+      .eq("lead_lists.assigned_admin_user_id", opts.assignedAdminUserId);
+    if (listErr) throw listErr;
+    const ids = Array.from(
+      new Set((assignedLeadIds ?? []).map((r: { lead_id: string }) => r.lead_id)),
+    );
+    if (ids.length === 0) {
+      return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
     }
+    q = q.in("id", ids);
   }
+
   if (opts.service && opts.service !== "all") q = q.eq("service", opts.service);
   if (opts.serviceOption && opts.serviceOption !== "all") q = q.eq("service_option", opts.serviceOption);
   if (opts.fromIso) q = q.gte("created_at", opts.fromIso);
@@ -384,19 +391,12 @@ export async function listPaginatedLeads(
     }
   }
 
-  if (opts.assignedAdminUserId) {
-    const { data: assignedLeadIds, error: listErr } = await supabase()
-      .from("lead_list_items")
-      .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
-      .eq("lead_lists.assigned_admin_user_id", opts.assignedAdminUserId);
-    if (listErr) throw listErr;
-    const ids = Array.from(
-      new Set((assignedLeadIds ?? []).map((r: { lead_id: string }) => r.lead_id)),
-    );
-    if (ids.length === 0) {
+  if (opts.area && opts.area !== "all") {
+    const matchingIds = await resolveLeadIdsForArea(opts.area, opts.assignedAdminUserId ? undefined : null);
+    if (matchingIds.length === 0) {
       return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
     }
-    q = q.in("id", ids);
+    q = q.in("id", matchingIds);
   }
 
   q = q.range(offset, offset + limit - 1);

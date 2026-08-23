@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { supabase } from "./supabase";
+import { unseal } from "./crypto";
 
 // Resolve a pincode → locality name via the pincode_areas lookup table. The
 // table is small + stable, so React-cache the full map per-request rather
@@ -35,37 +36,60 @@ const DEFAULT_KNOWN_AREAS = [
   "George Town",
   "Gopalapuram",
   "Guindy",
+  "Injambakkam",
+  "Iyyappanthangal",
   "K. K. Nagar",
   "Karapakkam",
+  "Keelkattalai",
   "Kelambakkam",
   "Kilpauk",
   "Kodambakkam",
   "Kodambakkam West",
+  "Kolathur",
+  "Kottivakkam",
   "Kotturpuram",
+  "Kovilambakkam",
   "Madhavaram",
   "Madipakkam",
   "Manapakkam",
   "Medavakkam",
+  "Meenambakkam",
   "Mogappair",
   "Mogappair East",
+  "Moovarasampettai",
+  "Mugalivakkam",
   "Mylapore",
   "Nandanam",
   "Nanganallur",
+  "Nanmangalam",
+  "Navalur",
+  "Neelankarai",
   "Nungambakkam",
   "OMR / Padur",
+  "Palavakkam",
   "Pallavaram",
   "Pallikaranai",
   "Park Town",
   "Perambur",
   "Periyapalayam",
+  "Perumbakkam",
+  "Perungudi",
+  "Poonamallee",
   "Porur",
+  "Puzhuthivakkam",
+  "Puzhudhivakkam",
+  "Puzhuthivakam",
   "R. A. Puram",
+  "Ramapuram",
   "Royapettah",
   "Saidapet",
   "Saligramam",
   "Selaiyur",
+  "Semmancheri",
   "Shenoy Nagar",
   "Sholinganallur",
+  "Siruseri",
+  "Sithalapakkam",
   "St. Thomas Mount",
   "Tambaram",
   "Tambaram East",
@@ -74,10 +98,14 @@ const DEFAULT_KNOWN_AREAS = [
   "Taramani",
   "T. Nagar",
   "Teynampet",
+  "Thirumazhisai",
   "Thiruvanmiyur",
+  "Thoraipakkam",
   "Thousand Lights",
   "Triplicane",
+  "Ullagaram",
   "Vadapalani",
+  "Valasaravakkam",
   "Velappanchavadi",
   "Velachery",
   "Virugambakkam",
@@ -239,7 +267,8 @@ export async function listAreasWithCounts(
     if (r.area?.trim()) {
       leadAreas.add(r.area.trim());
     }
-    const extracted = await extractAllAreasFromAddress(r.address, r.pincode);
+    const plainAddress = unseal(r.address);
+    const extracted = await extractAllAreasFromAddress(plainAddress, r.pincode);
     for (const a of extracted) {
       leadAreas.add(a);
     }
@@ -260,6 +289,57 @@ export async function listAreasWithCounts(
   };
 
   return sortedResult;
+}
+
+/**
+ * Resolves all lead IDs matching an area name across both the area column
+ * and the decrypted permanent address text.
+ */
+export async function resolveLeadIdsForArea(
+  area: string,
+  allowedLeadIds?: string[] | null,
+): Promise<string[]> {
+  const normTarget = area.trim().toLowerCase();
+  if (!normTarget || normTarget === "all") return [];
+
+  const escaped = normTarget
+    .replace(/[+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\./g, "\\.?")
+    .replace(/\s+/g, "\\s+");
+  const regex = new RegExp(`(^|[^a-zA-Z0-9])${escaped}([^a-zA-Z0-9]|$)`, "i");
+
+  const matchingIds: string[] = [];
+  let from = 0;
+  const batchSize = 1000;
+
+  while (true) {
+    let q = supabase()
+      .from("leads")
+      .select("id, area, address, pincode")
+      .range(from, from + batchSize - 1);
+    if (allowedLeadIds) q = q.in("id", allowedLeadIds);
+
+    const { data, error } = await q;
+    if (error || !data || data.length === 0) break;
+
+    for (const r of data as { id: string; area: string | null; address: string | null; pincode: string | null }[]) {
+      const plainAddress = unseal(r.address);
+      const leadArea = (r.area || "").trim();
+      const leadAddr = (plainAddress || "").trim();
+
+      if (
+        (leadArea && (leadArea.toLowerCase() === normTarget || regex.test(leadArea))) ||
+        (leadAddr && regex.test(leadAddr))
+      ) {
+        matchingIds.push(r.id);
+      }
+    }
+
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
+
+  return matchingIds;
 }
 
 /** Canonical area list from the lookup table — used for autocomplete suggestions
