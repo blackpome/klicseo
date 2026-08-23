@@ -57,6 +57,11 @@ export default function FolderAllocationButton({
           defaultArea={area}
           folderName={folderName}
           allFolders={allFolders}
+          initialCount={
+            folder
+              ? allFolders?.find((f) => f.id === folder)?.count
+              : allFolders?.reduce((sum, f) => sum + f.count, 0)
+          }
           isOpen={isOpen}
           onClose={() => setIsOpen(false)}
           onSuccess={(msg) => {

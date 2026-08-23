@@ -111,7 +111,7 @@ export function markLeadsAsAssigned(leadIds: string[]): void {
 }
 
 /**
- * Fetch all assigned lead IDs with in-memory 30s caching and in-flight de-duplication.
+ * Fetch all assigned lead IDs with parallel chunk loading and in-memory 5-minute caching.
  */
 export async function getAllAssignedLeadIds(): Promise<Set<string>> {
   if (assignedLeadIdsCache && assignedLeadIdsCache.expires > Date.now()) {
@@ -124,21 +124,36 @@ export async function getAllAssignedLeadIds(): Promise<Set<string>> {
   inFlightAssignedPromise = (async () => {
     try {
       const set = new Set<string>();
-      let from = 0;
+      
+      const { count } = await supabase()
+        .from("lead_list_items")
+        .select("*", { count: "exact", head: true });
+
+      const total = count || 5000;
       const batchSize = 1000;
-      while (true) {
-        const { data, error } = await supabase()
-          .from("lead_list_items")
-          .select("lead_id")
-          .range(from, from + batchSize - 1);
-        if (error || !data || data.length === 0) break;
-        for (const item of data) {
-          if (item.lead_id) set.add(item.lead_id);
-        }
-        if (data.length < batchSize) break;
-        from += batchSize;
+      const chunkCount = Math.max(1, Math.ceil(total / batchSize));
+
+      const chunkPromises = [];
+      for (let i = 0; i < chunkCount; i++) {
+        const start = i * batchSize;
+        chunkPromises.push(
+          supabase()
+            .from("lead_list_items")
+            .select("lead_id")
+            .range(start, start + batchSize - 1),
+        );
       }
-      assignedLeadIdsCache = { set, expires: Date.now() + 30000 };
+
+      const chunkResults = await Promise.all(chunkPromises);
+      for (const res of chunkResults) {
+        if (res.data) {
+          for (const item of res.data) {
+            if (item.lead_id) set.add(item.lead_id);
+          }
+        }
+      }
+
+      assignedLeadIdsCache = { set, expires: Date.now() + 300000 };
       return set;
     } finally {
       inFlightAssignedPromise = null;

@@ -35,6 +35,7 @@ interface Props {
   defaultArea?: string;
   folderName?: string;
   allFolders?: Array<{ id: string; name: string; count: number }>;
+  initialCount?: number;
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
@@ -84,6 +85,7 @@ export default function LeadAllocationModal({
   defaultArea,
   folderName,
   allFolders,
+  initialCount,
   isOpen,
   onClose,
   onSuccess,
@@ -94,10 +96,10 @@ export default function LeadAllocationModal({
   // 0. Folder Scoping
   const [selectedFolder, setSelectedFolder] = useState<string>(defaultFolder || "all");
 
-  // 1. Lead Count
+  // 1. Lead Count (Instant initial display with 0ms delay)
   const [leadCount, setLeadCount] = useState<number>(20);
-  const [availableCount, setAvailableCount] = useState<number | null>(null);
-  const [totalUnallocatedPool, setTotalUnallocatedPool] = useState<number | null>(null);
+  const [availableCount, setAvailableCount] = useState<number | null>(initialCount ?? null);
+  const [totalUnallocatedPool, setTotalUnallocatedPool] = useState<number | null>(initialCount ?? null);
   const [isCounting, setIsCounting] = useState(false);
 
   // 2. Conditions
@@ -119,8 +121,12 @@ export default function LeadAllocationModal({
       if (defaultArea) {
         setSelectedAreas((prev) => (prev.includes(defaultArea) ? prev : [...prev, defaultArea]));
       }
+      if (initialCount != null) {
+        setAvailableCount((prev) => prev ?? initialCount);
+        setTotalUnallocatedPool((prev) => prev ?? initialCount);
+      }
     }
-  }, [isOpen, defaultFolder, defaultArea]);
+  }, [isOpen, defaultFolder, defaultArea, initialCount]);
 
   // 3. Assignees
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([]);
@@ -137,7 +143,7 @@ export default function LeadAllocationModal({
   // Live query available matching leads count (folder-aware + location-scoped)
   useEffect(() => {
     if (!isOpen) return;
-    setIsCounting(true);
+    if (availableCount === null) setIsCounting(true);
 
     const timer = setTimeout(async () => {
       const res = await previewMatchingLeadsAction({
@@ -151,7 +157,7 @@ export default function LeadAllocationModal({
       setAvailableCount(res.count);
       setTotalUnallocatedPool(res.totalUnallocated);
       setIsCounting(false);
-    }, 150);
+    }, 50);
 
     return () => clearTimeout(timer);
   }, [isOpen, selectedFolder, selectedStatuses, selectedAreas, selectedPincodes, selectedServices, minPrice]);
