@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   MapPin,
   X,
+  Folder,
+  Layers,
 } from "lucide-react";
 import AdminShell from "./AdminShell";
 import AdminError from "./AdminError";
@@ -18,6 +20,7 @@ import {
   mapLeadIdsToLists,
   listServiceCounts,
   listLeadStatusSummary,
+  listFolderSummaries,
 } from "@/lib/leads";
 import { listAreasWithCounts } from "@/lib/area";
 import {
@@ -31,9 +34,13 @@ import { DEFAULT_LEAD_STATUS_ITEMS, type CustomLeadStatus } from "@/lib/site-set
 import { listLeadLists } from "@/lib/leadLists";
 import type { LeadListRow } from "@/lib/leadLists-shared";
 import { currentAdmin, resolveScope } from "@/lib/admin-auth";
+import { listAssignableAdminUsers } from "@/lib/admin-users";
 import ExportToolbar from "@/components/ExportToolbar";
 import Pagination from "@/components/Pagination";
 import LeadBulkListTable from "./LeadBulkListTable";
+import LeadCardsGrid from "./LeadCardsGrid";
+import FolderCardsDeck from "./FolderCardsDeck";
+import LeadViewModeSwitcher from "./LeadViewModeSwitcher";
 import AreaFilterSelect from "./AreaFilterSelect";
 
 function buildLeadsHref(args: {
@@ -41,6 +48,10 @@ function buildLeadsHref(args: {
   q?: string;
   area?: string;
   service?: string;
+  folder?: string;
+  view?: string;
+  year?: string;
+  source?: string;
   page?: number;
   pageSize?: number;
 }): string {
@@ -49,6 +60,10 @@ function buildLeadsHref(args: {
   if (args.q) params.set("q", args.q);
   if (args.area && args.area !== "all") params.set("area", args.area);
   if (args.service && args.service !== "all") params.set("service", args.service);
+  if (args.folder && args.folder !== "all") params.set("folder", args.folder);
+  if (args.view && args.view !== "cards") params.set("view", args.view);
+  if (args.year && args.year !== "all") params.set("year", args.year);
+  if (args.source && args.source !== "all") params.set("source", args.source);
   if (args.page && args.page > 1) params.set("page", String(args.page));
   if (args.pageSize && args.pageSize !== 25) params.set("pageSize", String(args.pageSize));
   const s = params.toString();
@@ -63,6 +78,10 @@ export default async function AdminLeadsPage({
     q?: string;
     area?: string;
     service?: string;
+    folder?: string;
+    view?: string;
+    year?: string;
+    source?: string;
     page?: string;
     pageSize?: string;
   }>;
@@ -89,10 +108,23 @@ export default async function AdminLeadsPage({
   );
 
   const canManage = Boolean(me?.permissions.includes("leads.manage"));
-  const { status, q, area, service, page: pageParam, pageSize: pageSizeParam } = await searchParams;
+  const {
+    status,
+    q,
+    area,
+    service,
+    folder,
+    view,
+    year,
+    source,
+    page: pageParam,
+    pageSize: pageSizeParam,
+  } = await searchParams;
+
   const filter = statusTabs.find((t) => t.id === status)?.id ?? "all";
   const areaFilter = area && area !== "all" ? area : undefined;
   const serviceFilter = service && service !== "all" ? service : undefined;
+  const currentView = view === "table" ? "table" : "cards";
 
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const pageSize = Math.max(1, Math.min(100, parseInt(pageSizeParam ?? "25", 10) || 25));
@@ -103,19 +135,24 @@ export default async function AdminLeadsPage({
 
   let paginated;
   let statusSummary;
+  let folderSummaries;
   let leadLists: LeadListRow[] = [];
   let areaCounts: { area: string; count: number }[] = [];
   let serviceCounts: { service: string; count: number }[] = [];
   let leadListNames: Map<string, string[]> = new Map();
+  let assignableUsers: Array<{ id: string; email: string; name: string }> = [];
 
   try {
     const canManageLists = Boolean(me?.permissions.includes("leads.manage"));
-    [paginated, statusSummary, areaCounts, leadLists, serviceCounts] = await Promise.all([
+    [paginated, statusSummary, folderSummaries, areaCounts, leadLists, serviceCounts, assignableUsers] = await Promise.all([
       listPaginatedLeads({
         status: filter as any,
         search: q,
         area: areaFilter,
         service: serviceFilter,
+        folder,
+        year,
+        source,
         assignedAdminUserId,
         page,
         pageSize,
@@ -125,10 +162,15 @@ export default async function AdminLeadsPage({
         search: q,
         area: areaFilter,
         service: serviceFilter,
+        folder,
+        year,
+        source,
       }),
+      listFolderSummaries(assignedAdminUserId),
       listAreasWithCounts(assignedAdminUserId),
       canManageLists ? listLeadLists({ assignedAdminUserId }) : Promise.resolve([]),
       listServiceCounts({ assignedAdminUserId, area: areaFilter }),
+      canManageLists ? listAssignableAdminUsers() : Promise.resolve([]),
     ]);
 
     if (isSuperAdmin && paginated.leads.length > 0) {
@@ -153,6 +195,20 @@ export default async function AdminLeadsPage({
     statusSummary.total > 0
       ? Math.round((statusSummary.booked / statusSummary.total) * 100)
       : 0;
+
+  let activeFolderName = "";
+  if (folder && folder !== "all") {
+    if (folder === "website_form") {
+      activeFolderName = "🌐 Website Form Leads";
+    } else if (folder === "hot_leads") {
+      activeFolderName = "🔥 Hot Leads (Admin Added)";
+    } else if (folder.startsWith("year_")) {
+      activeFolderName = `📅 ${folder.replace("year_", "")} Leads`;
+    } else {
+      const matchCustom = folderSummaries.customFolders.find((f) => f.id === folder);
+      activeFolderName = matchCustom ? `📁 ${matchCustom.name}` : "📁 Custom Folder";
+    }
+  }
 
   return (
     <AdminShell require="leads.view">
@@ -200,11 +256,44 @@ export default async function AdminLeadsPage({
           )}
         </div>
 
+        {/* 1. Folder Cards Deck (System & Custom Folder Buckets) */}
+        <FolderCardsDeck
+          systemFolders={folderSummaries.systemFolders}
+          customFolders={folderSummaries.customFolders}
+          totalLeads={folderSummaries.totalLeads}
+          activeFolder={folder}
+          adminUsers={assignableUsers}
+          canManage={canManage}
+        />
+
+        {/* Active Folder Filter Banner */}
+        {activeFolderName && (
+          <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-[#C9A84C]/15 to-transparent border border-[#C9A84C]/30 text-white shadow-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#E8CC7A]">
+                Active Folder Filter:
+              </span>
+              <span className="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-[#C9A84C]/20 border border-[#C9A84C]/40 text-[#E8CC7A]">
+                {activeFolderName}
+              </span>
+              <span className="text-xs text-white/50">
+                ({totalCount.toLocaleString("en-IN")} matching leads)
+              </span>
+            </div>
+            <Link
+              href={buildLeadsHref({ folder: "all", status: filter, view: currentView })}
+              className="text-xs font-bold text-rose-300 hover:text-white inline-flex items-center gap-1 hover:underline shrink-0"
+            >
+              <X size={13} /> Clear Folder Filter
+            </Link>
+          </div>
+        )}
+
         {/* Hero KPI Stat Strip (Astryx Metrics) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
           {/* Card 1: Total Leads */}
           <Link
-            href={buildLeadsHref({ status: "all", area: areaFilter, service: serviceFilter })}
+            href={buildLeadsHref({ status: "all", area: areaFilter, service: serviceFilter, folder, view: currentView })}
             className={`p-4 rounded-2xl border transition-all ${
               filter === "all"
                 ? "bg-[#C9A84C]/10 border-[#C9A84C]/40 ring-1 ring-[#C9A84C]/20"
@@ -216,7 +305,7 @@ export default async function AdminLeadsPage({
               <Users size={16} className="text-[#C9A84C]" />
             </div>
             <div className="text-2xl font-bold text-white tabular-nums">
-              {statusSummary.total}
+              {statusSummary.total.toLocaleString("en-IN")}
             </div>
             <div className="text-[11px] text-white/40 mt-1">
               Active CRM database
@@ -225,7 +314,7 @@ export default async function AdminLeadsPage({
 
           {/* Card 2: New Leads */}
           <Link
-            href={buildLeadsHref({ status: "new", area: areaFilter, service: serviceFilter })}
+            href={buildLeadsHref({ status: "new", area: areaFilter, service: serviceFilter, folder, view: currentView })}
             className={`p-4 rounded-2xl border transition-all ${
               filter === "new"
                 ? "bg-blue-500/10 border-blue-500/40 ring-1 ring-blue-500/20"
@@ -237,7 +326,7 @@ export default async function AdminLeadsPage({
               <Sparkles size={16} className="text-blue-400" />
             </div>
             <div className="text-2xl font-bold text-blue-400 tabular-nums">
-              {statusSummary.new}
+              {statusSummary.new.toLocaleString("en-IN")}
             </div>
             <div className="text-[11px] text-white/40 mt-1">
               Awaiting first contact
@@ -246,7 +335,7 @@ export default async function AdminLeadsPage({
 
           {/* Card 3: Contacted / In Progress */}
           <Link
-            href={buildLeadsHref({ status: "contacted", area: areaFilter, service: serviceFilter })}
+            href={buildLeadsHref({ status: "contacted", area: areaFilter, service: serviceFilter, folder, view: currentView })}
             className={`p-4 rounded-2xl border transition-all ${
               filter === "contacted"
                 ? "bg-amber-500/10 border-amber-500/40 ring-1 ring-amber-500/20"
@@ -258,7 +347,7 @@ export default async function AdminLeadsPage({
               <PhoneCall size={16} className="text-amber-400" />
             </div>
             <div className="text-2xl font-bold text-amber-400 tabular-nums">
-              {statusSummary.contacted + statusSummary.follow_up + statusSummary.call_not_responded}
+              {(statusSummary.contacted + statusSummary.follow_up + statusSummary.call_not_responded).toLocaleString("en-IN")}
             </div>
             <div className="text-[11px] text-white/40 mt-1">
               In telecalling cycle
@@ -267,7 +356,7 @@ export default async function AdminLeadsPage({
 
           {/* Card 4: Booked Conversions */}
           <Link
-            href={buildLeadsHref({ status: "booked", area: areaFilter, service: serviceFilter })}
+            href={buildLeadsHref({ status: "booked", area: areaFilter, service: serviceFilter, folder, view: currentView })}
             className={`p-4 rounded-2xl border transition-all ${
               filter === "booked"
                 ? "bg-emerald-500/10 border-emerald-500/40 ring-1 ring-emerald-500/20"
@@ -280,7 +369,7 @@ export default async function AdminLeadsPage({
             </div>
             <div className="flex items-baseline gap-2">
               <div className="text-2xl font-bold text-emerald-400 tabular-nums">
-                {statusSummary.booked}
+                {statusSummary.booked.toLocaleString("en-IN")}
               </div>
               <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
                 {conversionRate}% conv.
@@ -292,45 +381,54 @@ export default async function AdminLeadsPage({
           </Link>
         </div>
 
-        {/* Unified Astryx Filter Command Bar */}
+        {/* Unified Filter & Command Bar */}
         <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-4 space-y-4 shadow-lg">
-          {/* Status Tabs Segmented Control */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {statusTabs.map((t) => {
-              const active = filter === t.id;
-              const count =
-                t.id === "all"
-                  ? statusSummary.total
-                  : statusSummary[t.id as keyof typeof statusSummary] ?? 0;
+          {/* Top Row: Status Tabs Segmented Control & View Mode Switcher */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none flex-1 min-w-[260px]">
+              {statusTabs.map((t) => {
+                const active = filter === t.id;
+                const count =
+                  t.id === "all"
+                    ? statusSummary.total
+                    : statusSummary[t.id as keyof typeof statusSummary] ?? 0;
 
-              return (
-                <Link
-                  key={t.id}
-                  href={buildLeadsHref({
-                    status: t.id,
-                    q,
-                    area: areaFilter,
-                    service: serviceFilter,
-                  })}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                    active
-                      ? "bg-[#C9A84C] text-[#050E21] shadow-sm"
-                      : "bg-white/[0.02] text-white/60 hover:text-white hover:bg-white/[0.06]"
-                  }`}
-                >
-                  <span>{t.label}</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                return (
+                  <Link
+                    key={t.id}
+                    href={buildLeadsHref({
+                      status: t.id,
+                      q,
+                      area: areaFilter,
+                      service: serviceFilter,
+                      folder,
+                      view: currentView,
+                    })}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                       active
-                        ? "bg-[#050E21]/20 text-[#050E21]"
-                        : "bg-white/10 text-white/50"
+                        ? "bg-[#C9A84C] text-[#050E21] shadow-sm"
+                        : "bg-white/[0.02] text-white/60 hover:text-white hover:bg-white/[0.06]"
                     }`}
                   >
-                    {count}
-                  </span>
-                </Link>
-              );
-            })}
+                    <span>{t.label}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        active
+                          ? "bg-[#050E21]/20 text-[#050E21]"
+                          : "bg-white/10 text-white/50"
+                      }`}
+                    >
+                      {count.toLocaleString("en-IN")}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* View Mode Switcher */}
+            <div className="shrink-0 flex items-center gap-2">
+              <LeadViewModeSwitcher currentView={currentView} />
+            </div>
           </div>
 
           {/* Search, Area & Service Filters */}
@@ -339,6 +437,8 @@ export default async function AdminLeadsPage({
               {filter !== "all" && <input type="hidden" name="status" value={filter} />}
               {areaFilter && <input type="hidden" name="area" value={areaFilter} />}
               {serviceFilter && <input type="hidden" name="service" value={serviceFilter} />}
+              {folder && <input type="hidden" name="folder" value={folder} />}
+              {currentView !== "cards" && <input type="hidden" name="view" value={currentView} />}
 
               <div className="relative flex-1">
                 <Search
@@ -369,7 +469,7 @@ export default async function AdminLeadsPage({
                   <MapPin size={13} className="text-white/40" />
                   <div className="flex gap-1 flex-wrap items-center">
                     <Link
-                      href={buildLeadsHref({ status: filter, q, area: "all", service: serviceFilter })}
+                      href={buildLeadsHref({ status: filter, q, area: "all", service: serviceFilter, folder, view: currentView })}
                       className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
                         !areaFilter
                           ? "bg-white/15 text-white"
@@ -386,6 +486,8 @@ export default async function AdminLeadsPage({
                           q,
                           area: a.area,
                           service: serviceFilter,
+                          folder,
+                          view: currentView,
                         })}
                         className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
                           areaFilter === a.area
@@ -414,7 +516,7 @@ export default async function AdminLeadsPage({
               {/* Active Filter Clear Tag */}
               {(q || areaFilter || serviceFilter) && (
                 <Link
-                  href={buildLeadsHref({ status: filter })}
+                  href={buildLeadsHref({ status: filter, folder, view: currentView })}
                   className="px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-300 text-[11px] font-medium hover:bg-rose-500/20 inline-flex items-center gap-1 transition-colors"
                 >
                   <X size={12} /> Clear Filters
@@ -426,25 +528,37 @@ export default async function AdminLeadsPage({
           </div>
         </div>
 
-        {/* Data Table or Empty State */}
-        {leads.length === 0 ? (
-          <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-12 text-center space-y-3">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-white/30">
-              <Users size={24} />
-            </div>
-            <h3 className="text-sm font-semibold text-white">No matching leads found</h3>
-            <p className="text-xs text-white/40 max-w-sm mx-auto">
-              Try adjusting your search criteria or status filter, or upload a new spreadsheet batch.
-            </p>
-            {canManage && (
-              <div className="pt-2">
-                <Link
-                  href="/admin/upload"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#C9A84C] text-xs font-bold text-[#050E21] hover:bg-[#E8CC7A]"
-                >
-                  <UploadCloud size={14} /> Upload Leads
-                </Link>
-              </div>
+        {/* Lead View (Manual Cards Grid vs Sheet Table View) */}
+        {currentView === "cards" ? (
+          <div className="space-y-4">
+            <LeadCardsGrid
+              leads={leads}
+              configuredStatuses={configuredStatuses}
+              leadListNames={leadListNames}
+              leadLists={leadLists}
+              canManage={canManage}
+            />
+
+            {/* Pagination Controls */}
+            {leads.length > 0 && (
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                totalCount={totalCount}
+                totalPages={totalPages}
+                buildHref={(newPage, newPageSize) =>
+                  buildLeadsHref({
+                    status: filter,
+                    q,
+                    area: areaFilter,
+                    service: serviceFilter,
+                    folder,
+                    view: currentView,
+                    page: newPage,
+                    pageSize: newPageSize ?? pageSize,
+                  })
+                }
+              />
             )}
           </div>
         ) : (
@@ -459,22 +573,26 @@ export default async function AdminLeadsPage({
             />
 
             {/* Pagination Controls */}
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              totalCount={totalCount}
-              totalPages={totalPages}
-              buildHref={(newPage, newPageSize) =>
-                buildLeadsHref({
-                  status: filter,
-                  q,
-                  area: areaFilter,
-                  service: serviceFilter,
-                  page: newPage,
-                  pageSize: newPageSize ?? pageSize,
-                })
-              }
-            />
+            {leads.length > 0 && (
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                totalCount={totalCount}
+                totalPages={totalPages}
+                buildHref={(newPage, newPageSize) =>
+                  buildLeadsHref({
+                    status: filter,
+                    q,
+                    area: areaFilter,
+                    service: serviceFilter,
+                    folder,
+                    view: currentView,
+                    page: newPage,
+                    pageSize: newPageSize ?? pageSize,
+                  })
+                }
+              />
+            )}
           </div>
         )}
       </div>

@@ -340,6 +340,8 @@ export interface LeadLocationSummary {
   service?: string | null;
   price_total?: number | null;
   status?: string | null;
+  source?: string | null;
+  created_at?: string | null;
 }
 
 interface LocationIndexCache {
@@ -387,7 +389,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
         chunkPromises.push(
           supabase()
             .from("leads")
-            .select("id, area, address, pincode, service, price_total, status")
+            .select("id, area, address, pincode, service, price_total, status, source, created_at")
             .range(start, start + batchSize - 1),
         );
       }
@@ -401,6 +403,8 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
         service: string | null;
         price_total: number | null;
         status: string | null;
+        source: string | null;
+        created_at: string | null;
       }> = [];
 
       for (const res of chunkResults) {
@@ -425,6 +429,8 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
           service: r.service,
           price_total: r.price_total,
           status: r.status,
+          source: r.source,
+          created_at: r.created_at,
         };
 
         leadMap.set(r.id, summary);

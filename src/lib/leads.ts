@@ -1,7 +1,7 @@
 import "server-only";
 import { supabase } from "./supabase";
 import { sealFields, unsealFields, unseal, phoneHash, normalizePhone } from "./crypto";
-import { areaFromPincode, extractAreaFromAddress, listAreasWithCounts, resolveLeadIdsForArea, invalidateAreaCountsCache } from "./area";
+import { areaFromPincode, extractAreaFromAddress, listAreasWithCounts, resolveLeadIdsForArea, invalidateAreaCountsCache, getOrBuildLocationIndex } from "./area";
 import type { CallReminder, LeadStatus, LeadSource } from "./leads-shared";
 import type { LeadScope } from "./admin-auth";
 
@@ -214,6 +214,9 @@ export interface ListStatusSummaryOptions {
   area?: string;
   service?: string;
   serviceOption?: string;
+  folder?: string;
+  year?: string;
+  source?: string;
   fromIso?: string;
   toIso?: string;
 }
@@ -228,6 +231,18 @@ function applyLeadFilters(
   if (options.serviceOption && options.serviceOption !== "all") q = q.eq("service_option", options.serviceOption);
   if (options.fromIso) q = q.gte("created_at", options.fromIso);
   if (options.toIso) q = q.lte("created_at", options.toIso);
+
+  // Folder / Source / Year filtering
+  if (options.folder === "website_form" || options.source === "wizard") {
+    q = q.eq("source", "wizard");
+  } else if (options.folder === "hot_leads" || options.source === "admin") {
+    q = q.eq("source", "admin");
+  } else if (options.folder && options.folder.startsWith("year_")) {
+    const yr = options.folder.replace("year_", "");
+    q = q.gte("created_at", `${yr}-01-01T00:00:00.000Z`).lte("created_at", `${yr}-12-31T23:59:59.999Z`);
+  } else if (options.year && options.year !== "all") {
+    q = q.gte("created_at", `${options.year}-01-01T00:00:00.000Z`).lte("created_at", `${options.year}-12-31T23:59:59.999Z`);
+  }
 
   if (options.search) {
     const s = sanitizeSearch(options.search);
@@ -263,6 +278,21 @@ export async function listLeadStatusSummary(
     if (allowedLeadIds.length === 0) {
       return { total: 0, new: 0, contacted: 0, follow_up: 0, call_not_responded: 0, booked: 0, cancelled: 0, draft: 0 };
     }
+  }
+
+  // If filtering by a custom list UUID folder
+  if (options.folder && options.folder.match(/^[0-9a-fA-F-]{36}$/)) {
+    const { data: listItems } = await supabase()
+      .from("lead_list_items")
+      .select("lead_id")
+      .eq("list_id", options.folder);
+    const listLeadIds = (listItems ?? []).map((i) => i.lead_id);
+    if (listLeadIds.length === 0) {
+      return { total: 0, new: 0, contacted: 0, follow_up: 0, call_not_responded: 0, booked: 0, cancelled: 0, draft: 0 };
+    }
+    allowedLeadIds = allowedLeadIds
+      ? allowedLeadIds.filter((id) => listLeadIds.includes(id))
+      : listLeadIds;
   }
 
   if (options.area && options.area !== "all") {
@@ -323,6 +353,9 @@ export interface ListLeadsOptions {
   area?: string;
   service?: string;
   serviceOption?: string;
+  folder?: string;
+  year?: string;
+  source?: string;
   fromIso?: string;
   toIso?: string;
   excludeStatuses?: LeadStatus[];
@@ -359,19 +392,52 @@ export async function listPaginatedLeads(
   } else if (opts.excludeStatuses && opts.excludeStatuses.length) {
     q = q.not("status", "in", `(${opts.excludeStatuses.join(",")})`);
   }
+
+  let allowedIds: string[] | null = null;
+
   if (opts.assignedAdminUserId) {
     const { data: assignedLeadIds, error: listErr } = await supabase()
       .from("lead_list_items")
       .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
       .eq("lead_lists.assigned_admin_user_id", opts.assignedAdminUserId);
     if (listErr) throw listErr;
-    const ids = Array.from(
+    allowedIds = Array.from(
       new Set((assignedLeadIds ?? []).map((r: { lead_id: string }) => r.lead_id)),
     );
-    if (ids.length === 0) {
+    if (allowedIds.length === 0) {
       return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
     }
-    q = q.in("id", ids);
+  }
+
+  // If filtering by a custom list UUID folder
+  if (opts.folder && opts.folder.match(/^[0-9a-fA-F-]{36}$/)) {
+    const { data: listItems } = await supabase()
+      .from("lead_list_items")
+      .select("lead_id")
+      .eq("list_id", opts.folder);
+    const listLeadIds = (listItems ?? []).map((i) => i.lead_id);
+    if (listLeadIds.length === 0) {
+      return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
+    }
+    allowedIds = allowedIds
+      ? allowedIds.filter((id) => listLeadIds.includes(id))
+      : listLeadIds;
+  }
+
+  if (allowedIds) {
+    q = q.in("id", allowedIds);
+  }
+
+  // Folder / Source / Year filtering
+  if (opts.folder === "website_form" || opts.source === "wizard") {
+    q = q.eq("source", "wizard");
+  } else if (opts.folder === "hot_leads" || opts.source === "admin") {
+    q = q.eq("source", "admin");
+  } else if (opts.folder && opts.folder.startsWith("year_")) {
+    const yr = opts.folder.replace("year_", "");
+    q = q.gte("created_at", `${yr}-01-01T00:00:00.000Z`).lte("created_at", `${yr}-12-31T23:59:59.999Z`);
+  } else if (opts.year && opts.year !== "all") {
+    q = q.gte("created_at", `${opts.year}-01-01T00:00:00.000Z`).lte("created_at", `${opts.year}-12-31T23:59:59.999Z`);
   }
 
   if (opts.service && opts.service !== "all") q = q.eq("service", opts.service);
@@ -413,6 +479,129 @@ export async function listPaginatedLeads(
     page,
     pageSize,
     totalPages,
+  };
+}
+
+export interface FolderSummary {
+  id: string;
+  type: "system_source" | "system_year" | "custom_list";
+  name: string;
+  description?: string;
+  count: number;
+  bookedCount: number;
+  source?: string;
+  year?: string;
+  assignedStaffName?: string;
+  assignedStaffId?: string;
+}
+
+/**
+ * Real-time metrics for all system and custom lead folders/cards.
+ */
+export async function listFolderSummaries(assignedAdminUserId?: string): Promise<{
+  systemFolders: FolderSummary[];
+  customFolders: FolderSummary[];
+  totalLeads: number;
+}> {
+  const [locationIndex, leadListsRes] = await Promise.all([
+    getOrBuildLocationIndex(),
+    supabase()
+      .from("lead_lists")
+      .select("id, name, assigned_admin_user_id, admin_users(email, employees(name)), lead_list_items(lead_id)")
+      .order("created_at", { ascending: false }),
+  ]);
+
+  let allLeads = locationIndex.allLeads;
+  if (assignedAdminUserId) {
+    const userLists = (leadListsRes.data ?? []).filter((l: any) => l.assigned_admin_user_id === assignedAdminUserId);
+    const allowedIds = new Set(userLists.flatMap((l: any) => (l.lead_list_items ?? []).map((i: any) => i.lead_id)));
+    allLeads = allLeads.filter((l) => allowedIds.has(l.id));
+  }
+
+  let websiteCount = 0;
+  let websiteBooked = 0;
+  let adminCount = 0;
+  let adminBooked = 0;
+  const yearCounts = new Map<string, { count: number; booked: number }>();
+
+  for (const lead of allLeads) {
+    const isBooked = lead.status === "booked";
+    if (lead.source === "wizard") {
+      websiteCount++;
+      if (isBooked) websiteBooked++;
+    } else {
+      adminCount++;
+      if (isBooked) adminBooked++;
+    }
+
+    const year = lead.created_at ? new Date(lead.created_at).getFullYear().toString() : "2026";
+    if (!yearCounts.has(year)) {
+      yearCounts.set(year, { count: 0, booked: 0 });
+    }
+    const yStat = yearCounts.get(year)!;
+    yStat.count++;
+    if (isBooked) yStat.booked++;
+  }
+
+  const systemFolders: FolderSummary[] = [
+    {
+      id: "website_form",
+      type: "system_source",
+      name: "Website Form Leads",
+      description: "Online booking form submissions",
+      count: websiteCount,
+      bookedCount: websiteBooked,
+      source: "wizard",
+    },
+    {
+      id: "hot_leads",
+      type: "system_source",
+      name: "Hot Leads (Admin Added)",
+      description: "Directly added & bulk uploaded leads",
+      count: adminCount,
+      bookedCount: adminBooked,
+      source: "admin",
+    },
+  ];
+
+  const sortedYears = Array.from(yearCounts.keys()).sort((a, b) => b.localeCompare(a));
+  for (const yr of sortedYears) {
+    const stat = yearCounts.get(yr)!;
+    systemFolders.push({
+      id: `year_${yr}`,
+      type: "system_year",
+      name: `${yr} Leads`,
+      description: `All leads registered in ${yr}`,
+      count: stat.count,
+      bookedCount: stat.booked,
+      year: yr,
+    });
+  }
+
+  const leadMap = locationIndex.leadMap;
+  const customFolders: FolderSummary[] = (leadListsRes.data ?? []).map((l: any) => {
+    const items = l.lead_list_items ?? [];
+    let booked = 0;
+    for (const item of items) {
+      const summary = leadMap.get(item.lead_id);
+      if (summary && summary.status === "booked") booked++;
+    }
+    const staffName = l.admin_users?.employees?.name || (l.admin_users?.email ? l.admin_users.email.split("@")[0] : undefined);
+    return {
+      id: l.id,
+      type: "custom_list",
+      name: l.name,
+      count: items.length,
+      bookedCount: booked,
+      assignedStaffName: staffName,
+      assignedStaffId: l.assigned_admin_user_id,
+    };
+  });
+
+  return {
+    systemFolders,
+    customFolders,
+    totalLeads: allLeads.length,
   };
 }
 
