@@ -22,6 +22,8 @@ import {
   X,
   Sparkles,
   BarChart3,
+  TrendingUp,
+  PieChart,
 } from "lucide-react";
 import { ROLE_LABEL, type AdminRole } from "@/lib/admin-users-shared";
 import type { CallReminder } from "@/lib/leads-shared";
@@ -54,6 +56,8 @@ const ICONS = {
   Wallet,
   ScrollText,
   BarChart3,
+  TrendingUp,
+  PieChart,
 } as const;
 
 export default function Sidebar({
