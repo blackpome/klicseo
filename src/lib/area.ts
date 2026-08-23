@@ -332,6 +332,36 @@ export async function resolvePrimaryLocality(
   return null;
 }
 
+export function extractLeadYear(
+  customFields: Record<string, any> | null | undefined,
+  createdAt?: string | null,
+): string {
+  const cf = customFields || {};
+  const regDate =
+    cf["Reg. Date"] ||
+    cf["REG DATE"] ||
+    cf["REG. DATE"] ||
+    cf["REG_DATE"] ||
+    cf["Reg Date"] ||
+    cf["reg_date"] ||
+    cf["REG.DATE"] ||
+    cf["Registration Date"] ||
+    cf["DATE"];
+  if (regDate) {
+    const m = String(regDate).match(/\b(19\d\d|20\d\d)\b/);
+    if (m) return m[1];
+  }
+  const uploadFile = cf["upload_file"] || cf["file_name"] || cf["source_file"];
+  if (uploadFile) {
+    const m = String(uploadFile).match(/\b(19\d\d|20\d\d)\b/);
+    if (m) return m[1];
+  }
+  if (createdAt) {
+    return createdAt.slice(0, 4);
+  }
+  return "2026";
+}
+
 export interface LeadLocationSummary {
   id: string;
   primaryLocality: string;
@@ -342,12 +372,14 @@ export interface LeadLocationSummary {
   status?: string | null;
   source?: string | null;
   created_at?: string | null;
+  year?: string;
 }
 
 interface LocationIndexCache {
   expires: number;
   leadMap: Map<string, LeadLocationSummary>;
   areaToLeadIds: Map<string, string[]>;
+  yearToLeadIds: Map<string, string[]>;
   allLeads: LeadLocationSummary[];
 }
 
@@ -360,7 +392,7 @@ export function invalidateAreaCountsCache(): void {
 }
 
 /**
- * Fast parallel-cached index of all lead locations with in-flight request de-duplication.
+ * Fast parallel-cached index of all lead locations and registration years with in-flight request de-duplication.
  */
 export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
   const now = Date.now();
@@ -389,7 +421,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
         chunkPromises.push(
           supabase()
             .from("leads")
-            .select("id, area, address, pincode, service, price_total, status, source, created_at")
+            .select("id, area, address, pincode, service, price_total, status, source, created_at, custom_fields")
             .range(start, start + batchSize - 1),
         );
       }
@@ -405,6 +437,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
         status: string | null;
         source: string | null;
         created_at: string | null;
+        custom_fields: Record<string, any> | null;
       }> = [];
 
       for (const res of chunkResults) {
@@ -413,6 +446,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
 
       const leadMap = new Map<string, LeadLocationSummary>();
       const areaToLeadIds = new Map<string, string[]>();
+      const yearToLeadIds = new Map<string, string[]>();
       const allLeads: LeadLocationSummary[] = [];
 
       for (const r of allRows) {
@@ -420,6 +454,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
         const primary = await resolvePrimaryLocality(r.area, plainAddress, r.pincode);
         const resolved = primary || "Unspecified";
         const norm = resolved.toLowerCase();
+        const year = extractLeadYear(r.custom_fields, r.created_at);
 
         const summary: LeadLocationSummary = {
           id: r.id,
@@ -431,6 +466,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
           status: r.status,
           source: r.source,
           created_at: r.created_at,
+          year,
         };
 
         leadMap.set(r.id, summary);
@@ -442,12 +478,20 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
           }
           areaToLeadIds.get(norm)!.push(r.id);
         }
+
+        if (year) {
+          if (!yearToLeadIds.has(year)) {
+            yearToLeadIds.set(year, []);
+          }
+          yearToLeadIds.get(year)!.push(r.id);
+        }
       }
 
       locationIndexCache = {
         expires: Date.now() + 120000, // 2-minute in-memory TTL
         leadMap,
         areaToLeadIds,
+        yearToLeadIds,
         allLeads,
       };
 
@@ -458,6 +502,11 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
   })();
 
   return inFlightLocationIndexPromise;
+}
+
+export async function resolveLeadIdsForYear(year: string): Promise<string[]> {
+  const idx = await getOrBuildLocationIndex();
+  return idx.yearToLeadIds.get(year.trim()) || [];
 }
 
 /** Distinct areas + lead counts across ALL leads in the database, for the filter pill bar on /admin. */

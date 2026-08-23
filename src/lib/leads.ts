@@ -1,7 +1,15 @@
 import "server-only";
 import { supabase } from "./supabase";
 import { sealFields, unsealFields, unseal, phoneHash, normalizePhone } from "./crypto";
-import { areaFromPincode, extractAreaFromAddress, listAreasWithCounts, resolveLeadIdsForArea, invalidateAreaCountsCache, getOrBuildLocationIndex } from "./area";
+import {
+  areaFromPincode,
+  extractAreaFromAddress,
+  listAreasWithCounts,
+  resolveLeadIdsForArea,
+  resolveLeadIdsForYear,
+  invalidateAreaCountsCache,
+  getOrBuildLocationIndex,
+} from "./area";
 import type { CallReminder, LeadStatus, LeadSource } from "./leads-shared";
 import type { LeadScope } from "./admin-auth";
 
@@ -232,16 +240,11 @@ function applyLeadFilters(
   if (options.fromIso) q = q.gte("created_at", options.fromIso);
   if (options.toIso) q = q.lte("created_at", options.toIso);
 
-  // Folder / Source / Year filtering
+  // Folder / Source filtering
   if (options.folder === "website_form" || options.source === "wizard") {
     q = q.eq("source", "wizard");
   } else if (options.folder === "hot_leads" || options.source === "admin") {
     q = q.eq("source", "admin");
-  } else if (options.folder && options.folder.startsWith("year_")) {
-    const yr = options.folder.replace("year_", "");
-    q = q.gte("created_at", `${yr}-01-01T00:00:00.000Z`).lte("created_at", `${yr}-12-31T23:59:59.999Z`);
-  } else if (options.year && options.year !== "all") {
-    q = q.gte("created_at", `${options.year}-01-01T00:00:00.000Z`).lte("created_at", `${options.year}-12-31T23:59:59.999Z`);
   }
 
   if (options.search) {
@@ -293,6 +296,23 @@ export async function listLeadStatusSummary(
     allowedLeadIds = allowedLeadIds
       ? allowedLeadIds.filter((id) => listLeadIds.includes(id))
       : listLeadIds;
+  }
+
+  // Year folder or year filter
+  const targetYear = options.folder && options.folder.startsWith("year_")
+    ? options.folder.replace("year_", "")
+    : options.year && options.year !== "all"
+    ? options.year
+    : null;
+
+  if (targetYear) {
+    const yearMatchingIds = await resolveLeadIdsForYear(targetYear);
+    if (yearMatchingIds.length === 0) {
+      return { total: 0, new: 0, contacted: 0, follow_up: 0, call_not_responded: 0, booked: 0, cancelled: 0, draft: 0 };
+    }
+    allowedLeadIds = allowedLeadIds
+      ? allowedLeadIds.filter((id) => yearMatchingIds.includes(id))
+      : yearMatchingIds;
   }
 
   if (options.area && options.area !== "all") {
@@ -424,20 +444,32 @@ export async function listPaginatedLeads(
       : listLeadIds;
   }
 
+  // Year folder or year filter
+  const targetYear = opts.folder && opts.folder.startsWith("year_")
+    ? opts.folder.replace("year_", "")
+    : opts.year && opts.year !== "all"
+    ? opts.year
+    : null;
+
+  if (targetYear) {
+    const yearLeadIds = await resolveLeadIdsForYear(targetYear);
+    if (yearLeadIds.length === 0) {
+      return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
+    }
+    allowedIds = allowedIds
+      ? allowedIds.filter((id) => yearLeadIds.includes(id))
+      : yearLeadIds;
+  }
+
   if (allowedIds) {
     q = q.in("id", allowedIds);
   }
 
-  // Folder / Source / Year filtering
+  // Folder / Source filtering
   if (opts.folder === "website_form" || opts.source === "wizard") {
     q = q.eq("source", "wizard");
   } else if (opts.folder === "hot_leads" || opts.source === "admin") {
     q = q.eq("source", "admin");
-  } else if (opts.folder && opts.folder.startsWith("year_")) {
-    const yr = opts.folder.replace("year_", "");
-    q = q.gte("created_at", `${yr}-01-01T00:00:00.000Z`).lte("created_at", `${yr}-12-31T23:59:59.999Z`);
-  } else if (opts.year && opts.year !== "all") {
-    q = q.gte("created_at", `${opts.year}-01-01T00:00:00.000Z`).lte("created_at", `${opts.year}-12-31T23:59:59.999Z`);
   }
 
   if (opts.service && opts.service !== "all") q = q.eq("service", opts.service);
@@ -534,7 +566,7 @@ export async function listFolderSummaries(assignedAdminUserId?: string): Promise
       if (isBooked) adminBooked++;
     }
 
-    const year = lead.created_at ? new Date(lead.created_at).getFullYear().toString() : "2026";
+    const year = lead.year || (lead.created_at ? new Date(lead.created_at).getFullYear().toString() : "2026");
     if (!yearCounts.has(year)) {
       yearCounts.set(year, { count: 0, booked: 0 });
     }
