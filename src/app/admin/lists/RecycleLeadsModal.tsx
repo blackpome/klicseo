@@ -29,7 +29,7 @@ interface Props {
   sourceStaffName?: string;
   adminUsers: { id: string; email: string; name: string }[];
   statusBreakdown?: Record<string, number>;
-  onSuccess: (msg: string) => void;
+  onSuccess?: (msg: string) => void;
 }
 
 export default function RecycleLeadsModal({
@@ -116,7 +116,7 @@ export default function RecycleLeadsModal({
       });
 
       if (res.ok && res.result) {
-        onSuccess(
+        onSuccess?.(
           `Successfully recycled ${res.result.recycledCount} leads across ${res.result.assignedStaffCount} telecaller(s)! (Protected ${res.result.protectedCount} Booked & Follow-up leads).`,
         );
         onClose();

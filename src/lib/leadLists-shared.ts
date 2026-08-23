@@ -9,7 +9,11 @@ export interface LeadListRow {
   assigned_admin_user_id: string | null; // admin user id assigned to this list
   assigned_admin_user?: { email: string | null; name?: string | null } | null;
   assigned_employee_id?: string | null; // legacy employee id, kept for backward compatibility
-  lead_count?: number; // for display, not stored in DB
+  lead_count?: number; // total leads in batch
+  completed_count?: number; // total called/completed leads
+  pending_count?: number; // leads pending to call
+  completion_rate?: number; // percentage 0-100
+  status_counts?: Record<string, number>; // breakdown by lead status
   admin_users?: { email: string | null } | null;
   employees?: { name: string | null } | null;
 }

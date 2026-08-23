@@ -31,6 +31,7 @@ import DeleteLeadListButton from "./DeleteLeadListButton";
 import LeadAllocationModal from "./LeadAllocationModal";
 import StaffReallocationModal from "./StaffReallocationModal";
 import RecycleLeadsModal from "./RecycleLeadsModal";
+import StaffDatewiseLeadListsView from "../my-lists/StaffDatewiseLeadListsView";
 import {
   cancelScheduledAllocationAction,
   pauseScheduledAllocationAction,
@@ -223,120 +224,14 @@ export default function LeadListsWorkspaceClient({
         </button>
       </div>
 
-      {/* TAB 1: CAMPAIGN LISTS */}
+      {/* TAB 1: CAMPAIGN LISTS (Staff -> Datewise -> Batch Leads) */}
       {tab === "campaigns" && (
-        <div className="space-y-4">
-          <form className="flex gap-2 max-w-md">
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
-              <input
-                type="search"
-                name="q"
-                defaultValue={searchQuery}
-                placeholder="Search lists by name..."
-                className="w-full bg-[#071228] border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#C9A84C]"
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-white/80 border border-white/10"
-            >
-              Search
-            </button>
-          </form>
-
-          {initialLists.length === 0 ? (
-            <div className="rounded-3xl border border-white/[0.08] bg-[#071228] p-12 text-center space-y-3">
-              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-white/30">
-                <ClipboardList size={24} />
-              </div>
-              <h3 className="text-sm font-semibold text-white">No campaign lists found</h3>
-              <p className="text-xs text-white/40 max-w-sm mx-auto">
-                Create a list to organize and assign leads to your telecallers.
-              </p>
-              <div className="pt-2">
-                <Link
-                  href="/admin/lists/new"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#C9A84C] text-xs font-bold text-[#050E21] hover:bg-[#E8CC7A]"
-                >
-                  <Plus size={14} /> Create List
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {initialLists.map((list) => {
-                const count = list.lead_count ?? 0;
-                const assignee = list.assigned_admin_user?.name;
-
-                return (
-                  <div
-                    key={list.id}
-                    className="group rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 hover:border-[#C9A84C]/40 hover:bg-white/[0.01] transition-all shadow-lg flex flex-col justify-between"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <Link
-                          href={`/admin/lists/${list.id}`}
-                          className="text-base font-bold text-white group-hover:text-[#E8CC7A] transition-colors"
-                        >
-                          {list.name}
-                        </Link>
-
-                        <div className="flex items-center gap-1">
-                          <Link
-                            href={`/admin/lists/${list.id}/edit`}
-                            title="Edit List"
-                            className="grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                          >
-                            <Pencil size={13} />
-                          </Link>
-                          <DeleteLeadListButton id={list.id} name={list.name} />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 text-xs text-white/50">
-                        {assignee ? (
-                          <span className="inline-flex items-center gap-1 text-[#E8CC7A]">
-                            <User size={12} /> {assignee}
-                          </span>
-                        ) : (
-                          <span className="text-white/30 italic">Unassigned</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 pt-2 border-t border-white/[0.04]">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-white/40">Total Leads</span>
-                        <span className="font-bold text-white tabular-nums text-sm">
-                          {count} {count === 1 ? "lead" : "leads"}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-1">
-                        <Link
-                          href={`/admin/lists/${list.id}`}
-                          className="flex-1 text-center py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-white/90 transition-colors border border-white/10 inline-flex items-center justify-center gap-1"
-                        >
-                          View Leads <ArrowRight size={12} />
-                        </Link>
-
-                        <Link
-                          href={`/admin/upload?listId=${list.id}`}
-                          title="Upload Leads into this List"
-                          className="py-2 px-3 rounded-xl bg-[#C9A84C]/15 hover:bg-[#C9A84C]/25 text-xs font-semibold text-[#E8CC7A] border border-[#C9A84C]/30 transition-colors inline-flex items-center gap-1"
-                        >
-                          <UploadCloud size={13} /> Import
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <StaffDatewiseLeadListsView
+          lists={initialLists}
+          currentUser={{ id: "super_admin", email: "admin@klicseo.com", name: "Super Admin", role: "super_admin" }}
+          isSuperAdmin={true}
+          adminUsers={adminUsers}
+        />
       )}
 
       {/* TAB 2: SCHEDULED DISPATCHES & ALLOCATION HISTORY */}

@@ -94,27 +94,71 @@ export async function listLeadLists(opts: {
       );
     }
 
-  // Flatten the joined data and add lead count
-  const result = await Promise.all(
-    (data ?? []).map(async (row: any) => {
-      // Get lead count for this list
-      const countResult = await supabase()
-        .from("lead_list_items")
-        .select("lead_id", { count: "exact" })
-        .eq("list_id", row.id);
+  // Batch fetch all items and statuses for the returned lists in a single fast query
+  const listIds = (data ?? []).map((r: any) => r.id);
+  const statsByListId = new Map<
+    string,
+    { total: number; completed: number; pending: number; statuses: Record<string, number> }
+  >();
 
-      const leadCount = countResult.count ?? 0;
-      const assignedAdminUser = row.assigned_admin_user_id
-        ? assignedUsersById[row.assigned_admin_user_id] ?? { email: null, name: null }
-        : null;
+  if (listIds.length > 0) {
+    const { data: allItems, error: itemsErr } = await supabase()
+      .from("lead_list_items")
+      .select("list_id, lead_id, leads:lead_id (status)")
+      .in("list_id", listIds);
 
-      return {
-        ...row,
-        assigned_admin_user: assignedAdminUser,
-        lead_count: leadCount,
-      } as LeadListRow;
-    }),
-  );
+    if (!itemsErr && allItems) {
+      for (const item of allItems) {
+        const lid = item.list_id;
+        const current = statsByListId.get(lid) ?? {
+          total: 0,
+          completed: 0,
+          pending: 0,
+          statuses: {},
+        };
+        current.total += 1;
+
+        const lead: any = Array.isArray(item.leads) ? item.leads[0] : item.leads;
+        const status = (lead?.status ?? "new") as string;
+        current.statuses[status] = (current.statuses[status] ?? 0) + 1;
+
+        // Completed = contacted, booked, cancelled, follow_up
+        if (["contacted", "booked", "cancelled", "follow_up"].includes(status)) {
+          current.completed += 1;
+        } else {
+          current.pending += 1;
+        }
+
+        statsByListId.set(lid, current);
+      }
+    }
+  }
+
+  // Combine joined data and stats
+  const result: LeadListRow[] = (data ?? []).map((row: any) => {
+    const stats = statsByListId.get(row.id) ?? {
+      total: 0,
+      completed: 0,
+      pending: 0,
+      statuses: {},
+    };
+    const completionRate =
+      stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+
+    const assignedAdminUser = row.assigned_admin_user_id
+      ? assignedUsersById[row.assigned_admin_user_id] ?? { email: null, name: null }
+      : null;
+
+    return {
+      ...row,
+      assigned_admin_user: assignedAdminUser,
+      lead_count: stats.total,
+      completed_count: stats.completed,
+      pending_count: stats.pending,
+      completion_rate: completionRate,
+      status_counts: stats.statuses,
+    } as LeadListRow;
+  });
 
   return result;
 }

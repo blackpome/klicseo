@@ -571,8 +571,10 @@ export async function processQueueAutoRefills(): Promise<{ refilledStaffCount: n
  */
 export async function processScheduledJobs(): Promise<{ executedCount: number }> {
   try {
-    const nowIso = new Date().toISOString();
-    
+    const now = new Date();
+    const nowIso = now.toISOString();
+    let executed = 0;
+
     // 1. Process pending one-time schedules due now
     const { data: pendingJobs } = await supabase()
       .from("lead_allocation_schedules")
@@ -581,7 +583,6 @@ export async function processScheduledJobs(): Promise<{ executedCount: number }>
       .eq("schedule_mode", "once_scheduled")
       .lte("scheduled_for", nowIso);
 
-    let executed = 0;
     for (const job of pendingJobs ?? []) {
       const res = await executeLeadAllocation({
         lead_count: job.lead_count,
@@ -604,7 +605,56 @@ export async function processScheduledJobs(): Promise<{ executedCount: number }>
       executed++;
     }
 
-    // 2. Also run queue auto-refills check
+    // 2. Process active daily recurring releases
+    const { data: recurringRules } = await supabase()
+      .from("lead_allocation_schedules")
+      .select("*")
+      .eq("status", "active_recurring")
+      .eq("schedule_mode", "daily_recurring");
+
+    if (recurringRules && recurringRules.length > 0) {
+      const istDateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // "YYYY-MM-DD"
+      const istTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false }); // "HH:MM"
+      const istDayOfWeekStr = now.toLocaleDateString("en-US", { timeZone: "Asia/Kolkata", weekday: "short" });
+      const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      const istDayOfWeek = dayMap[istDayOfWeekStr] ?? now.getDay();
+
+      for (const rule of recurringRules) {
+        const recurringDays: number[] = rule.recurring_days ?? [1, 2, 3, 4, 5, 6];
+        const targetTime = (rule.recurring_time ?? "09:30").slice(0, 5);
+        const isDayDue = recurringDays.includes(istDayOfWeek);
+        const isTimeDue = istTimeStr >= targetTime;
+
+        let alreadyRanToday = false;
+        if (rule.last_run_at) {
+          const lastRunDateStr = new Date(rule.last_run_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+          alreadyRanToday = lastRunDateStr === istDateStr;
+        }
+
+        if (isDayDue && isTimeDue && !alreadyRanToday) {
+          const res = await executeLeadAllocation({
+            lead_count: rule.lead_count ?? 10,
+            conditions: rule.conditions ?? {},
+            assignee_ids: rule.assignee_ids ?? [],
+            target_list_id: rule.target_list_id,
+            notes: `Daily recurring release (${targetTime} IST)`,
+            allocation_type: "daily_recurring",
+          });
+
+          await supabase()
+            .from("lead_allocation_schedules")
+            .update({
+              allocated_lead_ids: res.leadIds,
+              last_run_at: nowIso,
+            })
+            .eq("id", rule.id);
+
+          executed++;
+        }
+      }
+    }
+
+    // 3. Process queue auto-refills check
     await processQueueAutoRefills();
 
     return { executedCount: executed };
