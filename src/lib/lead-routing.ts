@@ -38,6 +38,22 @@ export function matchesFilter(
     return false;
   }
 
+  // 1.5 Folder / Year / Source Filter
+  if (filter.folder) {
+    if (filter.folder.startsWith("year_")) {
+      const yr = filter.folder.replace("year_", "");
+      const leadYear = (lead as any).year || ((lead as any).created_at ? (lead as any).created_at.slice(0, 4) : "2026");
+      if (leadYear !== yr) return false;
+    } else if (filter.folder === "website_form") {
+      if ((lead as any).source !== "wizard") return false;
+    } else if (filter.folder === "hot_leads") {
+      if ((lead as any).source === "wizard") return false;
+    }
+  } else if (filter.year && filter.year !== "all") {
+    const leadYear = (lead as any).year || ((lead as any).created_at ? (lead as any).created_at.slice(0, 4) : "2026");
+    if (leadYear !== filter.year) return false;
+  }
+
   // 2. Area (checks both area column and permanent address text with unseal & canonical matching)
   if (filter.areas && filter.areas.length > 0) {
     const plainAddress = unseal(lead.address);
@@ -141,6 +157,9 @@ export async function countMatchingLeads(
 ): Promise<{ count: number; totalUnallocated: number }> {
   try {
     const hasExplicitFilters = Boolean(
+      (filter.folder && filter.folder !== "all") ||
+      (filter.year && filter.year !== "all") ||
+      (filter.source && filter.source !== "all") ||
       (filter.areas && filter.areas.length > 0) ||
       (filter.pincodes && filter.pincodes.length > 0) ||
       (filter.services && filter.services.length > 0) ||
@@ -159,21 +178,38 @@ export async function countMatchingLeads(
       return allowedStatuses.some((allowed) => allowed.toLowerCase().trim() === s);
     });
 
-    const totalUnallocated = statusFilteredLeads.filter((l) => !assignedSet.has(l.id)).length;
+    // If a folder/year filter is specified, totalUnallocated is scoped to that folder/year
+    const folderFilteredLeads = statusFilteredLeads.filter((lead) => {
+      if (filter.folder && filter.folder !== "all") {
+        if (filter.folder.startsWith("year_")) {
+          const yr = filter.folder.replace("year_", "");
+          if (lead.year !== yr) return false;
+        } else if (filter.folder === "website_form") {
+          if (lead.source !== "wizard") return false;
+        } else if (filter.folder === "hot_leads") {
+          if (lead.source === "wizard") return false;
+        }
+      } else if (filter.year && filter.year !== "all") {
+        if (lead.year !== filter.year) return false;
+      }
+      return true;
+    });
+
+    const totalUnallocated = folderFilteredLeads.filter((l) => !assignedSet.has(l.id)).length;
 
     if (!hasExplicitFilters) {
       return { count: totalUnallocated, totalUnallocated };
     }
 
-    const availableMatching = statusFilteredLeads.filter((lead) => {
+    const availableMatching = folderFilteredLeads.filter((lead) => {
       if (assignedSet.has(lead.id)) return false;
 
-      // 1. Area filter
+      // 1. Area filter (Location-scoped matching)
       if (filter.areas && filter.areas.length > 0) {
         const leadPrimary = lead.primaryLocality.toLowerCase();
         const matched = filter.areas.some((area) => {
           const canonicalTarget = (CANONICAL_AREA_ALIASES[area.toLowerCase().trim()] || area.trim()).toLowerCase();
-          return leadPrimary === canonicalTarget;
+          return leadPrimary === canonicalTarget || leadPrimary.includes(canonicalTarget);
         });
         if (!matched) return false;
       }
@@ -298,12 +334,26 @@ export async function executeLeadAllocation(req: {
       return false;
     }
 
-    // 1. Area filter
+    // 0.5 Folder / Year / Source filter
+    if (req.conditions.folder && req.conditions.folder !== "all") {
+      if (req.conditions.folder.startsWith("year_")) {
+        const yr = req.conditions.folder.replace("year_", "");
+        if (lead.year !== yr) return false;
+      } else if (req.conditions.folder === "website_form") {
+        if (lead.source !== "wizard") return false;
+      } else if (req.conditions.folder === "hot_leads") {
+        if (lead.source === "wizard") return false;
+      }
+    } else if (req.conditions.year && req.conditions.year !== "all") {
+      if (lead.year !== req.conditions.year) return false;
+    }
+
+    // 1. Area filter (Location-scoped matching)
     if (req.conditions.areas && req.conditions.areas.length > 0) {
       const leadPrimary = lead.primaryLocality.toLowerCase();
       const matched = req.conditions.areas.some((area) => {
         const canonicalTarget = (CANONICAL_AREA_ALIASES[area.toLowerCase().trim()] || area.trim()).toLowerCase();
-        return leadPrimary === canonicalTarget;
+        return leadPrimary === canonicalTarget || leadPrimary.includes(canonicalTarget);
       });
       if (!matched) return false;
     }

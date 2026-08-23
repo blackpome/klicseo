@@ -45,6 +45,7 @@ import FolderCardsDeck from "./FolderCardsDeck";
 import FolderExplorerView from "./FolderExplorerView";
 import LeadViewModeSwitcher from "./LeadViewModeSwitcher";
 import AreaFilterSelect from "./AreaFilterSelect";
+import FolderAllocationButton from "./FolderAllocationButton";
 
 function buildLeadsHref(args: {
   status?: string;
@@ -259,6 +260,19 @@ export default async function AdminLeadsPage({
 
             {canManage && (
               <>
+                <FolderAllocationButton
+                  folder={folder}
+                  area={areaFilter}
+                  folderName={activeFolderName}
+                  adminUsers={assignableUsers}
+                  lists={leadLists}
+                  availableAreas={areaCounts.map((a) => a.area)}
+                  allFolders={[
+                    ...folderSummaries.systemFolders.map((f) => ({ id: f.id, name: f.name, count: f.count })),
+                    ...folderSummaries.customFolders.map((f) => ({ id: f.id, name: f.name, count: f.count })),
+                  ]}
+                />
+
                 <Link
                   href="/admin/upload"
                   className="px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white/80 hover:text-white hover:bg-white/[0.08] hover:border-[#C9A84C]/40 text-xs font-semibold transition-all inline-flex items-center gap-2 shadow-sm"
@@ -542,6 +556,22 @@ export default async function AdminLeadsPage({
                     >
                       <X size={12} /> Clear Filters
                     </Link>
+                  )}
+
+                  {canManage && (
+                    <FolderAllocationButton
+                      variant="toolbar"
+                      folder={folder}
+                      area={areaFilter}
+                      folderName={activeFolderName}
+                      adminUsers={assignableUsers}
+                      lists={leadLists}
+                      availableAreas={areaCounts.map((a) => a.area)}
+                      allFolders={[
+                        ...folderSummaries.systemFolders.map((f) => ({ id: f.id, name: f.name, count: f.count })),
+                        ...folderSummaries.customFolders.map((f) => ({ id: f.id, name: f.name, count: f.count })),
+                      ]}
+                    />
                   )}
 
                   <ExportToolbar endpoint="/api/admin/leads-export" label="leads" />

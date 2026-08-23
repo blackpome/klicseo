@@ -31,6 +31,10 @@ interface Props {
   lists: LeadListRow[];
   adminUsers: { id: string; email: string; name: string }[];
   availableAreas?: string[];
+  defaultFolder?: string;
+  defaultArea?: string;
+  folderName?: string;
+  allFolders?: Array<{ id: string; name: string; count: number }>;
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
@@ -46,12 +50,15 @@ const ALL_STATUS_OPTIONS = [
 ];
 
 const COMMON_AREAS = [
+  "Puzhuthivakkam",
   "Velachery",
-  "OMR",
+  "Madipakkam",
+  "Nanganallur",
+  "Adambakkam",
   "Tambaram",
   "Adyar",
   "Anna Nagar",
-  "ECR",
+  "OMR",
   "Guindy",
   "Porur",
   "T. Nagar",
@@ -73,12 +80,19 @@ export default function LeadAllocationModal({
   lists,
   adminUsers,
   availableAreas,
+  defaultFolder,
+  defaultArea,
+  folderName,
+  allFolders,
   isOpen,
   onClose,
   onSuccess,
 }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  // 0. Folder Scoping
+  const [selectedFolder, setSelectedFolder] = useState<string>(defaultFolder || "all");
 
   // 1. Lead Count
   const [leadCount, setLeadCount] = useState<number>(20);
@@ -89,7 +103,7 @@ export default function LeadAllocationModal({
   // 2. Conditions
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(["new", "draft"]);
 
-  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  const [selectedAreas, setSelectedAreas] = useState<string[]>(defaultArea ? [defaultArea] : []);
   const [customAreaInput, setCustomAreaInput] = useState("");
 
   const [selectedPincodes, setSelectedPincodes] = useState<string[]>([]);
@@ -97,6 +111,16 @@ export default function LeadAllocationModal({
 
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [minPrice, setMinPrice] = useState<string>("");
+
+  // Sync defaultFolder and defaultArea when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedFolder(defaultFolder || "all");
+      if (defaultArea) {
+        setSelectedAreas((prev) => (prev.includes(defaultArea) ? prev : [...prev, defaultArea]));
+      }
+    }
+  }, [isOpen, defaultFolder, defaultArea]);
 
   // 3. Assignees
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([]);
@@ -110,13 +134,14 @@ export default function LeadAllocationModal({
   const [replenishThreshold, setReplenishThreshold] = useState<number>(5);
   const [notes, setNotes] = useState("");
 
-  // Live query available matching leads count
+  // Live query available matching leads count (folder-aware + location-scoped)
   useEffect(() => {
     if (!isOpen) return;
     setIsCounting(true);
 
     const timer = setTimeout(async () => {
       const res = await previewMatchingLeadsAction({
+        folder: selectedFolder !== "all" ? selectedFolder : undefined,
         statuses: selectedStatuses.length > 0 ? selectedStatuses : undefined,
         areas: selectedAreas.length > 0 ? selectedAreas : undefined,
         pincodes: selectedPincodes.length > 0 ? selectedPincodes : undefined,
@@ -129,7 +154,7 @@ export default function LeadAllocationModal({
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [isOpen, selectedStatuses, selectedAreas, selectedPincodes, selectedServices, minPrice]);
+  }, [isOpen, selectedFolder, selectedStatuses, selectedAreas, selectedPincodes, selectedServices, minPrice]);
 
   if (!isOpen) return null;
 
@@ -246,6 +271,7 @@ export default function LeadAllocationModal({
         schedule_mode: scheduleMode,
         lead_count: Number(leadCount),
         conditions: {
+          folder: selectedFolder !== "all" ? selectedFolder : undefined,
           statuses: selectedStatuses.length > 0 ? selectedStatuses : ["new", "draft"],
           areas: selectedAreas.length > 0 ? selectedAreas : undefined,
           pincodes: selectedPincodes.length > 0 ? selectedPincodes : undefined,
@@ -292,7 +318,9 @@ export default function LeadAllocationModal({
             <div>
               <h2 className="text-base font-bold text-white">Allocate & Schedule Leads</h2>
               <p className="text-xs text-white/40">
-                Immediate distribution, daily recurring schedules, or queue-based auto-replenishment.
+                {selectedFolder !== "all"
+                  ? `Assigning leads strictly scoped to ${folderName || selectedFolder}`
+                  : "Immediate distribution, daily recurring schedules, or queue-based auto-replenishment."}
               </p>
             </div>
           </div>
@@ -312,6 +340,57 @@ export default function LeadAllocationModal({
               <span>{error}</span>
             </div>
           )}
+
+          {/* DUAL-SCOPING BANNER: Folder + Locality Indicator */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#0B1E3D] via-[#07142A] to-[#0B1E3D] border border-[#C9A84C]/30 shadow-inner flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-bold text-[#E8CC7A] uppercase tracking-wider flex items-center gap-1">
+                <Layers size={13} /> Scoping:
+              </span>
+
+              {/* Folder Pill / Dropdown */}
+              {allFolders && allFolders.length > 0 ? (
+                <select
+                  value={selectedFolder}
+                  onChange={(e) => setSelectedFolder(e.target.value)}
+                  className="bg-[#050E21] border border-[#C9A84C]/40 text-[#E8CC7A] font-bold rounded-lg px-2 py-1 text-xs outline-none focus:border-[#E8CC7A]"
+                >
+                  <option value="all">📁 All Folders Combined</option>
+                  {allFolders.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      📁 {f.name} ({f.count.toLocaleString()} leads)
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="px-2.5 py-1 rounded-lg bg-[#C9A84C]/20 border border-[#C9A84C]/40 text-[#E8CC7A] font-bold text-xs flex items-center gap-1.5 shadow-sm">
+                  <span>📁 {folderName || (selectedFolder !== "all" ? selectedFolder : "All Folders")}</span>
+                </span>
+              )}
+
+              {/* Active Territory Pill */}
+              {selectedAreas.length > 0 && (
+                <span className="px-2.5 py-1 rounded-lg bg-sky-500/20 border border-sky-500/40 text-sky-300 font-bold text-xs flex items-center gap-1 shadow-sm">
+                  <MapPin size={12} />
+                  <span>📍 {selectedAreas.join(", ")}</span>
+                </span>
+              )}
+            </div>
+
+            {/* Quick Scope Reset */}
+            {(selectedFolder !== "all" || selectedAreas.length > 0) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedFolder("all");
+                  setSelectedAreas([]);
+                }}
+                className="text-[10px] text-white/50 hover:text-white underline transition-colors cursor-pointer"
+              >
+                Clear Scoping
+              </button>
+            )}
+          </div>
 
           {/* Section 1: Lead Count & Live Pool Indicator */}
           <div className="p-4 rounded-2xl bg-[#050E21] border border-white/10 space-y-3">

@@ -14,6 +14,9 @@ export type ScheduleStatus =
   | "active_recurring";
 
 export interface LeadAllocationFilter {
+  folder?: string;
+  year?: string;
+  source?: string;
   areas?: string[];
   pincodes?: string[];
   services?: string[];
