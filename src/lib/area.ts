@@ -112,6 +112,51 @@ const DEFAULT_KNOWN_AREAS = [
   "West Mambalam",
 ];
 
+// Disambiguation patterns: False-positive phrases to ignore or strip before matching
+const FALSE_POSITIVE_PHRASES = [
+  /adyar\s+anand[bh]a\s+bhavan/gi, // Restaurant chain landmark
+  /anna\s+salai/gi, // Highway
+  /gst\s+road/gi,
+  /velachery\s+tambaram\s+main\s+road/gi, // Inter-locality highway
+  /anna\s+nagar\s+(1st|2nd|3rd|4th|5th|6th|7th|8th|9th|\d+th)\s+street/gi,
+  /kk\s+nagar\s+(1st|2nd|3rd|4th|5th|6th|7th|8th|9th|\d+th)\s+street/gi,
+];
+
+export const CANONICAL_AREA_ALIASES: Record<string, string> = {
+  "puzhudhivakkam": "Puzhuthivakkam",
+  "puzhuthivakam": "Puzhuthivakkam",
+  "puzhuthivakkam": "Puzhuthivakkam",
+  "madipakam": "Madipakkam",
+  "madipakkam": "Madipakkam",
+  "nanganalur": "Nanganallur",
+  "nanganallur": "Nanganallur",
+  "tnhb velachery": "Velachery",
+  "velachery": "Velachery",
+  "velacherry": "Velachery",
+  "adambakkam": "Adambakkam",
+  "adambakam": "Adambakkam",
+  "guindy": "Guindy",
+  "alandur": "Alandur",
+  "alandhur": "Alandur",
+  "st. thomas mount": "St. Thomas Mount",
+  "st thomas mount": "St. Thomas Mount",
+  "parangi malai": "St. Thomas Mount",
+  "ullagaram": "Ullagaram",
+  "moovarasampettai": "Moovarasampettai",
+  "keelkattalai": "Keelkattalai",
+  "keelkatalai": "Keelkattalai",
+  "porur": "Porur",
+  "palavanthangal": "Pazhavanthangal",
+  "pazhavanthangal": "Pazhavanthangal",
+  "t. nagar": "T. Nagar",
+  "t nagar": "T. Nagar",
+  "t.nagar": "T. Nagar",
+  "k. k. nagar": "K. K. Nagar",
+  "kk nagar": "K. K. Nagar",
+  "k.k. nagar": "K. K. Nagar",
+  "bv nagar": "Nanganallur",
+};
+
 const loadPincodeMap = cache(async (): Promise<Map<string, string>> => {
   const m = new Map<string, string>();
   try {
@@ -143,31 +188,41 @@ export async function extractAllAreasFromAddress(
   // 1. Direct explicit pincode
   if (pincode) {
     const derived = await areaFromPincode(pincode);
-    if (derived) foundAreas.add(derived);
+    if (derived) {
+      const canonical = CANONICAL_AREA_ALIASES[derived.toLowerCase()] || derived;
+      foundAreas.add(canonical);
+    }
   }
 
   if (!address || !address.trim()) {
     return Array.from(foundAreas);
   }
 
-  const rawAddr = address.trim();
+  // 2. Clean address by stripping false-positive landmarks & road names
+  let cleanedAddr = address.trim();
+  for (const fp of FALSE_POSITIVE_PHRASES) {
+    cleanedAddr = cleanedAddr.replace(fp, " ");
+  }
 
-  // 2. All 6-digit pincodes in address text
-  const pinMatches = rawAddr.match(/\b(6\d{5})\b/g);
+  // 3. All 6-digit pincodes in address text
+  const pinMatches = cleanedAddr.match(/\b(6\d{5})\b/g);
   if (pinMatches) {
     for (const pin of pinMatches) {
       const derived = await areaFromPincode(pin);
-      if (derived) foundAreas.add(derived);
+      if (derived) {
+        const canonical = CANONICAL_AREA_ALIASES[derived.toLowerCase()] || derived;
+        foundAreas.add(canonical);
+      }
     }
   }
 
-  // 3. Scan for all known locality names
+  // 4. Scan for all known locality names
   const knownAreas = await listKnownAreas();
-  const sortedKnown = [...new Set([...knownAreas, ...DEFAULT_KNOWN_AREAS])].sort(
-    (a, b) => b.length - a.length,
-  );
+  const sortedKnown = [
+    ...new Set([...knownAreas, ...DEFAULT_KNOWN_AREAS, ...Object.keys(CANONICAL_AREA_ALIASES)]),
+  ].sort((a, b) => b.length - a.length);
 
-  const lowerAddr = rawAddr.toLowerCase();
+  const lowerAddr = cleanedAddr.toLowerCase();
   for (const area of sortedKnown) {
     const escaped = area
       .replace(/[+?^${}()|[\]\\]/g, "\\$&")
@@ -175,13 +230,14 @@ export async function extractAllAreasFromAddress(
       .replace(/\s+/g, "\\s+");
     const regex = new RegExp(`(^|[^a-zA-Z0-9])${escaped}([^a-zA-Z0-9]|$)`, "i");
     if (regex.test(lowerAddr)) {
-      foundAreas.add(area);
+      const canonical = CANONICAL_AREA_ALIASES[area.toLowerCase()] || area;
+      foundAreas.add(canonical);
     }
   }
 
-  // 4. Comma-separated address segment fallback if no known areas found
+  // 5. Comma-separated address segment fallback if no known areas found
   if (foundAreas.size === 0) {
-    const parts = rawAddr
+    const parts = cleanedAddr
       .split(/[,;\n]/)
       .map((p) => p.trim())
       .filter(Boolean);
@@ -191,7 +247,8 @@ export async function extractAllAreasFromAddress(
         if (/^(chennai|tamil nadu|tamilnadu|india|\d{6})$/i.test(part)) continue;
         if (/^(no|flat|plot|door|street|st|rd|road|lane|cross|main)\b/i.test(part) && part.length < 5) continue;
         if (part.length >= 3 && part.length <= 35) {
-          foundAreas.add(part);
+          const canonical = CANONICAL_AREA_ALIASES[part.toLowerCase()] || part;
+          foundAreas.add(canonical);
           break;
         }
       }
@@ -299,14 +356,8 @@ export async function resolveLeadIdsForArea(
   area: string,
   allowedLeadIds?: string[] | null,
 ): Promise<string[]> {
-  const normTarget = area.trim().toLowerCase();
+  const normTarget = (CANONICAL_AREA_ALIASES[area.trim().toLowerCase()] || area.trim()).toLowerCase();
   if (!normTarget || normTarget === "all") return [];
-
-  const escaped = normTarget
-    .replace(/[+?^${}()|[\]\\]/g, "\\$&")
-    .replace(/\./g, "\\.?")
-    .replace(/\s+/g, "\\s+");
-  const regex = new RegExp(`(^|[^a-zA-Z0-9])${escaped}([^a-zA-Z0-9]|$)`, "i");
 
   const matchingIds: string[] = [];
   let from = 0;
@@ -323,14 +374,18 @@ export async function resolveLeadIdsForArea(
     if (error || !data || data.length === 0) break;
 
     for (const r of data as { id: string; area: string | null; address: string | null; pincode: string | null }[]) {
+      const leadAreas = new Set<string>();
+      if (r.area?.trim()) {
+        const canonical = CANONICAL_AREA_ALIASES[r.area.trim().toLowerCase()] || r.area.trim();
+        leadAreas.add(canonical.toLowerCase());
+      }
       const plainAddress = unseal(r.address);
-      const leadArea = (r.area || "").trim();
-      const leadAddr = (plainAddress || "").trim();
+      const extracted = await extractAllAreasFromAddress(plainAddress, r.pincode);
+      for (const a of extracted) {
+        leadAreas.add(a.toLowerCase());
+      }
 
-      if (
-        (leadArea && (leadArea.toLowerCase() === normTarget || regex.test(leadArea))) ||
-        (leadAddr && regex.test(leadAddr))
-      ) {
+      if (leadAreas.has(normTarget)) {
         matchingIds.push(r.id);
       }
     }
