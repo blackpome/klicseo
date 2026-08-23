@@ -1,6 +1,8 @@
 import "server-only";
 import { supabase } from "./supabase";
+import { unseal } from "./crypto";
 import { addLeadsToList, insertLeadList } from "./leadLists";
+import { resolveLeadIdsForArea, resolvePrimaryLocality, CANONICAL_AREA_ALIASES } from "./area";
 import type {
   LeadAllocationFilter,
   LeadAllocationSchedule,
@@ -28,13 +30,17 @@ export function matchesFilter(
 ): boolean {
   if (!filter) return true;
 
-  // 1. Area (checks both area column and permanent address text)
+  // 1. Area (checks both area column and permanent address text with unseal & canonical matching)
   if (filter.areas && filter.areas.length > 0) {
+    const plainAddress = unseal(lead.address);
     const leadArea = String(lead.area ?? "").toLowerCase().trim();
-    const leadAddress = String(lead.address ?? "").toLowerCase().trim();
+    const leadAddr = String(plainAddress ?? "").toLowerCase().trim();
     const matched = filter.areas.some((area) => {
-      const a = area.toLowerCase().trim();
-      return (leadArea && leadArea.includes(a)) || (leadAddress && leadAddress.includes(a));
+      const canonicalTarget = (CANONICAL_AREA_ALIASES[area.toLowerCase().trim()] || area.trim()).toLowerCase();
+      return (
+        (leadArea && (leadArea === canonicalTarget || leadArea.includes(canonicalTarget))) ||
+        (leadAddr && leadAddr.includes(canonicalTarget))
+      );
     });
     if (!matched) return false;
   }
@@ -123,13 +129,15 @@ export async function countMatchingLeads(
       .neq("status", "booked");
 
     if (filter.areas && filter.areas.length > 0) {
-      const areaClauses = filter.areas
-        .map((a) => {
-          const s = a.trim();
-          return `area.ilike.%${s}%,address.ilike.%${s}%`;
-        })
-        .join(",");
-      query = query.or(areaClauses);
+      const matchingAreaIds = new Set<string>();
+      for (const area of filter.areas) {
+        const ids = await resolveLeadIdsForArea(area);
+        for (const id of ids) matchingAreaIds.add(id);
+      }
+      if (matchingAreaIds.size === 0) {
+        return { count: 0, totalUnallocated };
+      }
+      query = query.in("id", Array.from(matchingAreaIds));
     }
     if (filter.pincodes && filter.pincodes.length > 0) {
       query = query.in("pincode", filter.pincodes);
@@ -246,13 +254,15 @@ export async function executeLeadAllocation(req: {
       .order("created_at", { ascending: false });
 
     if (req.conditions.areas && req.conditions.areas.length > 0) {
-      const areaClauses = req.conditions.areas
-        .map((a) => {
-          const s = a.trim();
-          return `area.ilike.%${s}%,address.ilike.%${s}%`;
-        })
-        .join(",");
-      query = query.or(areaClauses);
+      const matchingAreaIds = new Set<string>();
+      for (const area of req.conditions.areas) {
+        const ids = await resolveLeadIdsForArea(area);
+        for (const id of ids) matchingAreaIds.add(id);
+      }
+      if (matchingAreaIds.size === 0) {
+        return { allocatedCount: 0, leadIds: [] };
+      }
+      query = query.in("id", Array.from(matchingAreaIds));
     }
     if (req.conditions.pincodes && req.conditions.pincodes.length > 0) {
       query = query.in("pincode", req.conditions.pincodes);
