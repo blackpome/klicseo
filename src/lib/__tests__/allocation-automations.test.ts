@@ -16,6 +16,8 @@ let mockLeadListItemsData: any[] = [];
 let mockAdminUsersData: any[] = [];
 let mockLeadListsData: any[] = [];
 
+let mockAllocationsLogData: any[] = [];
+
 vi.mock("@/lib/supabase", () => ({
   supabase: () => ({
     from: (table: string) => {
@@ -182,8 +184,18 @@ vi.mock("@/lib/supabase", () => ({
 
       if (table === "lead_allocations_log") {
         return {
+          select: () => ({
+            eq: (field: string, val: any) => ({
+              order: () => {
+                const filtered = mockAllocationsLogData.filter((log) => log[field] === val);
+                return Promise.resolve({ data: filtered, error: null });
+              },
+            }),
+          }),
           insert: (log: any) => {
             mockInsert(log);
+            const arr = Array.isArray(log) ? log : [log];
+            mockAllocationsLogData.push(...arr);
             return Promise.resolve({ error: null });
           },
         };
@@ -211,6 +223,7 @@ import {
   transferStaffLeads,
   recycleAndReassignLeads,
   listStaffWorkload,
+  getLeadAllocationHistory,
 } from "../lead-routing";
 
 describe("Allocation Automations Full Test Suite", () => {
@@ -348,6 +361,40 @@ describe("Allocation Automations Full Test Suite", () => {
       expect(res.recycledCount).toBe(2);
       expect(res.protectedCount).toBe(1); // booked lead protected
       expect(res.createdListIds.length).toBe(1);
+    });
+  });
+
+  describe("7. Persistent Campaign & Allocation History (getLeadAllocationHistory)", () => {
+    it("fetches chronological list allocation and recycling history for a lead", async () => {
+      mockAllocationsLogData = [
+        {
+          id: "log-1",
+          created_at: "2026-08-19T09:30:00Z",
+          lead_id: "lead-hist-1",
+          allocation_type: "manual",
+          reason: "Recycled from Old Campaign → Assigned to Girija",
+          assigned_to_list_id: "list-2",
+          lead_lists: { id: "list-2", name: "Recycled Leads (19/08/2026)" },
+          admin_users: { id: "staff-2", email: "girija@klicseo.com", employees: { name: "Girija" } },
+        },
+        {
+          id: "log-2",
+          created_at: "2026-08-15T09:30:00Z",
+          lead_id: "lead-hist-1",
+          allocation_type: "daily_recurring",
+          reason: "Initial release",
+          assigned_to_list_id: "list-1",
+          lead_lists: { id: "list-1", name: "Priya Campaign" },
+          admin_users: { id: "staff-1", email: "priya@klicseo.com", employees: { name: "Priya" } },
+        },
+      ];
+
+      const history = await getLeadAllocationHistory("lead-hist-1");
+      expect(history.length).toBe(2);
+      expect(history[0].listName).toBe("Recycled Leads (19/08/2026)");
+      expect(history[0].staffName).toBe("Girija");
+      expect(history[1].listName).toBe("Priya Campaign");
+      expect(history[1].staffName).toBe("Priya");
     });
   });
 });

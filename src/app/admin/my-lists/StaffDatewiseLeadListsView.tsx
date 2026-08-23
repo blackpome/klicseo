@@ -671,9 +671,96 @@ export default function StaffDatewiseLeadListsView({
                       </div>
                     </div>
 
-                    {/* BATCH LEADS GRID */}
-                    {!isCollapsed && (
-                      <div className="p-4 md:p-5 pt-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border-t border-white/[0.04]">
+                    {/* WHAT HAPPENED ON THIS DATE BRIEFING BANNER */}
+                    {!isCollapsed && (() => {
+                      const bookedOnDate = dateGroup.lists.reduce((sum, l) => sum + (l.status_counts?.booked ?? 0), 0);
+                      const followUpOnDate = dateGroup.lists.reduce((sum, l) => sum + (l.status_counts?.follow_up ?? 0), 0);
+                      const contactedOnDate = dateGroup.lists.reduce((sum, l) => sum + (l.status_counts?.contacted ?? 0), 0);
+                      const noAnswerOnDate = dateGroup.lists.reduce((sum, l) => sum + (l.status_counts?.call_not_responded ?? 0), 0);
+                      const callsOnDate = dateGroup.completedLeads;
+                      const staffName = selectedStaffObj?.staffName || "Staff member";
+
+                      return (
+                        <div className="p-4 md:p-5 pt-0 space-y-4">
+                          <div className="rounded-2xl border border-white/[0.06] bg-[#050E21] p-4 space-y-3">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#C9A84C]">
+                                <Sparkles size={14} /> What Happened On {dateGroup.displayDate.replace("Today · ", "").replace("Yesterday · ", "")}
+                              </span>
+                              <span className="text-[11px] text-white/40 font-medium">
+                                {dateGroup.completionRate}% daily calling coverage
+                              </span>
+                            </div>
+
+                            {/* Dynamic Daily Story */}
+                            <p className="text-xs text-white/80 leading-relaxed font-medium">
+                              {bookedOnDate > 0
+                                ? `🏆 Outstanding outcome! ${staffName} converted ${bookedOnDate} confirmed booking${bookedOnDate === 1 ? "" : "s"} with ${callsOnDate} calls completed (${dateGroup.completionRate}% coverage).`
+                                : callsOnDate > 0
+                                ? `📞 ${staffName} completed ${callsOnDate} out of ${dateGroup.totalLeads} calls (${dateGroup.completionRate}% coverage) with ${followUpOnDate} callback${followUpOnDate === 1 ? "" : "s"} scheduled.`
+                                : `⚡ ${dateGroup.totalLeads} fresh leads released across ${dateGroup.lists.length} batch${dateGroup.lists.length === 1 ? "" : "es"} awaiting outreach.`}
+                            </p>
+
+                            {/* Daily Metric Highlights Grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1">
+                              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04] text-center">
+                                <span className="block text-[9px] uppercase font-bold tracking-wider text-white/35">
+                                  Total Assigned
+                                </span>
+                                <span className="text-xs font-bold text-white tabular-nums">
+                                  {dateGroup.totalLeads} Leads
+                                </span>
+                              </div>
+
+                              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04] text-center">
+                                <span className="block text-[9px] uppercase font-bold tracking-wider text-white/35">
+                                  Calls Made
+                                </span>
+                                <span className="text-xs font-bold text-sky-400 tabular-nums">
+                                  {callsOnDate} ({dateGroup.completionRate}%)
+                                </span>
+                              </div>
+
+                              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+                                <span className="block text-[9px] uppercase font-bold tracking-wider text-emerald-300">
+                                  🏆 Booked
+                                </span>
+                                <span className="text-xs font-bold text-emerald-400 tabular-nums">
+                                  {bookedOnDate} Converted
+                                </span>
+                              </div>
+
+                              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
+                                <span className="block text-[9px] uppercase font-bold tracking-wider text-amber-300">
+                                  🟡 Callbacks
+                                </span>
+                                <span className="text-xs font-bold text-amber-400 tabular-nums">
+                                  {followUpOnDate} Scheduled
+                                </span>
+                              </div>
+
+                              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-center">
+                                <span className="block text-[9px] uppercase font-bold tracking-wider text-rose-300">
+                                  📵 Unreachable
+                                </span>
+                                <span className="text-xs font-bold text-rose-400 tabular-nums">
+                                  {noAnswerOnDate} No Answer
+                                </span>
+                              </div>
+
+                              <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-center">
+                                <span className="block text-[9px] uppercase font-bold tracking-wider text-purple-300">
+                                  🟢 To Call
+                                </span>
+                                <span className="text-xs font-bold text-purple-300 tabular-nums">
+                                  {dateGroup.pendingLeads} Pending
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* BATCH LEADS GRID */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
                         {dateGroup.lists.map((batch) => {
                           const count = batch.lead_count ?? 0;
                           const completed = batch.completed_count ?? 0;
@@ -810,10 +897,12 @@ export default function StaffDatewiseLeadListsView({
                           );
                         })}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    </div>
+                  );
+                })()}
+              </div>
+            );
+          })}
             </div>
           )}
         </div>

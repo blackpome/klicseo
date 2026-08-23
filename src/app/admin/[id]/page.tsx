@@ -21,6 +21,7 @@ import {
   Copy,
   FileSpreadsheet,
   UploadCloud,
+  RotateCcw,
 } from "lucide-react";
 import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
@@ -33,6 +34,7 @@ import WhatsAppLink from "@/components/WhatsAppLink";
 import PhoneCell from "@/components/PhoneCell";
 import { formatPhone } from "@/lib/phone-shared";
 import { getLead, assertLeadInScope } from "@/lib/leads";
+import { getLeadAllocationHistory } from "@/lib/lead-routing";
 import { LEAD_STATUS_COLOR, getLeadSourceInfo } from "@/lib/leads-shared";
 import { getSiteSettings } from "@/lib/site-settings";
 import { DEFAULT_LEAD_STATUS_ITEMS, type CustomLeadStatus } from "@/lib/site-settings-shared";
@@ -163,7 +165,10 @@ export default async function LeadDetailPage({
   const statusColorMap = Object.fromEntries(configuredStatuses.map((s) => [s.id, s.color]));
 
   const canViewPayments = me != null && me.permissions.includes("payments.view" as Permission);
-  const paymentHistory = canViewPayments ? await getCustomerPayments(id).catch(() => []) : [];
+  const [paymentHistory, allocationHistory] = await Promise.all([
+    canViewPayments ? getCustomerPayments(id).catch(() => []) : Promise.resolve([]),
+    getLeadAllocationHistory(id).catch(() => []),
+  ]);
 
   const ShiftIcon = lead.shift === "morning" ? Sunrise : Sunset;
   const shiftLabel =
@@ -493,6 +498,74 @@ export default async function LeadDetailPage({
               </div>
 
               <LeadNotesEditor id={lead.id} initialNotes={lead.notes ?? ""} />
+            </div>
+
+            {/* Campaign & Allocation History (Persistent across list recycling) */}
+            <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 shadow-lg">
+              <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#C9A84C]">
+                  <RotateCcw size={15} /> Campaign & List History
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white/60 font-semibold tabular-nums">
+                  {allocationHistory.length} Record{allocationHistory.length === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              {allocationHistory.length === 0 ? (
+                <p className="text-xs text-white/40 py-2">
+                  No automated dispatches or recycling events recorded for this lead yet.
+                </p>
+              ) : (
+                <div className="relative pl-4 space-y-4 before:absolute before:left-1.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-white/10">
+                  {allocationHistory.map((item, idx) => {
+                    const isLatest = idx === 0;
+                    return (
+                      <div key={item.id} className="relative space-y-1 text-xs">
+                        <div
+                          className={`absolute -left-[19px] top-1.5 h-2.5 w-2.5 rounded-full border-2 ${
+                            isLatest
+                              ? "bg-[#C9A84C] border-[#071228] ring-2 ring-[#C9A84C]/40"
+                              : "bg-white/30 border-[#071228]"
+                          }`}
+                        />
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-white">
+                            {item.listName ? (
+                              <Link
+                                href={`/admin/lists/${item.listId}`}
+                                className="hover:text-[#E8CC7A] hover:underline"
+                              >
+                                {item.listName}
+                              </Link>
+                            ) : (
+                              "Campaign List"
+                            )}
+                          </span>
+                          <span className="text-[10px] text-white/40 tabular-nums">
+                            {new Date(item.created_at).toLocaleDateString("en-IN", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              timeZone: "Asia/Kolkata",
+                            })}
+                          </span>
+                        </div>
+
+                        {item.staffName && (
+                          <div className="text-[11px] text-white/60 flex items-center gap-1">
+                            <span>Assigned to:</span>
+                            <span className="text-[#E8CC7A] font-medium">{item.staffName}</span>
+                          </div>
+                        )}
+
+                        <div className="text-[11px] text-white/50 bg-white/[0.02] p-2 rounded-lg border border-white/[0.04] leading-relaxed">
+                          {item.reason}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>

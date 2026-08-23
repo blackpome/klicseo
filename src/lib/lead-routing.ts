@@ -807,4 +807,62 @@ export async function recycleAndReassignLeads(
   };
 }
 
+/**
+ * Fetch the persistent campaign list membership and allocation history for a specific lead.
+ */
+export async function getLeadAllocationHistory(leadId: string): Promise<
+  {
+    id: string;
+    created_at: string;
+    allocation_type: string;
+    reason: string;
+    staffName: string | null;
+    staffEmail: string | null;
+    listName: string | null;
+    listId: string | null;
+  }[]
+> {
+  try {
+    const { data, error } = await supabase()
+      .from("lead_allocations_log")
+      .select(`
+        id,
+        created_at,
+        allocation_type,
+        reason,
+        assigned_to_list_id,
+        lead_lists:assigned_to_list_id (id, name),
+        admin_users:assigned_to_admin_user_id (id, email, employees:employee_id (name))
+      `)
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false });
+
+    if (error || !data) return [];
+
+    return data.map((row: any) => {
+      const admin = row.admin_users;
+      const emp = admin?.employees;
+      const empName = Array.isArray(emp) ? emp[0]?.name : emp?.name;
+      const staffName = empName || (admin?.email ? admin.email.split("@")[0] : null);
+      const list = row.lead_lists;
+      const listName = Array.isArray(list) ? list[0]?.name : list?.name;
+
+      return {
+        id: row.id,
+        created_at: row.created_at,
+        allocation_type: row.allocation_type ?? "manual",
+        reason: row.reason || "Assigned to list",
+        staffName: staffName ?? null,
+        staffEmail: admin?.email ?? null,
+        listName: listName ?? null,
+        listId: row.assigned_to_list_id ?? null,
+      };
+    });
+  } catch (err) {
+    console.error("getLeadAllocationHistory error:", err);
+    return [];
+  }
+}
+
+
 
