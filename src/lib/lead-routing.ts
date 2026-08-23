@@ -2,7 +2,7 @@ import "server-only";
 import { supabase } from "./supabase";
 import { unseal } from "./crypto";
 import { addLeadsToList, insertLeadList } from "./leadLists";
-import { resolveLeadIdsForArea, resolvePrimaryLocality, getOrBuildLocationIndex, CANONICAL_AREA_ALIASES } from "./area";
+import { resolveLeadIdsForArea, resolvePrimaryLocality, getOrBuildLocationIndex, invalidateAreaCountsCache, CANONICAL_AREA_ALIASES } from "./area";
 import type {
   LeadAllocationFilter,
   LeadAllocationSchedule,
@@ -231,8 +231,13 @@ export async function executeLeadAllocation(req: {
   allocatedCount: number;
   leadIds: string[];
 }> {
-  // 1. Fetch already assigned lead IDs to strictly prevent duplicates
-  let assignedSet = new Set<string>();
+  // 1. Fetch location index and assigned lead IDs
+  const [locationIndex, globalAssignedSet] = await Promise.all([
+    getOrBuildLocationIndex(),
+    getAllAssignedLeadIds(),
+  ]);
+
+  let assignedSet = globalAssignedSet;
   if (req.target_list_id) {
     // If adding to a specific list, exclude leads already in this list
     const { data: existingInList } = await supabase()
@@ -241,57 +246,50 @@ export async function executeLeadAllocation(req: {
       .eq("list_id", req.target_list_id)
       .range(0, 49999);
     assignedSet = new Set((existingInList ?? []).map((i) => i.lead_id));
-  } else {
-    // If assigning directly to staff rosters, exclude leads assigned to any active list
-    assignedSet = await getAllAssignedLeadIds();
   }
 
-  // 2. Fetch candidate leads from pool matching conditions
-  const selectedLeadIds: string[] = [];
-  let from = 0;
-  const batchSize = Math.max(req.lead_count * 2, 500);
+  // 2. Select matching candidate leads directly from index
+  const candidateLeads = locationIndex.allLeads.filter((lead) => {
+    if (lead.status === "booked") return false;
+    if (assignedSet.has(lead.id)) return false;
 
-  while (selectedLeadIds.length < req.lead_count) {
-    let query = supabase()
-      .from("leads")
-      .select("id, area, address, pincode, service, price_total, status")
-      .neq("status", "booked")
-      .order("created_at", { ascending: false });
-
+    // 1. Area filter
     if (req.conditions.areas && req.conditions.areas.length > 0) {
-      const matchingAreaIds = new Set<string>();
-      for (const area of req.conditions.areas) {
-        const ids = await resolveLeadIdsForArea(area);
-        for (const id of ids) matchingAreaIds.add(id);
-      }
-      if (matchingAreaIds.size === 0) {
-        return { allocatedCount: 0, leadIds: [] };
-      }
-      query = query.in("id", Array.from(matchingAreaIds));
+      const leadPrimary = lead.primaryLocality.toLowerCase();
+      const matched = req.conditions.areas.some((area) => {
+        const canonicalTarget = (CANONICAL_AREA_ALIASES[area.toLowerCase().trim()] || area.trim()).toLowerCase();
+        return leadPrimary === canonicalTarget;
+      });
+      if (!matched) return false;
     }
+
+    // 2. Pincodes
     if (req.conditions.pincodes && req.conditions.pincodes.length > 0) {
-      query = query.in("pincode", req.conditions.pincodes);
+      const leadPin = String(lead.pincode ?? "").trim();
+      const matched = req.conditions.pincodes.some((pin) => leadPin.includes(pin.trim()));
+      if (!matched) return false;
     }
+
+    // 3. Services
     if (req.conditions.services && req.conditions.services.length > 0) {
-      query = query.in("service", req.conditions.services);
+      const leadService = String(lead.service ?? "").toLowerCase().trim();
+      if (!leadService) return false;
+      const matched = req.conditions.services.some((srv) =>
+        leadService.includes(srv.toLowerCase().trim()),
+      );
+      if (!matched) return false;
     }
+
+    // 4. Min Price
     if (req.conditions.min_price != null && req.conditions.min_price > 0) {
-      query = query.gte("price_total", req.conditions.min_price);
+      const price = lead.price_total ?? 0;
+      if (price < req.conditions.min_price) return false;
     }
 
-    const { data, error } = await query.range(from, from + batchSize - 1);
-    if (error || !data || data.length === 0) break;
+    return true;
+  });
 
-    for (const lead of data) {
-      if (!assignedSet.has(lead.id) && matchesFilter(lead, req.conditions)) {
-        selectedLeadIds.push(lead.id);
-        if (selectedLeadIds.length >= req.lead_count) break;
-      }
-    }
-
-    if (data.length < batchSize) break;
-    from += batchSize;
-  }
+  const selectedLeadIds = candidateLeads.slice(0, req.lead_count).map((l) => l.id);
 
   if (selectedLeadIds.length === 0) {
     return { allocatedCount: 0, leadIds: [] };
@@ -317,17 +315,21 @@ export async function executeLeadAllocation(req: {
 
       await addLeadsToList(list.id, slice);
 
-      for (const leadId of slice) {
-        await supabase().from("lead_allocations_log").insert({
-          lead_id: leadId,
-          assigned_to_admin_user_id: staffId,
-          assigned_to_list_id: list.id,
-          allocation_type: req.allocation_type ?? "manual",
-          reason: req.notes || `Allocated in batch of ${selectedLeadIds.length} leads`,
-        });
-      }
+      const logRows = slice.map((leadId) => ({
+        lead_id: leadId,
+        assigned_to_admin_user_id: staffId,
+        assigned_to_list_id: list.id,
+        allocation_type: req.allocation_type ?? "manual",
+        reason: req.notes || `Allocated in batch of ${selectedLeadIds.length} leads`,
+      }));
+
+      await supabase().from("lead_allocations_log").insert(logRows);
     }
   }
+
+  // Invalidate in-memory caches so subsequent views update immediately
+  invalidateAssignedLeadsCache();
+  invalidateAreaCountsCache();
 
   return {
     allocatedCount: selectedLeadIds.length,
