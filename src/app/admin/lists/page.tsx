@@ -3,6 +3,7 @@ import AdminShell from "../AdminShell";
 import AdminError from "../AdminError";
 import { listLeadLists } from "@/lib/leadLists";
 import { listScheduledAllocations, listStaffWorkload } from "@/lib/lead-routing";
+import { listAreasWithCounts } from "@/lib/area";
 import { listAssignableAdminUsers } from "@/lib/admin-users";
 import { currentAdmin } from "@/lib/admin-auth";
 import LeadListsWorkspaceClient from "./LeadListsWorkspaceClient";
@@ -22,11 +23,12 @@ export default async function LeadListsPage({
   const { q } = await searchParams;
 
   try {
-    const [lists, schedules, staffWorkload, adminUsers] = await Promise.all([
+    const [lists, schedules, staffWorkload, adminUsers, areaCounts] = await Promise.all([
       listLeadLists({ search: q }),
       listScheduledAllocations(),
       listStaffWorkload(),
       listAssignableAdminUsers(),
+      listAreasWithCounts(),
     ]);
 
     const currentAdminUser = adminUsers.find(
@@ -43,6 +45,7 @@ export default async function LeadListsPage({
           initialStaffWorkload={staffWorkload}
           adminUsers={adminUsers.map((u) => ({ id: u.id, email: u.email, name: u.name }))}
           currentUser={{ id: currentUserId, email: me.email, name: currentUserName, role: me.role }}
+          availableAreas={areaCounts.map((a) => a.area)}
           searchQuery={q ?? ""}
         />
       </AdminShell>

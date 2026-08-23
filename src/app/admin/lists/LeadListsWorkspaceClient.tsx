@@ -50,6 +50,7 @@ interface Props {
   initialStaffWorkload: StaffWorkloadSummary[];
   adminUsers: { id: string; email: string; name: string }[];
   currentUser?: { id: string; email: string; name: string; role: string };
+  availableAreas?: string[];
   searchQuery?: string;
 }
 
@@ -61,6 +62,7 @@ export default function LeadListsWorkspaceClient({
   initialStaffWorkload,
   adminUsers,
   currentUser,
+  availableAreas,
   searchQuery = "",
 }: Props) {
   const router = useRouter();
@@ -652,6 +654,7 @@ export default function LeadListsWorkspaceClient({
       <LeadAllocationModal
         lists={initialLists}
         adminUsers={adminUsers}
+        availableAreas={availableAreas}
         isOpen={allocateModalOpen}
         onClose={() => setAllocateModalOpen(false)}
         onSuccess={handleSuccess}

@@ -365,9 +365,9 @@ export default async function AdminLeadsPage({
             <div className="flex items-center gap-2 flex-wrap text-xs">
               {/* Area Quick Filter */}
               {areaCounts.length > 0 && (
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <MapPin size={13} className="text-white/40" />
-                  <div className="flex gap-1 flex-wrap">
+                  <div className="flex gap-1 flex-wrap items-center">
                     <Link
                       href={buildLeadsHref({ status: filter, q, area: "all", service: serviceFilter })}
                       className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
@@ -376,9 +376,9 @@ export default async function AdminLeadsPage({
                           : "text-white/40 hover:text-white hover:bg-white/5"
                       }`}
                     >
-                      All Areas
+                      All Areas ({areaCounts.reduce((sum, a) => sum + a.count, 0)})
                     </Link>
-                    {areaCounts.slice(0, 4).map((a) => (
+                    {areaCounts.slice(0, 6).map((a) => (
                       <Link
                         key={a.area}
                         href={buildLeadsHref({
@@ -396,6 +396,30 @@ export default async function AdminLeadsPage({
                         {a.area} <span className="opacity-50">({a.count})</span>
                       </Link>
                     ))}
+
+                    {/* Full Area Selector dropdown if more than 6 areas */}
+                    {areaCounts.length > 6 && (
+                      <form className="inline-block">
+                        {filter !== "all" && <input type="hidden" name="status" value={filter} />}
+                        {q && <input type="hidden" name="q" value={q} />}
+                        {serviceFilter && <input type="hidden" name="service" value={serviceFilter} />}
+                        <select
+                          name="area"
+                          defaultValue={areaFilter ?? ""}
+                          onChange={(e) => {
+                            if (e.target.form) e.target.form.submit();
+                          }}
+                          className="bg-[#050E21] border border-white/10 text-white/80 rounded-lg px-2 py-1 text-[11px] focus:outline-none focus:border-[#C9A84C]"
+                        >
+                          <option value="">All {areaCounts.length} Captured Areas...</option>
+                          {areaCounts.map((a) => (
+                            <option key={a.area} value={a.area}>
+                              {a.area} ({a.count})
+                            </option>
+                          ))}
+                        </select>
+                      </form>
+                    )}
                   </div>
                 </div>
               )}

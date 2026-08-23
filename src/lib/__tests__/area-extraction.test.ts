@@ -16,6 +16,7 @@ vi.mock("../supabase", () => ({
             { pincode: "600042", area: "Velachery" },
             { pincode: "600017", area: "T. Nagar" },
             { pincode: "600020", area: "Adyar" },
+            { pincode: "600032", area: "Guindy" },
             { pincode: "600044", area: "Chromepet" },
             { pincode: "600096", area: "Sholinganallur" },
           ],
@@ -24,7 +25,7 @@ vi.mock("../supabase", () => ({
   }),
 }));
 
-import { extractAreaFromAddress, areaFromPincode } from "../area";
+import { extractAreaFromAddress, extractAllAreasFromAddress, areaFromPincode } from "../area";
 
 describe("Permanent Address Area Extraction Engine", () => {
   describe("areaFromPincode", () => {
@@ -82,6 +83,22 @@ describe("Permanent Address Area Extraction Engine", () => {
       expect(await extractAreaFromAddress(null)).toBeNull();
       expect(await extractAreaFromAddress("")).toBeNull();
       expect(await extractAreaFromAddress("   ")).toBeNull();
+    });
+  });
+
+  describe("extractAllAreasFromAddress", () => {
+    it("captures ALL areas mentioned in a multi-locality address", async () => {
+      const addr = "Near Velachery Main Road, Guindy, Chennai 600042";
+      const all = await extractAllAreasFromAddress(addr);
+      expect(all).toContain("Velachery");
+      expect(all).toContain("Guindy");
+    });
+
+    it("extracts multiple areas including embedded pincodes", async () => {
+      const addr = "Branch 1: Adyar, Branch 2: T. Nagar, Chennai - 600020";
+      const all = await extractAllAreasFromAddress(addr);
+      expect(all).toContain("Adyar");
+      expect(all).toContain("T. Nagar");
     });
   });
 });

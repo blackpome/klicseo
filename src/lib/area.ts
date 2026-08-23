@@ -104,29 +104,36 @@ export async function areaFromPincode(pincode: string | null | undefined): Promi
 }
 
 /**
- * Intelligently extract locality / area from permanent address text and pincode.
+ * Intelligently extract ALL locality / area names found in permanent address text and pincode.
  */
-export async function extractAreaFromAddress(
+export async function extractAllAreasFromAddress(
   address: string | null | undefined,
   pincode?: string | null | undefined,
-): Promise<string | null> {
+): Promise<string[]> {
+  const foundAreas = new Set<string>();
+
   // 1. Direct explicit pincode
   if (pincode) {
     const derived = await areaFromPincode(pincode);
-    if (derived) return derived;
+    if (derived) foundAreas.add(derived);
   }
 
-  if (!address || !address.trim()) return null;
+  if (!address || !address.trim()) {
+    return Array.from(foundAreas);
+  }
+
   const rawAddr = address.trim();
 
-  // 2. 6-digit pincode in address text
-  const pinMatch = rawAddr.match(/\b(6\d{5})\b/);
-  if (pinMatch) {
-    const derived = await areaFromPincode(pinMatch[1]);
-    if (derived) return derived;
+  // 2. All 6-digit pincodes in address text
+  const pinMatches = rawAddr.match(/\b(6\d{5})\b/g);
+  if (pinMatches) {
+    for (const pin of pinMatches) {
+      const derived = await areaFromPincode(pin);
+      if (derived) foundAreas.add(derived);
+    }
   }
 
-  // 3. Scan for known locality names (sort by length descending so longer compound names match first)
+  // 3. Scan for all known locality names
   const knownAreas = await listKnownAreas();
   const sortedKnown = [...new Set([...knownAreas, ...DEFAULT_KNOWN_AREAS])].sort(
     (a, b) => b.length - a.length,
@@ -134,34 +141,47 @@ export async function extractAreaFromAddress(
 
   const lowerAddr = rawAddr.toLowerCase();
   for (const area of sortedKnown) {
-    // Escape regex characters except allowing optional dots/spaces (e.g. T. Nagar, T Nagar)
     const escaped = area
       .replace(/[+?^${}()|[\]\\]/g, "\\$&")
       .replace(/\./g, "\\.?")
       .replace(/\s+/g, "\\s+");
     const regex = new RegExp(`(^|[^a-zA-Z0-9])${escaped}([^a-zA-Z0-9]|$)`, "i");
     if (regex.test(lowerAddr)) {
-      return area;
+      foundAreas.add(area);
     }
   }
 
-  // 4. Comma-separated address segment fallback
-  const parts = rawAddr
-    .split(/[,;\n]/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (parts.length >= 2) {
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const part = parts[i];
-      if (/^(chennai|tamil nadu|tamilnadu|india|\d{6})$/i.test(part)) continue;
-      if (/^(no|flat|plot|door|street|st|rd|road|lane|cross|main)\b/i.test(part) && part.length < 5) continue;
-      if (part.length >= 3 && part.length <= 35) {
-        return part;
+  // 4. Comma-separated address segment fallback if no known areas found
+  if (foundAreas.size === 0) {
+    const parts = rawAddr
+      .split(/[,;\n]/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length >= 2) {
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const part = parts[i];
+        if (/^(chennai|tamil nadu|tamilnadu|india|\d{6})$/i.test(part)) continue;
+        if (/^(no|flat|plot|door|street|st|rd|road|lane|cross|main)\b/i.test(part) && part.length < 5) continue;
+        if (part.length >= 3 && part.length <= 35) {
+          foundAreas.add(part);
+          break;
+        }
       }
     }
   }
 
-  return null;
+  return Array.from(foundAreas);
+}
+
+/**
+ * Returns the primary locality / area extracted from address.
+ */
+export async function extractAreaFromAddress(
+  address: string | null | undefined,
+  pincode?: string | null | undefined,
+): Promise<string | null> {
+  const all = await extractAllAreasFromAddress(address, pincode);
+  return all.length > 0 ? all[0] : null;
 }
 
 // In-memory cache for area counts to prevent full-table scans on every /admin load
@@ -199,12 +219,17 @@ export async function listAreasWithCounts(
   const counts = new Map<string, number>();
 
   for (const r of (data ?? []) as { area: string | null; address: string | null; pincode: string | null }[]) {
-    let resolvedArea = r.area?.trim() || null;
-    if (!resolvedArea && (r.address || r.pincode)) {
-      resolvedArea = await extractAreaFromAddress(r.address, r.pincode);
+    const leadAreas = new Set<string>();
+    if (r.area?.trim()) {
+      leadAreas.add(r.area.trim());
     }
-    if (resolvedArea) {
-      counts.set(resolvedArea, (counts.get(resolvedArea) ?? 0) + 1);
+    const extracted = await extractAllAreasFromAddress(r.address, r.pincode);
+    for (const a of extracted) {
+      leadAreas.add(a);
+    }
+
+    for (const a of leadAreas) {
+      counts.set(a, (counts.get(a) ?? 0) + 1);
     }
   }
 

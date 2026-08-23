@@ -29,6 +29,7 @@ import type { ScheduleMode } from "@/lib/lead-routing-shared";
 interface Props {
   lists: LeadListRow[];
   adminUsers: { id: string; email: string; name: string }[];
+  availableAreas?: string[];
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
@@ -61,6 +62,7 @@ const PRICE_PRESETS = [3000, 5000, 10000, 15000];
 export default function LeadAllocationModal({
   lists,
   adminUsers,
+  availableAreas,
   isOpen,
   onClose,
   onSuccess,
@@ -417,30 +419,36 @@ export default function LeadAllocationModal({
               )}
 
               {/* Quick Area Preset Chips */}
-              <div className="flex flex-wrap gap-1.5">
-                {COMMON_AREAS.map((area) => {
-                  const isSelected = selectedAreas.includes(area);
-                  return (
-                    <button
-                      key={area}
-                      type="button"
-                      onClick={() => toggleArea(area)}
-                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all ${
-                        isSelected
-                          ? "bg-sky-500/20 border-sky-500/40 text-sky-300 font-semibold"
-                          : "bg-white/[0.03] border-white/10 text-white/60 hover:text-white hover:bg-white/[0.06]"
-                      }`}
-                    >
-                      {isSelected ? `✓ ${area}` : `+ ${area}`}
-                    </button>
-                  );
-                })}
+              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                {(availableAreas && availableAreas.length > 0
+                  ? Array.from(new Set([...availableAreas, ...COMMON_AREAS]))
+                  : COMMON_AREAS
+                )
+                  .slice(0, 18)
+                  .map((area) => {
+                    const isSelected = selectedAreas.includes(area);
+                    return (
+                      <button
+                        key={area}
+                        type="button"
+                        onClick={() => toggleArea(area)}
+                        className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all ${
+                          isSelected
+                            ? "bg-sky-500/20 border-sky-500/40 text-sky-300 font-semibold"
+                            : "bg-white/[0.03] border-white/10 text-white/60 hover:text-white hover:bg-white/[0.06]"
+                        }`}
+                      >
+                        {isSelected ? `✓ ${area}` : `+ ${area}`}
+                      </button>
+                    );
+                  })}
               </div>
 
-              {/* Custom Area Input */}
+              {/* Custom Area Input with Autocomplete Datalist */}
               <div className="flex items-center gap-2 pt-1">
                 <input
                   type="text"
+                  list="available-areas-list"
                   value={customAreaInput}
                   onChange={(e) => setCustomAreaInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -449,9 +457,17 @@ export default function LeadAllocationModal({
                       handleAddCustomArea();
                     }
                   }}
-                  placeholder="Type other locality (e.g. Sholinganallur)..."
+                  placeholder="Select or type any captured area (e.g. Sholinganallur)..."
                   className="flex-1 bg-[#071228] border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#C9A84C]"
                 />
+                <datalist id="available-areas-list">
+                  {(availableAreas && availableAreas.length > 0
+                    ? Array.from(new Set([...availableAreas, ...COMMON_AREAS]))
+                    : COMMON_AREAS
+                  ).map((a) => (
+                    <option key={a} value={a} />
+                  ))}
+                </datalist>
                 <button
                   type="button"
                   onClick={handleAddCustomArea}
