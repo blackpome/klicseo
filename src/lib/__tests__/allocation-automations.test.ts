@@ -85,6 +85,7 @@ vi.mock("@/lib/supabase", () => ({
         const leadChain: any = {
           in: (field: string, vals: any[]) => leadChain,
           neq: (field: string, val: any) => leadChain,
+          or: (clause: string) => leadChain,
           order: () => leadChain,
           gte: () => leadChain,
           range: () => Promise.resolve({ data: mockLeadsData, error: null }),

@@ -15,6 +15,31 @@ describe("Lead Allocation Condition Matcher", () => {
       expect(matchesFilter({ area: null }, filter)).toBe(false);
     });
 
+    it("matches area name from permanent address when area column is empty", () => {
+      const filter: LeadAllocationFilter = {
+        areas: ["Velachery", "Anna Nagar"],
+      };
+
+      expect(
+        matchesFilter(
+          { area: null, address: "Plot 12, 1st Main Rd, Velachery, Chennai" },
+          filter,
+        ),
+      ).toBe(true);
+      expect(
+        matchesFilter(
+          { area: null, address: "No 45, Anna Nagar West, Chennai - 600040" },
+          filter,
+        ),
+      ).toBe(true);
+      expect(
+        matchesFilter(
+          { area: null, address: "Door 8, Saidapet, Chennai" },
+          filter,
+        ),
+      ).toBe(false);
+    });
+
     it("matches pincodes accurately", () => {
       const filter: LeadAllocationFilter = {
         pincodes: ["600042", "600096"],

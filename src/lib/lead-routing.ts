@@ -19,6 +19,7 @@ export * from "./lead-routing-shared";
 export function matchesFilter(
   lead: {
     area?: string | null;
+    address?: string | null;
     pincode?: string | null;
     service?: string | null;
     price_total?: number | null;
@@ -27,12 +28,13 @@ export function matchesFilter(
 ): boolean {
   if (!filter) return true;
 
-  // 1. Area
+  // 1. Area (checks both area column and permanent address text)
   if (filter.areas && filter.areas.length > 0) {
     const leadArea = String(lead.area ?? "").toLowerCase().trim();
+    const leadAddress = String(lead.address ?? "").toLowerCase().trim();
     const matched = filter.areas.some((area) => {
       const a = area.toLowerCase().trim();
-      return leadArea && leadArea.includes(a);
+      return (leadArea && leadArea.includes(a)) || (leadAddress && leadAddress.includes(a));
     });
     if (!matched) return false;
   }
@@ -117,11 +119,17 @@ export async function countMatchingLeads(
     // 3. Count leads matching the filter
     let query = supabase()
       .from("leads")
-      .select("id, area, pincode, service, price_total, status")
+      .select("id, area, address, pincode, service, price_total, status")
       .neq("status", "booked");
 
     if (filter.areas && filter.areas.length > 0) {
-      query = query.in("area", filter.areas);
+      const areaClauses = filter.areas
+        .map((a) => {
+          const s = a.trim();
+          return `area.ilike.%${s}%,address.ilike.%${s}%`;
+        })
+        .join(",");
+      query = query.or(areaClauses);
     }
     if (filter.pincodes && filter.pincodes.length > 0) {
       query = query.in("pincode", filter.pincodes);
@@ -233,12 +241,18 @@ export async function executeLeadAllocation(req: {
   while (selectedLeadIds.length < req.lead_count) {
     let query = supabase()
       .from("leads")
-      .select("id, area, pincode, service, price_total, status")
+      .select("id, area, address, pincode, service, price_total, status")
       .neq("status", "booked")
       .order("created_at", { ascending: false });
 
     if (req.conditions.areas && req.conditions.areas.length > 0) {
-      query = query.in("area", req.conditions.areas);
+      const areaClauses = req.conditions.areas
+        .map((a) => {
+          const s = a.trim();
+          return `area.ilike.%${s}%,address.ilike.%${s}%`;
+        })
+        .join(",");
+      query = query.or(areaClauses);
     }
     if (req.conditions.pincodes && req.conditions.pincodes.length > 0) {
       query = query.in("pincode", req.conditions.pincodes);

@@ -13,6 +13,77 @@ interface PincodeAreaRow {
   area: string;
 }
 
+const DEFAULT_KNOWN_AREAS = [
+  "Adambakkam",
+  "Adyar",
+  "Alwarpet",
+  "Ambattur",
+  "Ambattur Industrial Estate",
+  "Ambattur OT",
+  "Aminjikarai",
+  "Anna Nagar",
+  "Anna Nagar West",
+  "Annanagar West Extn",
+  "Anna Salai",
+  "Arumbakkam",
+  "Avadi",
+  "Besant Nagar",
+  "Chetpet",
+  "Choolaimedu",
+  "Chromepet",
+  "Egmore",
+  "George Town",
+  "Gopalapuram",
+  "Guindy",
+  "K. K. Nagar",
+  "Karapakkam",
+  "Kelambakkam",
+  "Kilpauk",
+  "Kodambakkam",
+  "Kodambakkam West",
+  "Kotturpuram",
+  "Madhavaram",
+  "Madipakkam",
+  "Manapakkam",
+  "Medavakkam",
+  "Mogappair",
+  "Mogappair East",
+  "Mylapore",
+  "Nandanam",
+  "Nanganallur",
+  "Nungambakkam",
+  "OMR / Padur",
+  "Pallavaram",
+  "Pallikaranai",
+  "Park Town",
+  "Perambur",
+  "Periyapalayam",
+  "Porur",
+  "R. A. Puram",
+  "Royapettah",
+  "Saidapet",
+  "Saligramam",
+  "Selaiyur",
+  "Shenoy Nagar",
+  "Sholinganallur",
+  "St. Thomas Mount",
+  "Tambaram",
+  "Tambaram East",
+  "Tambaram West",
+  "Tambaram Sanatorium",
+  "Taramani",
+  "T. Nagar",
+  "Teynampet",
+  "Thiruvanmiyur",
+  "Thousand Lights",
+  "Triplicane",
+  "Vadapalani",
+  "Velappanchavadi",
+  "Velachery",
+  "Virugambakkam",
+  "West Mambalam",
+];
+
 const loadPincodeMap = cache(async (): Promise<Map<string, string>> => {
   const m = new Map<string, string>();
   try {
@@ -30,6 +101,67 @@ export async function areaFromPincode(pincode: string | null | undefined): Promi
   if (!PIN_REGEX.test(p)) return null;
   const map = await loadPincodeMap();
   return map.get(p) ?? null;
+}
+
+/**
+ * Intelligently extract locality / area from permanent address text and pincode.
+ */
+export async function extractAreaFromAddress(
+  address: string | null | undefined,
+  pincode?: string | null | undefined,
+): Promise<string | null> {
+  // 1. Direct explicit pincode
+  if (pincode) {
+    const derived = await areaFromPincode(pincode);
+    if (derived) return derived;
+  }
+
+  if (!address || !address.trim()) return null;
+  const rawAddr = address.trim();
+
+  // 2. 6-digit pincode in address text
+  const pinMatch = rawAddr.match(/\b(6\d{5})\b/);
+  if (pinMatch) {
+    const derived = await areaFromPincode(pinMatch[1]);
+    if (derived) return derived;
+  }
+
+  // 3. Scan for known locality names (sort by length descending so longer compound names match first)
+  const knownAreas = await listKnownAreas();
+  const sortedKnown = [...new Set([...knownAreas, ...DEFAULT_KNOWN_AREAS])].sort(
+    (a, b) => b.length - a.length,
+  );
+
+  const lowerAddr = rawAddr.toLowerCase();
+  for (const area of sortedKnown) {
+    // Escape regex characters except allowing optional dots/spaces (e.g. T. Nagar, T Nagar)
+    const escaped = area
+      .replace(/[+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\./g, "\\.?")
+      .replace(/\s+/g, "\\s+");
+    const regex = new RegExp(`(^|[^a-zA-Z0-9])${escaped}([^a-zA-Z0-9]|$)`, "i");
+    if (regex.test(lowerAddr)) {
+      return area;
+    }
+  }
+
+  // 4. Comma-separated address segment fallback
+  const parts = rawAddr
+    .split(/[,;\n]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      if (/^(chennai|tamil nadu|tamilnadu|india|\d{6})$/i.test(part)) continue;
+      if (/^(no|flat|plot|door|street|st|rd|road|lane|cross|main)\b/i.test(part) && part.length < 5) continue;
+      if (part.length >= 3 && part.length <= 35) {
+        return part;
+      }
+    }
+  }
+
+  return null;
 }
 
 // In-memory cache for area counts to prevent full-table scans on every /admin load
@@ -58,18 +190,24 @@ export async function listAreasWithCounts(
 
   let q = supabase()
     .from("leads")
-    .select("area")
-    .not("area", "is", null)
+    .select("area, address, pincode")
     .range(0, 49999);
   if (allowedLeadIds) q = q.in("id", allowedLeadIds);
 
   const { data, error } = await q;
   if (error) throw error;
   const counts = new Map<string, number>();
-  for (const r of (data ?? []) as { area: string | null }[]) {
-    if (!r.area) continue;
-    counts.set(r.area, (counts.get(r.area) ?? 0) + 1);
+
+  for (const r of (data ?? []) as { area: string | null; address: string | null; pincode: string | null }[]) {
+    let resolvedArea = r.area?.trim() || null;
+    if (!resolvedArea && (r.address || r.pincode)) {
+      resolvedArea = await extractAreaFromAddress(r.address, r.pincode);
+    }
+    if (resolvedArea) {
+      counts.set(resolvedArea, (counts.get(resolvedArea) ?? 0) + 1);
+    }
   }
+
   return [...counts.entries()]
     .map(([area, count]) => ({ area, count }))
     .sort((a, b) => b.count - a.count || a.area.localeCompare(b.area));
@@ -79,5 +217,6 @@ export async function listAreasWithCounts(
  *  on the lead form even before any lead has been tagged with that area. */
 export async function listKnownAreas(): Promise<string[]> {
   const map = await loadPincodeMap();
-  return Array.from(new Set(map.values())).sort((a, b) => a.localeCompare(b));
+  const dbAreas = Array.from(new Set(map.values()));
+  return Array.from(new Set([...dbAreas, ...DEFAULT_KNOWN_AREAS])).sort((a, b) => a.localeCompare(b));
 }

@@ -1,7 +1,7 @@
 import "server-only";
 import { supabase } from "./supabase";
 import { sealFields, unsealFields, unseal, phoneHash, normalizePhone } from "./crypto";
-import { areaFromPincode, invalidateAreaCountsCache } from "./area";
+import { areaFromPincode, extractAreaFromAddress, invalidateAreaCountsCache } from "./area";
 import type { CallReminder, LeadStatus, LeadSource } from "./leads-shared";
 import type { LeadScope } from "./admin-auth";
 
@@ -100,9 +100,12 @@ export async function insertLead(lead: NewLead): Promise<LeadRow> {
   }
   // Compute the search hash BEFORE sealing the plaintext phone.
   payload.phone_hash = phoneHash(lead.phone);
-  // Auto-derive locality from pincode when the caller didn't set area.
+  // Auto-derive locality from permanent address and pincode when caller didn't set area.
   if (!(payload as { area?: string | null }).area) {
-    payload.area = await areaFromPincode((lead as { pincode?: string | null }).pincode);
+    payload.area = await extractAreaFromAddress(
+      lead.address as string | null,
+      (lead as { pincode?: string | null }).pincode,
+    );
   }
   const sealed = sealFields(payload, ENCRYPTED_LEAD_FIELDS);
   const { data, error } = await supabase()
@@ -120,6 +123,7 @@ export async function insertLead(lead: NewLead): Promise<LeadRow> {
 const SEARCH_FIELDS = [
   "name",
   "area",
+  "address",
   "car_model",
   "vehicle_type",
   "pincode",
@@ -204,7 +208,14 @@ function applyLeadFilters(
   allowedLeadIds: string[] | null,
 ) {
   if (allowedLeadIds) q = q.in("id", allowedLeadIds);
-  if (options.area && options.area !== "all") q = q.eq("area", options.area);
+  if (options.area && options.area !== "all") {
+    const sArea = sanitizeSearch(options.area);
+    if (sArea) {
+      q = q.or(`area.eq.${options.area},address.ilike.%${sArea}%`);
+    } else {
+      q = q.eq("area", options.area);
+    }
+  }
   if (options.service && options.service !== "all") q = q.eq("service", options.service);
   if (options.serviceOption && options.serviceOption !== "all") q = q.eq("service_option", options.serviceOption);
   if (options.fromIso) q = q.gte("created_at", options.fromIso);
@@ -332,7 +343,14 @@ export async function listPaginatedLeads(
   } else if (opts.excludeStatuses && opts.excludeStatuses.length) {
     q = q.not("status", "in", `(${opts.excludeStatuses.join(",")})`);
   }
-  if (opts.area && opts.area !== "all") q = q.eq("area", opts.area);
+  if (opts.area && opts.area !== "all") {
+    const sArea = sanitizeSearch(opts.area);
+    if (sArea) {
+      q = q.or(`area.eq.${opts.area},address.ilike.%${sArea}%`);
+    } else {
+      q = q.eq("area", opts.area);
+    }
+  }
   if (opts.service && opts.service !== "all") q = q.eq("service", opts.service);
   if (opts.serviceOption && opts.serviceOption !== "all") q = q.eq("service_option", opts.serviceOption);
   if (opts.fromIso) q = q.gte("created_at", opts.fromIso);
@@ -423,9 +441,12 @@ export async function updateLead(id: string, patch: LeadUpdate): Promise<void> {
   const payload: Record<string, unknown> = { ...patch };
   // Keep phone_hash in lock-step with any phone update.
   if ("phone" in payload) payload.phone_hash = phoneHash(payload.phone as string | null);
-  // Pincode changed but area not explicitly set → re-derive.
-  if ("pincode" in payload && !("area" in payload)) {
-    payload.area = await areaFromPincode(payload.pincode as string | null);
+  // Pincode or address changed but area not explicitly set → re-derive.
+  if (("pincode" in payload || "address" in payload) && !("area" in payload)) {
+    payload.area = await extractAreaFromAddress(
+      payload.address as string | null,
+      payload.pincode as string | null,
+    );
   }
   const sealed = sealFields(payload, ENCRYPTED_LEAD_FIELDS);
   const { error } = await supabase().from("leads").update(sealed).eq("id", id);
@@ -776,7 +797,10 @@ export async function bulkInsertLeads(
     }
 
     // New lead to insert
-    const area = lead.area || (lead.pincode ? areaCache.get(lead.pincode) ?? null : null);
+    let area = lead.area || (lead.pincode ? areaCache.get(lead.pincode) ?? null : null);
+    if (!area && (lead.address || lead.pincode)) {
+      area = await extractAreaFromAddress(lead.address, lead.pincode);
+    }
     const now = new Date().toISOString();
     const payload: Record<string, unknown> = {
       ...lead,
