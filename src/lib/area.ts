@@ -276,6 +276,67 @@ export function invalidateAreaCountsCache(): void {
   cachedAreas = null;
 }
 
+/**
+ * Resolves each lead to its single, most-accurate primary locality.
+ */
+export async function resolvePrimaryLocality(
+  rawArea: string | null | undefined,
+  plainAddress: string | null | undefined,
+  pincode?: string | null | undefined,
+): Promise<string | null> {
+  const areaTrim = (rawArea || "").trim();
+  const addrTrim = (plainAddress || "").trim();
+  const pinTrim = (pincode || "").trim();
+
+  let cleanedAddr = addrTrim;
+  for (const fp of FALSE_POSITIVE_PHRASES) {
+    cleanedAddr = cleanedAddr.replace(fp, " ");
+  }
+  const addrLower = cleanedAddr.toLowerCase();
+
+  // 1. Scan address text for specific sub-localities (e.g. Puzhuthivakkam, Ullagaram, Alandur, Moovarasampettai)
+  const knownAreas = await listKnownAreas();
+  const sortedKnown = [
+    ...new Set([...knownAreas, ...DEFAULT_KNOWN_AREAS, ...Object.keys(CANONICAL_AREA_ALIASES)]),
+  ].sort((a, b) => b.length - a.length);
+
+  for (const area of sortedKnown) {
+    const escaped = area
+      .replace(/[+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\./g, "\\.?")
+      .replace(/\s+/g, "\\s+");
+    const regex = new RegExp(`(^|[^a-zA-Z0-9])${escaped}([^a-zA-Z0-9]|$)`, "i");
+    if (regex.test(addrLower)) {
+      return CANONICAL_AREA_ALIASES[area.toLowerCase()] || area;
+    }
+  }
+
+  // 2. Direct Area column if specified
+  if (areaTrim && areaTrim !== "null" && areaTrim !== "Unspecified") {
+    const norm = areaTrim.toLowerCase();
+    return CANONICAL_AREA_ALIASES[norm] || areaTrim;
+  }
+
+  // 3. Pincode lookup
+  if (pinTrim) {
+    const derived = await areaFromPincode(pinTrim);
+    if (derived) {
+      return CANONICAL_AREA_ALIASES[derived.toLowerCase()] || derived;
+    }
+  }
+
+  // 4. Embedded pincode in address text
+  const pinMatch = addrTrim.match(/\b(6\d{5})\b/);
+  if (pinMatch) {
+    const derived = await areaFromPincode(pinMatch[1]);
+    if (derived) {
+      return CANONICAL_AREA_ALIASES[derived.toLowerCase()] || derived;
+    }
+  }
+
+  return null;
+}
+
 /** Distinct areas + lead counts across ALL leads in the database, for the filter pill bar on /admin. */
 export async function listAreasWithCounts(
   assignedAdminUserId?: string,
@@ -320,18 +381,10 @@ export async function listAreasWithCounts(
   const counts = new Map<string, number>();
 
   for (const r of allLeads) {
-    const leadAreas = new Set<string>();
-    if (r.area?.trim()) {
-      leadAreas.add(r.area.trim());
-    }
     const plainAddress = unseal(r.address);
-    const extracted = await extractAllAreasFromAddress(plainAddress, r.pincode);
-    for (const a of extracted) {
-      leadAreas.add(a);
-    }
-
-    for (const a of leadAreas) {
-      counts.set(a, (counts.get(a) ?? 0) + 1);
+    const primary = await resolvePrimaryLocality(r.area, plainAddress, r.pincode);
+    if (primary && primary !== "Unspecified") {
+      counts.set(primary, (counts.get(primary) ?? 0) + 1);
     }
   }
 
@@ -374,18 +427,9 @@ export async function resolveLeadIdsForArea(
     if (error || !data || data.length === 0) break;
 
     for (const r of data as { id: string; area: string | null; address: string | null; pincode: string | null }[]) {
-      const leadAreas = new Set<string>();
-      if (r.area?.trim()) {
-        const canonical = CANONICAL_AREA_ALIASES[r.area.trim().toLowerCase()] || r.area.trim();
-        leadAreas.add(canonical.toLowerCase());
-      }
       const plainAddress = unseal(r.address);
-      const extracted = await extractAllAreasFromAddress(plainAddress, r.pincode);
-      for (const a of extracted) {
-        leadAreas.add(a.toLowerCase());
-      }
-
-      if (leadAreas.has(normTarget)) {
+      const primary = await resolvePrimaryLocality(r.area, plainAddress, r.pincode);
+      if (primary && primary.toLowerCase() === normTarget) {
         matchingIds.push(r.id);
       }
     }
