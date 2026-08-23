@@ -72,20 +72,22 @@ export async function countMatchingLeads(filter: LeadAllocationFilter): Promise<
     // 1. Query leads that are already assigned to any list
     const { data: assignedItems } = await supabase()
       .from("lead_list_items")
-      .select("lead_id");
+      .select("lead_id")
+      .range(0, 49999);
     const assignedSet = new Set((assignedItems ?? []).map((item) => item.lead_id));
 
     // 2. Query candidates
     let query = supabase()
       .from("leads")
       .select("id, area, pincode, service, price_total")
-      .in("status", ["new", "draft", "call_not_responded", "cancelled"]);
+      .in("status", ["new", "draft", "call_not_responded", "cancelled"])
+      .range(0, 49999);
 
     if (filter.min_price != null && filter.min_price > 0) {
       query = query.gte("price_total", filter.min_price);
     }
 
-    const { data, error } = await query.limit(2000);
+    const { data, error } = await query;
     if (error) throw error;
 
     if (!data) return 0;
@@ -162,23 +164,25 @@ export async function executeLeadAllocation(req: {
     const { data: existingInList } = await supabase()
       .from("lead_list_items")
       .select("lead_id")
-      .eq("list_id", req.target_list_id);
+      .eq("list_id", req.target_list_id)
+      .range(0, 49999);
     assignedSet = new Set((existingInList ?? []).map((i) => i.lead_id));
   } else {
     // If assigning directly to staff rosters, exclude leads assigned to any active list
     const { data: allAssigned } = await supabase()
       .from("lead_list_items")
-      .select("lead_id");
+      .select("lead_id")
+      .range(0, 49999);
     assignedSet = new Set((allAssigned ?? []).map((i) => i.lead_id));
   }
 
-  // 2. Fetch candidate leads from pool (scans full candidate pool up to 2000 rows)
+  // 2. Fetch candidate leads from pool (scans full candidate pool up to 50000 rows)
   let query = supabase()
     .from("leads")
     .select("id, area, pincode, service, price_total")
     .in("status", ["new", "draft", "call_not_responded", "cancelled"])
     .order("created_at", { ascending: false })
-    .limit(2000);
+    .range(0, 49999);
 
   if (req.conditions.min_price != null && req.conditions.min_price > 0) {
     query = query.gte("price_total", req.conditions.min_price);
@@ -701,6 +705,7 @@ export async function recycleAndReassignLeads(
     throw new Error("Source list or source staff member is required.");
   }
 
+  listItemsQuery = listItemsQuery.range(0, 49999);
   const { data: rawItems, error: itemsErr } = await listItemsQuery;
   if (itemsErr) throw itemsErr;
 

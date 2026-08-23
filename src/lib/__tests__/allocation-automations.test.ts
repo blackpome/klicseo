@@ -86,9 +86,12 @@ vi.mock("@/lib/supabase", () => ({
           select: (cols?: string) => ({
             in: (field: string, vals: any[]) => ({
               order: () => ({
+                range: () => Promise.resolve({ data: mockLeadsData, error: null }),
                 limit: () => Promise.resolve({ data: mockLeadsData, error: null }),
               }),
+              range: () => Promise.resolve({ data: mockLeadsData, error: null }),
               limit: () => Promise.resolve({ data: mockLeadsData, error: null }),
+              then: (resolve: any) => resolve({ data: mockLeadsData, error: null }),
             }),
           }),
           update: (patch: any) => ({
@@ -106,14 +109,27 @@ vi.mock("@/lib/supabase", () => ({
       if (table === "lead_list_items") {
         return {
           select: (cols?: string) => ({
-            eq: (field: string, val: any) => {
-              const filtered = mockLeadListItemsData.filter((item) => item[field] === val);
-              return Promise.resolve({ data: filtered, error: null });
-            },
-            in: (field: string, vals: string[]) => {
-              const filtered = mockLeadListItemsData.filter((item) => vals.includes(item[field]));
-              return Promise.resolve({ data: filtered, error: null });
-            },
+            eq: (field: string, val: any) => ({
+              range: () => {
+                const filtered = mockLeadListItemsData.filter((item) => item[field] === val);
+                return Promise.resolve({ data: filtered, error: null });
+              },
+              then: (resolve: any) => {
+                const filtered = mockLeadListItemsData.filter((item) => item[field] === val);
+                return resolve({ data: filtered, error: null });
+              },
+            }),
+            in: (field: string, vals: string[]) => ({
+              range: () => {
+                const filtered = mockLeadListItemsData.filter((item) => vals.includes(item[field]));
+                return Promise.resolve({ data: filtered, error: null });
+              },
+              then: (resolve: any) => {
+                const filtered = mockLeadListItemsData.filter((item) => vals.includes(item[field]));
+                return resolve({ data: filtered, error: null });
+              },
+            }),
+            range: () => Promise.resolve({ data: mockLeadListItemsData, error: null }),
             then: (resolve: any) => resolve({ data: mockLeadListItemsData, error: null }),
           }),
           insert: (items: any) => {
