@@ -507,24 +507,24 @@ export default function LeadListsWorkspaceClient({
                   <div className="space-y-3.5">
                     {/* Top: Name, Email, Role & Motivation Badge */}
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-sm text-white">{staff.name}</h4>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-bold text-sm text-white truncate">{staff.name}</h4>
                           {isAllDone && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0 whitespace-nowrap">
                               🎉 100% Done
                             </span>
                           )}
                           {isHighOutput && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 whitespace-nowrap">
                               🔥 On Track
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-white/40">{staff.email}</p>
+                        <p className="text-[11px] text-white/40 truncate">{staff.email}</p>
                       </div>
 
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#C9A84C]/15 text-[#E8CC7A] border border-[#C9A84C]/30 uppercase">
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#C9A84C]/15 text-[#E8CC7A] border border-[#C9A84C]/30 uppercase shrink-0 whitespace-nowrap">
                         {staff.role}
                       </span>
                     </div>

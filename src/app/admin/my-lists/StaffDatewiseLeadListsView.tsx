@@ -374,22 +374,22 @@ export default function StaffDatewiseLeadListsView({
                 >
                   {/* Staff Header */}
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-[#C9A84C]/20 to-[#E8CC7A]/10 border border-[#C9A84C]/30 text-[#E8CC7A] font-bold text-base shadow-sm">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-[#C9A84C]/20 to-[#E8CC7A]/10 border border-[#C9A84C]/30 text-[#E8CC7A] font-bold text-base shadow-sm shrink-0">
                         {initial}
                       </div>
 
-                      <div>
-                        <h3 className="text-base font-bold text-white group-hover:text-[#E8CC7A] transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-base font-bold text-white group-hover:text-[#E8CC7A] transition-colors truncate">
                           {staff.staffName}
                         </h3>
-                        <p className="text-xs text-white/40 truncate max-w-[180px]">
+                        <p className="text-xs text-white/40 truncate">
                           {staff.staffEmail}
                         </p>
                       </div>
                     </div>
 
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-white/5 border border-white/10 text-white/70 tabular-nums">
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-white/5 border border-white/10 text-white/70 tabular-nums shrink-0 whitespace-nowrap">
                       {staff.totalLists} {staff.totalLists === 1 ? "batch" : "batches"}
                     </span>
                   </div>
@@ -804,9 +804,11 @@ export default function StaffDatewiseLeadListsView({
                                   )}
                                 </div>
 
-                                <div className="flex items-center justify-between text-xs text-white/40">
-                                  <span>Created by {batch.admin_users?.email || "Admin"}</span>
-                                  <span className="text-[11px] text-white/35 tabular-nums">
+                                <div className="flex items-center justify-between text-xs text-white/40 gap-2">
+                                  <span className="truncate min-w-0 flex-1">
+                                    Created by {batch.admin_users?.email || "Admin"}
+                                  </span>
+                                  <span className="text-[11px] text-white/35 tabular-nums shrink-0 whitespace-nowrap">
                                     {new Date(batch.created_at).toLocaleTimeString("en-IN", {
                                       hour: "2-digit",
                                       minute: "2-digit",
