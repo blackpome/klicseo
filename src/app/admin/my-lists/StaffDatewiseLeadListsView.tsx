@@ -17,10 +17,13 @@ import {
   Sparkles,
   ClipboardList,
   ArrowRight,
+  ArrowLeft,
   TrendingUp,
   Plus,
   Pencil,
   Trash2,
+  UploadCloud,
+  Zap,
 } from "lucide-react";
 import type { LeadListRow } from "@/lib/leadLists-shared";
 import DeleteLeadListButton from "../lists/DeleteLeadListButton";
@@ -64,9 +67,13 @@ export default function StaffDatewiseLeadListsView({
   adminUsers = [],
 }: Props) {
   const router = useRouter();
-  const [selectedStaffId, setSelectedStaffId] = useState<string>(
-    isSuperAdmin ? "all" : currentUser.id,
+
+  // If super-admin: start at Level 1 (List of Staffs = null)
+  // If telecaller: start at Level 2 (their own staffId)
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(
+    isSuperAdmin ? null : currentUser.id,
   );
+
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set());
@@ -80,14 +87,14 @@ export default function StaffDatewiseLeadListsView({
   }>({ isOpen: false });
 
   // 1. Group lists by Staff -> Datewise -> Batch Leads
-  const { staffList, allDateGroups, globalStats } = useMemo(() => {
+  const { staffList, globalStats } = useMemo(() => {
     const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
     const yesterday = new Date(Date.now() - 86400000);
     const yesterdayStr = yesterday.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
     const staffMap = new Map<string, { name: string; email: string; lists: LeadListRow[] }>();
 
-    // Include all known admin staff members even if they have 0 lists
+    // Include all known admin staff members even if they currently have 0 lists
     for (const u of adminUsers) {
       staffMap.set(u.id, { name: u.name, email: u.email, lists: [] });
     }
@@ -203,7 +210,7 @@ export default function StaffDatewiseLeadListsView({
       builtStaffList.push({
         staffId: "unassigned",
         staffName: "Unassigned Lists",
-        staffEmail: "",
+        staffEmail: "Lists not assigned to any staff",
         totalLists: unassignedLists.length,
         totalLeads,
         completedLeads,
@@ -213,7 +220,14 @@ export default function StaffDatewiseLeadListsView({
       });
     }
 
-    const allDateGroupsBuilt = helperBuildDateGroups(lists);
+    // Sort staff: ones with active lists/pending leads first
+    builtStaffList.sort((a, b) => {
+      if (a.staffId === "unassigned") return 1;
+      if (b.staffId === "unassigned") return -1;
+      if (b.totalLists !== a.totalLists) return b.totalLists - a.totalLists;
+      return b.pendingLeads - a.pendingLeads;
+    });
+
     const globalTotalLeads = lists.reduce((sum, l) => sum + (l.lead_count ?? 0), 0);
     const globalCompleted = lists.reduce((sum, l) => sum + (l.completed_count ?? 0), 0);
     const globalPending = lists.reduce((sum, l) => sum + (l.pending_count ?? 0), 0);
@@ -222,7 +236,6 @@ export default function StaffDatewiseLeadListsView({
 
     return {
       staffList: builtStaffList,
-      allDateGroups: allDateGroupsBuilt,
       globalStats: {
         totalLists: lists.length,
         totalLeads: globalTotalLeads,
@@ -233,20 +246,18 @@ export default function StaffDatewiseLeadListsView({
     };
   }, [lists, adminUsers, currentUser]);
 
-  // 2. Filter active date groups based on staff selection, search, and status filter
-  const activeDateGroups = useMemo(() => {
-    let sourceGroups: DateGroup[] = [];
+  const selectedStaffObj = useMemo(() => {
+    if (!selectedStaffId) return null;
+    return staffList.find((s) => s.staffId === selectedStaffId) ?? null;
+  }, [selectedStaffId, staffList]);
 
-    if (selectedStaffId === "all") {
-      sourceGroups = allDateGroups;
-    } else {
-      const foundStaff = staffList.find((s) => s.staffId === selectedStaffId);
-      sourceGroups = foundStaff ? foundStaff.dateGroups : [];
-    }
+  // Filter date groups for the selected staff
+  const activeDateGroups = useMemo(() => {
+    if (!selectedStaffObj) return [];
 
     const q = searchQuery.toLowerCase().trim();
 
-    return sourceGroups
+    return selectedStaffObj.dateGroups
       .map((group) => {
         const filteredLists = group.lists.filter((list) => {
           // Status filter
@@ -254,11 +265,7 @@ export default function StaffDatewiseLeadListsView({
           if (statusFilter === "completed" && (list.pending_count ?? 0) > 0) return false;
 
           // Search query
-          if (q) {
-            const nameMatch = list.name.toLowerCase().includes(q);
-            const staffMatch = (list.assigned_admin_user?.name || "").toLowerCase().includes(q);
-            if (!nameMatch && !staffMatch) return false;
-          }
+          if (q && !list.name.toLowerCase().includes(q)) return false;
 
           return true;
         });
@@ -281,7 +288,7 @@ export default function StaffDatewiseLeadListsView({
         };
       })
       .filter((g): g is DateGroup => g !== null);
-  }, [selectedStaffId, allDateGroups, staffList, statusFilter, searchQuery]);
+  }, [selectedStaffObj, statusFilter, searchQuery]);
 
   const toggleDateCollapse = (dateKey: string) => {
     setCollapsedDates((prev) => {
@@ -292,447 +299,523 @@ export default function StaffDatewiseLeadListsView({
     });
   };
 
-  const selectedStaffObj = useMemo(() => {
-    if (selectedStaffId === "all") return null;
-    return staffList.find((s) => s.staffId === selectedStaffId) ?? null;
-  }, [selectedStaffId, staffList]);
-
   return (
     <div className="space-y-6">
-      {/* Header & Hierarchy Breadcrumb */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#C9A84C] uppercase tracking-wider">
-            <span>My Lists</span>
-            <span>→</span>
-            <span>Staff</span>
-            <span>→</span>
-            <span>Datewise</span>
-            <span>→</span>
-            <span>Batch Leads</span>
-          </div>
-          <h1
-            className="text-2xl md:text-3xl font-bold tracking-tight text-white mt-1"
-            style={{ fontFamily: "var(--font-playfair)" }}
-          >
-            {selectedStaffObj
-              ? `Campaign Worklists · ${selectedStaffObj.staffName}`
-              : "Lead Campaigns & Calling Worklists"}
-          </h1>
-          <p className="text-xs text-white/50 mt-0.5">
-            Organized chronologically by release dates and caller batch allocations
-          </p>
-        </div>
-
-        {/* Global Summary Cards */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
-            <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
-              Pending Calls
-            </span>
-            <span className="text-sm font-bold text-amber-400 tabular-nums">
-              {selectedStaffObj
-                ? selectedStaffObj.pendingLeads
-                : globalStats.pendingLeads}
-            </span>
-          </div>
-
-          <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
-            <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
-              Completed
-            </span>
-            <span className="text-sm font-bold text-emerald-400 tabular-nums">
-              {selectedStaffObj
-                ? selectedStaffObj.completedLeads
-                : globalStats.completedLeads}
-            </span>
-          </div>
-
-          <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
-            <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
-              Progress
-            </span>
-            <span className="text-sm font-bold text-sky-400 tabular-nums">
-              {selectedStaffObj
-                ? selectedStaffObj.completionRate
-                : globalStats.completionRate}
-              %
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* STEP 1: STAFF SELECTOR TABS (for Super-Admins or Team view) */}
-      {isSuperAdmin && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-white/40">
-              1. Select Staff Member
-            </span>
-            <span className="text-[11px] text-white/30">
-              {staffList.length} staff members registered
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-            <button
-              type="button"
-              onClick={() => setSelectedStaffId("all")}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-2 border ${
-                selectedStaffId === "all"
-                  ? "bg-[#C9A84C] text-[#050E21] border-[#C9A84C] font-bold shadow-md shadow-[#C9A84C]/15"
-                  : "bg-[#071228] text-white/70 border-white/[0.08] hover:border-white/20 hover:text-white"
-              }`}
-            >
-              <Users size={14} />
-              <span>All Staff</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold tabular-nums ${
-                  selectedStaffId === "all" ? "bg-black/20" : "bg-white/10"
-                }`}
+      {/* LEVEL 1: LIST OF STAFFS (When no specific staff is selected) */}
+      {selectedStaffId === null ? (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#C9A84C] uppercase tracking-wider">
+                <span>Lead Lists</span>
+                <span>→</span>
+                <span>List of Staffs</span>
+              </div>
+              <h1
+                className="text-2xl md:text-3xl font-bold tracking-tight text-white mt-1"
+                style={{ fontFamily: "var(--font-playfair)" }}
               >
-                {globalStats.totalLists}
-              </span>
-            </button>
+                Staff Calling Lists
+              </h1>
+              <p className="text-xs text-white/50 mt-0.5">
+                Select a staff member below to view their datewise assigned lead batches
+              </p>
+            </div>
 
+            {/* Quick Summary Badges */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
+                <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
+                  Total Staff
+                </span>
+                <span className="text-sm font-bold text-white tabular-nums">
+                  {staffList.length}
+                </span>
+              </div>
+
+              <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
+                <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
+                  Pending Calls
+                </span>
+                <span className="text-sm font-bold text-amber-400 tabular-nums">
+                  {globalStats.pendingLeads}
+                </span>
+              </div>
+
+              <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
+                <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
+                  Overall Progress
+                </span>
+                <span className="text-sm font-bold text-sky-400 tabular-nums">
+                  {globalStats.completionRate}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* STAFF CARDS GRID */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {staffList.map((staff) => {
-              const isSelected = selectedStaffId === staff.staffId;
+              const initial = staff.staffName.charAt(0).toUpperCase();
+
               return (
-                <button
+                <div
                   key={staff.staffId}
-                  type="button"
                   onClick={() => setSelectedStaffId(staff.staffId)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-2 border ${
-                    isSelected
-                      ? "bg-[#C9A84C] text-[#050E21] border-[#C9A84C] font-bold shadow-md shadow-[#C9A84C]/15"
-                      : "bg-[#071228] text-white/70 border-white/[0.08] hover:border-white/20 hover:text-white"
-                  }`}
+                  className="group cursor-pointer rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 hover:border-[#C9A84C]/50 hover:bg-white/[0.02] transition-all shadow-lg flex flex-col justify-between"
                 >
-                  <User size={13} />
-                  <span>{staff.staffName}</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold tabular-nums ${
-                      isSelected ? "bg-black/20" : "bg-white/10"
-                    }`}
-                  >
-                    {staff.totalLists}
-                  </span>
-                  {staff.pendingLeads > 0 && (
-                    <span
-                      className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
-                        isSelected
-                          ? "bg-black/30 text-[#050E21]"
-                          : "bg-amber-500/20 text-amber-300"
-                      }`}
-                    >
-                      {staff.pendingLeads} to call
+                  {/* Staff Header */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-[#C9A84C]/20 to-[#E8CC7A]/10 border border-[#C9A84C]/30 text-[#E8CC7A] font-bold text-base shadow-sm">
+                        {initial}
+                      </div>
+
+                      <div>
+                        <h3 className="text-base font-bold text-white group-hover:text-[#E8CC7A] transition-colors">
+                          {staff.staffName}
+                        </h3>
+                        <p className="text-xs text-white/40 truncate max-w-[180px]">
+                          {staff.staffEmail}
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-white/5 border border-white/10 text-white/70 tabular-nums">
+                      {staff.totalLists} {staff.totalLists === 1 ? "batch" : "batches"}
                     </span>
-                  )}
-                </button>
+                  </div>
+
+                  {/* Metrics & Calling Queue */}
+                  <div className="space-y-2 pt-2 border-t border-white/[0.04]">
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="p-2 rounded-xl bg-[#050E21] border border-white/[0.04]">
+                        <span className="block text-[9px] uppercase font-bold tracking-wider text-white/35">
+                          Total Leads
+                        </span>
+                        <span className="text-xs font-bold text-white tabular-nums">
+                          {staff.totalLeads}
+                        </span>
+                      </div>
+
+                      <div className="p-2 rounded-xl bg-[#050E21] border border-white/[0.04]">
+                        <span className="block text-[9px] uppercase font-bold tracking-wider text-white/35">
+                          Pending
+                        </span>
+                        <span className="text-xs font-bold text-amber-400 tabular-nums">
+                          {staff.pendingLeads}
+                        </span>
+                      </div>
+
+                      <div className="p-2 rounded-xl bg-[#050E21] border border-white/[0.04]">
+                        <span className="block text-[9px] uppercase font-bold tracking-wider text-white/35">
+                          Completed
+                        </span>
+                        <span className="text-xs font-bold text-emerald-400 tabular-nums">
+                          {staff.completedLeads}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="space-y-1 pt-1">
+                      <div className="flex items-center justify-between text-[11px] text-white/40">
+                        <span>Calling Progress</span>
+                        <span className="font-semibold text-white/70">{staff.completionRate}%</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-[#C9A84C] to-emerald-400 rounded-full"
+                          style={{ width: `${staff.completionRate}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Primary CTA */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      className="w-full py-2.5 px-4 rounded-xl bg-white/5 group-hover:bg-[#C9A84C] group-hover:text-[#050E21] text-white/80 text-xs font-bold transition-all inline-flex items-center justify-center gap-1.5 border border-white/10 group-hover:border-[#C9A84C]"
+                    >
+                      <span>View Datewise Lists</span>
+                      <ArrowRight size={13} />
+                    </button>
+                  </div>
+                </div>
               );
             })}
           </div>
         </div>
-      )}
-
-      {/* FILTER & SEARCH BAR */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-2 rounded-2xl bg-[#071228] border border-white/[0.08]">
-        {/* Status Filter Tabs */}
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setStatusFilter("all")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              statusFilter === "all"
-                ? "bg-white/15 text-white font-bold"
-                : "text-white/50 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            All Batches
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter("active")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              statusFilter === "active"
-                ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold"
-                : "text-white/50 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-            <span>Active Calls Pending</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter("completed")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              statusFilter === "completed"
-                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold"
-                : "text-white/50 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            Completed Batches
-          </button>
-        </div>
-
-        {/* Real-time search */}
-        <div className="relative min-w-[220px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search batches by name..."
-            className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#C9A84C]"
-          />
-        </div>
-      </div>
-
-      {/* STEP 2 & 3: DATEWISE GROUPS & BATCH LEADS */}
-      {activeDateGroups.length === 0 ? (
-        <div className="rounded-3xl border border-white/[0.08] bg-[#071228] p-12 text-center space-y-3">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-white/30">
-            <ClipboardList size={24} />
-          </div>
-          <h3 className="text-sm font-semibold text-white">No lead batches match this criteria</h3>
-          <p className="text-xs text-white/40 max-w-sm mx-auto">
-            {searchQuery
-              ? `No campaign batches found matching "${searchQuery}".`
-              : "No lead lists or calling batches assigned for this filter."}
-          </p>
-        </div>
       ) : (
+        /* LEVEL 2: DATEWISE ASSIGNED LEAD LISTS FOR SELECTED STAFF */
         <div className="space-y-6">
-          {activeDateGroups.map((dateGroup) => {
-            const isCollapsed = collapsedDates.has(dateGroup.dateKey);
-
-            return (
-              <div
-                key={dateGroup.dateKey}
-                className={`rounded-3xl border transition-all ${
-                  dateGroup.isToday
-                    ? "border-[#C9A84C]/40 bg-[#071228]/95 shadow-xl shadow-[#C9A84C]/5"
-                    : "border-white/[0.08] bg-[#071228]/80"
-                }`}
-              >
-                {/* DATEWISE ACCORDION HEADER */}
-                <div
-                  onClick={() => toggleDateCollapse(dateGroup.dateKey)}
-                  className="flex items-center justify-between p-4 md:p-5 cursor-pointer select-none hover:bg-white/[0.02] rounded-t-3xl transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`grid h-10 w-10 place-items-center rounded-2xl ${
-                        dateGroup.isToday
-                          ? "bg-[#C9A84C] text-[#050E21] font-bold shadow-md shadow-[#C9A84C]/20"
-                          : "bg-white/5 text-white/60"
-                      }`}
-                    >
-                      <Calendar size={18} />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-base font-bold text-white">
-                          {dateGroup.displayDate}
-                        </h3>
-                        {dateGroup.isToday && (
-                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#C9A84C]/20 text-[#E8CC7A] border border-[#C9A84C]/40">
-                            Today&apos;s Release
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-white/45 mt-0.5">
-                        {dateGroup.lists.length} Batch
-                        {dateGroup.lists.length === 1 ? "" : "es"} · {dateGroup.totalLeads} Leads Total
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Date Progress & Action */}
-                  <div className="flex items-center gap-4">
-                    <div className="hidden sm:flex items-center gap-3 text-right">
-                      <div>
-                        <span className="block text-xs font-bold text-amber-400 tabular-nums">
-                          {dateGroup.pendingLeads} Pending Calls
-                        </span>
-                        <span className="block text-[11px] text-white/40 tabular-nums">
-                          {dateGroup.completedLeads} Completed ({dateGroup.completionRate}%)
-                        </span>
-                      </div>
-
-                      {/* Mini visual progress bar */}
-                      <div className="w-16 h-2 rounded-full bg-white/10 overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-[#C9A84C] to-emerald-400 rounded-full"
-                          style={{ width: `${dateGroup.completionRate}%` }}
-                        />
-                      </div>
-                    </div>
-
+          {/* Header with Back Button */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#C9A84C] uppercase tracking-wider">
+                {isSuperAdmin && (
+                  <>
                     <button
                       type="button"
-                      className="grid h-8 w-8 place-items-center rounded-xl bg-white/5 text-white/60 hover:text-white"
+                      onClick={() => setSelectedStaffId(null)}
+                      className="hover:underline flex items-center gap-1"
                     >
-                      {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                      <ArrowLeft size={11} /> List of Staffs
                     </button>
-                  </div>
-                </div>
+                    <span>→</span>
+                  </>
+                )}
+                <span>{selectedStaffObj?.staffName}</span>
+                <span>→</span>
+                <span>Datewise Assigned Lists</span>
+              </div>
 
-                {/* BATCH LEADS GRID */}
-                {!isCollapsed && (
-                  <div className="p-4 md:p-5 pt-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border-t border-white/[0.04]">
-                    {dateGroup.lists.map((batch) => {
-                      const count = batch.lead_count ?? 0;
-                      const completed = batch.completed_count ?? 0;
-                      const pending = batch.pending_count ?? 0;
-                      const rate = batch.completion_rate ?? 0;
-                      const assigneeName = batch.assigned_admin_user?.name;
-                      const statusCounts = batch.status_counts ?? {};
+              <div className="flex items-center gap-3 mt-1">
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStaffId(null)}
+                    className="grid h-8 w-8 place-items-center rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 transition-colors shrink-0"
+                    title="Back to List of Staffs"
+                  >
+                    <ArrowLeft size={15} />
+                  </button>
+                )}
 
-                      return (
+                <h1
+                  className="text-2xl md:text-3xl font-bold tracking-tight text-white"
+                  style={{ fontFamily: "var(--font-playfair)" }}
+                >
+                  {selectedStaffObj?.staffName}&apos;s Assigned Lead Lists
+                </h1>
+              </div>
+
+              <p className="text-xs text-white/50 mt-0.5">
+                Organized datewise by campaign distribution dates ({selectedStaffObj?.totalLists || 0} batches total)
+              </p>
+            </div>
+
+            {/* Selected Staff Stats */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
+                <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
+                  Pending Calls
+                </span>
+                <span className="text-sm font-bold text-amber-400 tabular-nums">
+                  {selectedStaffObj?.pendingLeads || 0}
+                </span>
+              </div>
+
+              <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
+                <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
+                  Completed
+                </span>
+                <span className="text-sm font-bold text-emerald-400 tabular-nums">
+                  {selectedStaffObj?.completedLeads || 0}
+                </span>
+              </div>
+
+              <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
+                <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
+                  Progress
+                </span>
+                <span className="text-sm font-bold text-sky-400 tabular-nums">
+                  {selectedStaffObj?.completionRate || 0}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Filter & Search Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-2 rounded-2xl bg-[#071228] border border-white/[0.08]">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setStatusFilter("all")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  statusFilter === "all"
+                    ? "bg-white/15 text-white font-bold"
+                    : "text-white/50 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                All Batches
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatusFilter("active")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  statusFilter === "active"
+                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold"
+                    : "text-white/50 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                <span>Active Calls Pending</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatusFilter("completed")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  statusFilter === "completed"
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold"
+                    : "text-white/50 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                Completed
+              </button>
+            </div>
+
+            <div className="relative min-w-[220px]">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search batch name..."
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#C9A84C]"
+              />
+            </div>
+          </div>
+
+          {/* DATEWISE GROUPS & BATCH LEADS */}
+          {activeDateGroups.length === 0 ? (
+            <div className="rounded-3xl border border-white/[0.08] bg-[#071228] p-12 text-center space-y-3">
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-white/30">
+                <ClipboardList size={24} />
+              </div>
+              <h3 className="text-sm font-semibold text-white">No lead batches match this criteria</h3>
+              <p className="text-xs text-white/40 max-w-sm mx-auto">
+                {searchQuery
+                  ? `No campaign batches found matching "${searchQuery}".`
+                  : "No lead lists assigned for this filter."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {activeDateGroups.map((dateGroup) => {
+                const isCollapsed = collapsedDates.has(dateGroup.dateKey);
+
+                return (
+                  <div
+                    key={dateGroup.dateKey}
+                    className={`rounded-3xl border transition-all ${
+                      dateGroup.isToday
+                        ? "border-[#C9A84C]/40 bg-[#071228]/95 shadow-xl shadow-[#C9A84C]/5"
+                        : "border-white/[0.08] bg-[#071228]/80"
+                    }`}
+                  >
+                    {/* DATE HEADER */}
+                    <div
+                      onClick={() => toggleDateCollapse(dateGroup.dateKey)}
+                      className="flex items-center justify-between p-4 md:p-5 cursor-pointer select-none hover:bg-white/[0.02] rounded-t-3xl transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
                         <div
-                          key={batch.id}
-                          className="group rounded-2xl border border-white/[0.08] bg-[#050E21] p-5 space-y-4 hover:border-[#C9A84C]/40 hover:bg-white/[0.01] transition-all shadow-lg flex flex-col justify-between"
+                          className={`grid h-10 w-10 place-items-center rounded-2xl ${
+                            dateGroup.isToday
+                              ? "bg-[#C9A84C] text-[#050E21] font-bold shadow-md shadow-[#C9A84C]/20"
+                              : "bg-white/5 text-white/60"
+                          }`}
                         >
-                          {/* Batch Header */}
-                          <div className="space-y-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <Link
-                                href={`/admin/lists/${batch.id}`}
-                                className="text-base font-bold text-white group-hover:text-[#E8CC7A] transition-colors block line-clamp-2"
-                              >
-                                {batch.name}
-                              </Link>
+                          <Calendar size={18} />
+                        </div>
 
-                              {isSuperAdmin && (
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <Link
-                                    href={`/admin/lists/${batch.id}/edit`}
-                                    title="Edit List"
-                                    className="grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                                  >
-                                    <Pencil size={13} />
-                                  </Link>
-                                  <DeleteLeadListButton id={batch.id} name={batch.name} />
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Assigned Staff Badge */}
-                            <div className="flex items-center justify-between text-xs text-white/50">
-                              <div className="flex items-center gap-1.5">
-                                <User size={12} className="text-[#C9A84C]" />
-                                <span className="font-medium text-white/80">
-                                  {assigneeName || "Unassigned"}
-                                </span>
-                              </div>
-
-                              <span className="text-[11px] text-white/35 tabular-nums">
-                                {new Date(batch.created_at).toLocaleTimeString("en-IN", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  hour12: true,
-                                  timeZone: "Asia/Kolkata",
-                                })}
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-base font-bold text-white">
+                              {dateGroup.displayDate}
+                            </h3>
+                            {dateGroup.isToday && (
+                              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#C9A84C]/20 text-[#E8CC7A] border border-[#C9A84C]/40">
+                                Today&apos;s Release
                               </span>
-                            </div>
+                            )}
+                          </div>
+                          <p className="text-xs text-white/45 mt-0.5">
+                            {dateGroup.lists.length} Batch
+                            {dateGroup.lists.length === 1 ? "" : "es"} · {dateGroup.totalLeads} Leads Total
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Date Summary Stats */}
+                      <div className="flex items-center gap-4">
+                        <div className="hidden sm:flex items-center gap-3 text-right">
+                          <div>
+                            <span className="block text-xs font-bold text-amber-400 tabular-nums">
+                              {dateGroup.pendingLeads} Pending Calls
+                            </span>
+                            <span className="block text-[11px] text-white/40 tabular-nums">
+                              {dateGroup.completedLeads} Completed ({dateGroup.completionRate}%)
+                            </span>
                           </div>
 
-                          {/* Status Pills Breakdown */}
-                          <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                            {statusCounts.new != null && statusCounts.new > 0 && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/10 border border-sky-500/20 text-sky-300 font-medium">
-                                🟢 {statusCounts.new} New
-                              </span>
-                            )}
-                            {statusCounts.follow_up != null && statusCounts.follow_up > 0 && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 font-medium">
-                                🟡 {statusCounts.follow_up} Follow-up
-                              </span>
-                            )}
-                            {statusCounts.contacted != null && statusCounts.contacted > 0 && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-300 font-medium">
-                                🔵 {statusCounts.contacted} Contacted
-                              </span>
-                            )}
-                            {statusCounts.booked != null && statusCounts.booked > 0 && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-medium">
-                                🏆 {statusCounts.booked} Booked
-                              </span>
-                            )}
-                            {statusCounts.call_not_responded != null &&
-                              statusCounts.call_not_responded > 0 && (
-                                <span className="text-[10px] px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-300 font-medium">
-                                  📵 {statusCounts.call_not_responded} No Answer
-                                </span>
-                              )}
-                          </div>
-
-                          {/* Progress & Calling CTA */}
-                          <div className="space-y-3 pt-3 border-t border-white/[0.04]">
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-white/40">
-                                  {pending > 0 ? `${pending} leads pending` : "All leads called"}
-                                </span>
-                                <span className="font-bold text-white tabular-nums">
-                                  {completed} / {count} ({rate}%)
-                                </span>
-                              </div>
-
-                              <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all ${
-                                    rate === 100
-                                      ? "bg-emerald-400"
-                                      : "bg-gradient-to-r from-[#C9A84C] to-[#E8CC7A]"
-                                  }`}
-                                  style={{ width: `${rate}%` }}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 pt-1">
-                              <Link
-                                href={`/admin/lists/${batch.id}`}
-                                className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#C9A84C] to-[#E8CC7A] text-[#050E21] text-xs font-bold hover:brightness-105 transition-all inline-flex items-center justify-center gap-1.5 shadow-md shadow-[#C9A84C]/15"
-                              >
-                                <PhoneCall size={13} />
-                                <span>
-                                  {pending > 0 ? `Start Calling (${pending})` : "View Leads Batch"}
-                                </span>
-                              </Link>
-
-                              {/* Quick Recycle Action for non-booked leads */}
-                              {isSuperAdmin && (
-                                <button
-                                  type="button"
-                                  title="Recycle Remaining Leads"
-                                  onClick={() =>
-                                    setRecycleModalConfig({
-                                      isOpen: true,
-                                      sourceListId: batch.id,
-                                      sourceListName: batch.name,
-                                    })
-                                  }
-                                  className="grid h-9 w-9 place-items-center rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 transition-colors shrink-0"
-                                >
-                                  <RotateCcw size={13} />
-                                </button>
-                              )}
-                            </div>
+                          <div className="w-16 h-2 rounded-full bg-white/10 overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-[#C9A84C] to-emerald-400 rounded-full"
+                              style={{ width: `${dateGroup.completionRate}%` }}
+                            />
                           </div>
                         </div>
-                      );
-                    })}
+
+                        <button
+                          type="button"
+                          className="grid h-8 w-8 place-items-center rounded-xl bg-white/5 text-white/60 hover:text-white"
+                        >
+                          {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* BATCH LEADS GRID */}
+                    {!isCollapsed && (
+                      <div className="p-4 md:p-5 pt-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border-t border-white/[0.04]">
+                        {dateGroup.lists.map((batch) => {
+                          const count = batch.lead_count ?? 0;
+                          const completed = batch.completed_count ?? 0;
+                          const pending = batch.pending_count ?? 0;
+                          const rate = batch.completion_rate ?? 0;
+                          const statusCounts = batch.status_counts ?? {};
+
+                          return (
+                            <div
+                              key={batch.id}
+                              className="group rounded-2xl border border-white/[0.08] bg-[#050E21] p-5 space-y-4 hover:border-[#C9A84C]/40 hover:bg-white/[0.01] transition-all shadow-lg flex flex-col justify-between"
+                            >
+                              {/* Batch Header */}
+                              <div className="space-y-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <Link
+                                    href={`/admin/lists/${batch.id}`}
+                                    className="text-base font-bold text-white group-hover:text-[#E8CC7A] transition-colors block line-clamp-2"
+                                  >
+                                    {batch.name}
+                                  </Link>
+
+                                  {isSuperAdmin && (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <Link
+                                        href={`/admin/lists/${batch.id}/edit`}
+                                        title="Edit List"
+                                        className="grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                                      >
+                                        <Pencil size={13} />
+                                      </Link>
+                                      <DeleteLeadListButton id={batch.id} name={batch.name} />
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center justify-between text-xs text-white/40">
+                                  <span>Created by {batch.admin_users?.email || "Admin"}</span>
+                                  <span className="text-[11px] text-white/35 tabular-nums">
+                                    {new Date(batch.created_at).toLocaleTimeString("en-IN", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                      hour12: true,
+                                      timeZone: "Asia/Kolkata",
+                                    })}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Status Pills Breakdown */}
+                              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                {statusCounts.new != null && statusCounts.new > 0 && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/10 border border-sky-500/20 text-sky-300 font-medium">
+                                    🟢 {statusCounts.new} New
+                                  </span>
+                                )}
+                                {statusCounts.follow_up != null && statusCounts.follow_up > 0 && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 font-medium">
+                                    🟡 {statusCounts.follow_up} Follow-up
+                                  </span>
+                                )}
+                                {statusCounts.contacted != null && statusCounts.contacted > 0 && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-300 font-medium">
+                                    🔵 {statusCounts.contacted} Contacted
+                                  </span>
+                                )}
+                                {statusCounts.booked != null && statusCounts.booked > 0 && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-medium">
+                                    🏆 {statusCounts.booked} Booked
+                                  </span>
+                                )}
+                                {statusCounts.call_not_responded != null &&
+                                  statusCounts.call_not_responded > 0 && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-300 font-medium">
+                                      📵 {statusCounts.call_not_responded} No Answer
+                                    </span>
+                                  )}
+                              </div>
+
+                              {/* Progress & Calling CTA */}
+                              <div className="space-y-3 pt-3 border-t border-white/[0.04]">
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-white/40">
+                                      {pending > 0 ? `${pending} leads pending` : "All leads called"}
+                                    </span>
+                                    <span className="font-bold text-white tabular-nums">
+                                      {completed} / {count} ({rate}%)
+                                    </span>
+                                  </div>
+
+                                  <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all ${
+                                        rate === 100
+                                          ? "bg-emerald-400"
+                                          : "bg-gradient-to-r from-[#C9A84C] to-[#E8CC7A]"
+                                      }`}
+                                      style={{ width: `${rate}%` }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-1">
+                                  <Link
+                                    href={`/admin/lists/${batch.id}`}
+                                    className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#C9A84C] to-[#E8CC7A] text-[#050E21] text-xs font-bold hover:brightness-105 transition-all inline-flex items-center justify-center gap-1.5 shadow-md shadow-[#C9A84C]/15"
+                                  >
+                                    <PhoneCall size={13} />
+                                    <span>
+                                      {pending > 0 ? `Start Calling (${pending})` : "View Leads Batch"}
+                                    </span>
+                                  </Link>
+
+                                  {isSuperAdmin && (
+                                    <button
+                                      type="button"
+                                      title="Recycle Remaining Leads"
+                                      onClick={() =>
+                                        setRecycleModalConfig({
+                                          isOpen: true,
+                                          sourceListId: batch.id,
+                                          sourceListName: batch.name,
+                                        })
+                                      }
+                                      className="grid h-9 w-9 place-items-center rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 transition-colors shrink-0"
+                                    >
+                                      <RotateCcw size={13} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -745,6 +828,9 @@ export default function StaffDatewiseLeadListsView({
           sourceListName={recycleModalConfig.sourceListName}
           sourceAdminUserId={recycleModalConfig.sourceAdminUserId}
           adminUsers={adminUsers}
+          onSuccess={(msg) => {
+            router.refresh();
+          }}
         />
       )}
     </div>
