@@ -164,14 +164,30 @@ export async function listServiceCounts(
     if (allowedLeadIds.length === 0) return [];
   }
 
-  let q = supabase().from("leads").select("service").range(0, 49999);
-  if (allowedLeadIds) q = q.in("id", allowedLeadIds);
-  if (options.area && options.area !== "all") q = q.eq("area", options.area);
-  const { data, error } = await q;
-  if (error) throw error;
+  const allRows: Array<{ service: string | null }> = [];
+  let from = 0;
+  const batchSize = 1000;
+
+  while (true) {
+    let q = supabase().from("leads").select("service, area, address").range(from, from + batchSize - 1);
+    if (allowedLeadIds) q = q.in("id", allowedLeadIds);
+    if (options.area && options.area !== "all") {
+      const sArea = sanitizeSearch(options.area);
+      if (sArea) {
+        q = q.or(`area.eq.${options.area},address.ilike.%${sArea}%`);
+      } else {
+        q = q.eq("area", options.area);
+      }
+    }
+    const { data, error } = await q;
+    if (error || !data || data.length === 0) break;
+    allRows.push(...data);
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
 
   const counts = new Map<string, number>();
-  for (const r of (data ?? []) as { service: string | null }[]) {
+  for (const r of allRows) {
     if (!r.service) continue;
     counts.set(r.service, (counts.get(r.service) ?? 0) + 1);
   }

@@ -185,16 +185,21 @@ export async function extractAreaFromAddress(
 }
 
 // In-memory cache for area counts to prevent full-table scans on every /admin load
-let cachedAreas: { data: Array<{ area: string; count: number }>; expires: number } | null = null;
+let cachedAreas: Record<string, { data: Array<{ area: string; count: number }>; expires: number }> | null = null;
 
 export function invalidateAreaCountsCache(): void {
   cachedAreas = null;
 }
 
-/** Distinct areas + lead counts, for the filter pill bar on /admin. */
+/** Distinct areas + lead counts across ALL leads in the database, for the filter pill bar on /admin. */
 export async function listAreasWithCounts(
   assignedAdminUserId?: string,
 ): Promise<Array<{ area: string; count: number }>> {
+  const cacheKey = assignedAdminUserId || "global";
+  if (cachedAreas && cachedAreas[cacheKey] && cachedAreas[cacheKey].expires > Date.now()) {
+    return cachedAreas[cacheKey].data;
+  }
+
   let allowedLeadIds: string[] | null = null;
   if (assignedAdminUserId) {
     const { data: items, error: itemsErr } = await supabase()
@@ -208,17 +213,28 @@ export async function listAreasWithCounts(
     if (allowedLeadIds.length === 0) return [];
   }
 
-  let q = supabase()
-    .from("leads")
-    .select("area, address, pincode")
-    .range(0, 49999);
-  if (allowedLeadIds) q = q.in("id", allowedLeadIds);
+  // Fetch ALL leads in 1000-row chunks across all 12,000+ rows
+  const allLeads: Array<{ area: string | null; address: string | null; pincode: string | null }> = [];
+  let from = 0;
+  const batchSize = 1000;
 
-  const { data, error } = await q;
-  if (error) throw error;
+  while (true) {
+    let q = supabase()
+      .from("leads")
+      .select("area, address, pincode")
+      .range(from, from + batchSize - 1);
+    if (allowedLeadIds) q = q.in("id", allowedLeadIds);
+
+    const { data, error } = await q;
+    if (error || !data || data.length === 0) break;
+    allLeads.push(...data);
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
+
   const counts = new Map<string, number>();
 
-  for (const r of (data ?? []) as { area: string | null; address: string | null; pincode: string | null }[]) {
+  for (const r of allLeads) {
     const leadAreas = new Set<string>();
     if (r.area?.trim()) {
       leadAreas.add(r.area.trim());
@@ -233,9 +249,17 @@ export async function listAreasWithCounts(
     }
   }
 
-  return [...counts.entries()]
+  const sortedResult = [...counts.entries()]
     .map(([area, count]) => ({ area, count }))
     .sort((a, b) => b.count - a.count || a.area.localeCompare(b.area));
+
+  if (!cachedAreas) cachedAreas = {};
+  cachedAreas[cacheKey] = {
+    data: sortedResult,
+    expires: Date.now() + 30000, // 30 second cache TTL
+  };
+
+  return sortedResult;
 }
 
 /** Canonical area list from the lookup table — used for autocomplete suggestions
