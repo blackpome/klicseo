@@ -109,4 +109,50 @@ describe("Folder-Specific + Location-Scoped Lead Allocation", () => {
       }),
     ).toBe(false);
   });
+
+  it("correctly matches by pincode and multi-area within folder", () => {
+    const leadVelachery = {
+      area: "Velachery",
+      pincode: "600042",
+      status: "new",
+      year: "2026",
+    };
+
+    const leadTambaram = {
+      area: "Tambaram",
+      pincode: "600045",
+      status: "new",
+      year: "2026",
+    };
+
+    // Multi-area in 2026
+    expect(
+      matchesFilter(leadVelachery as any, {
+        folder: "year_2026",
+        areas: ["Velachery", "Tambaram"],
+      }),
+    ).toBe(true);
+
+    expect(
+      matchesFilter(leadTambaram as any, {
+        folder: "year_2026",
+        areas: ["Velachery", "Tambaram"],
+      }),
+    ).toBe(true);
+
+    // Pincode filter
+    expect(
+      matchesFilter(leadVelachery as any, {
+        folder: "year_2026",
+        pincodes: ["600042"],
+      }),
+    ).toBe(true);
+
+    expect(
+      matchesFilter(leadTambaram as any, {
+        folder: "year_2026",
+        pincodes: ["600042"],
+      }),
+    ).toBe(false);
+  });
 });
