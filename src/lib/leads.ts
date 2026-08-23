@@ -268,34 +268,32 @@ export async function listLeadStatusSummary(
   const options: ListStatusSummaryOptions =
     typeof opts === "string" ? { assignedAdminUserId: opts } : opts;
 
-  let allowedLeadIds: string[] | null = null;
+  const locationIndex = await getOrBuildLocationIndex();
+  let candidateLeads = locationIndex.allLeads;
+
   if (options.assignedAdminUserId) {
-    const { data: items, error: itemsErr } = await supabase()
+    const { data: items } = await supabase()
       .from("lead_list_items")
       .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
       .eq("lead_lists.assigned_admin_user_id", options.assignedAdminUserId);
-    if (itemsErr) throw itemsErr;
-    allowedLeadIds = Array.from(
-      new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id)),
-    );
-    if (allowedLeadIds.length === 0) {
-      return { total: 0, new: 0, contacted: 0, follow_up: 0, call_not_responded: 0, booked: 0, cancelled: 0, draft: 0 };
-    }
+    const allowed = new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id));
+    candidateLeads = candidateLeads.filter((l) => allowed.has(l.id));
   }
 
-  // If filtering by a custom list UUID folder
   if (options.folder && options.folder.match(/^[0-9a-fA-F-]{36}$/)) {
     const { data: listItems } = await supabase()
       .from("lead_list_items")
       .select("lead_id")
       .eq("list_id", options.folder);
-    const listLeadIds = (listItems ?? []).map((i) => i.lead_id);
-    if (listLeadIds.length === 0) {
-      return { total: 0, new: 0, contacted: 0, follow_up: 0, call_not_responded: 0, booked: 0, cancelled: 0, draft: 0 };
-    }
-    allowedLeadIds = allowedLeadIds
-      ? allowedLeadIds.filter((id) => listLeadIds.includes(id))
-      : listLeadIds;
+    const listSet = new Set((listItems ?? []).map((i) => i.lead_id));
+    candidateLeads = candidateLeads.filter((l) => listSet.has(l.id));
+  }
+
+  // Folder / Source filtering
+  if (options.folder === "website_form" || options.source === "wizard") {
+    candidateLeads = candidateLeads.filter((l) => l.source === "wizard");
+  } else if (options.folder === "hot_leads" || options.source === "admin") {
+    candidateLeads = candidateLeads.filter((l) => l.source === "admin" || !l.source);
   }
 
   // Year folder or year filter
@@ -306,51 +304,37 @@ export async function listLeadStatusSummary(
     : null;
 
   if (targetYear) {
-    const yearMatchingIds = await resolveLeadIdsForYear(targetYear);
-    if (yearMatchingIds.length === 0) {
-      return { total: 0, new: 0, contacted: 0, follow_up: 0, call_not_responded: 0, booked: 0, cancelled: 0, draft: 0 };
-    }
-    allowedLeadIds = allowedLeadIds
-      ? allowedLeadIds.filter((id) => yearMatchingIds.includes(id))
-      : yearMatchingIds;
+    candidateLeads = candidateLeads.filter((l) => l.year === targetYear);
   }
 
   if (options.area && options.area !== "all") {
-    const areaMatchingIds = await resolveLeadIdsForArea(options.area, allowedLeadIds);
-    if (areaMatchingIds.length === 0) {
-      return { total: 0, new: 0, contacted: 0, follow_up: 0, call_not_responded: 0, booked: 0, cancelled: 0, draft: 0 };
-    }
-    allowedLeadIds = areaMatchingIds;
+    const norm = options.area.trim().toLowerCase();
+    candidateLeads = candidateLeads.filter((l) => l.primaryLocality.toLowerCase() === norm);
   }
 
-  const statuses = [
-    "new",
-    "contacted",
-    "follow_up",
-    "call_not_responded",
-    "booked",
-    "cancelled",
-    "draft",
-  ] as const;
+  if (options.service && options.service !== "all") {
+    candidateLeads = candidateLeads.filter((l) => l.service === options.service);
+  }
 
-  const totalPromise = applyLeadFilters(
-    supabase().from("leads").select("*", { count: "exact", head: true }),
-    options,
-    allowedLeadIds,
-  );
-
-  const statusPromises = statuses.map((st) =>
-    applyLeadFilters(
-      supabase().from("leads").select("*", { count: "exact", head: true }).eq("status", st),
-      options,
-      allowedLeadIds,
-    ),
-  );
-
-  const [totalRes, ...statusResults] = await Promise.all([totalPromise, ...statusPromises]);
+  if (options.search && options.search.trim()) {
+    const s = sanitizeSearch(options.search);
+    if (s) {
+      const orParts = SEARCH_FIELDS.map((f) => `${f}.ilike.%${s}%`);
+      const ph = phoneHash(options.search);
+      if (ph && normalizePhone(options.search).length >= 7) {
+        orParts.push(`phone_hash.eq.${ph}`);
+      }
+      const { data: searchMatches } = await supabase()
+        .from("leads")
+        .select("id")
+        .or(orParts.join(","));
+      const matchSet = new Set((searchMatches ?? []).map((m: { id: string }) => m.id));
+      candidateLeads = candidateLeads.filter((l) => matchSet.has(l.id));
+    }
+  }
 
   const summary: LeadStatusSummary = {
-    total: totalRes.count ?? 0,
+    total: candidateLeads.length,
     new: 0,
     contacted: 0,
     follow_up: 0,
@@ -360,9 +344,12 @@ export async function listLeadStatusSummary(
     draft: 0,
   };
 
-  statuses.forEach((st, idx) => {
-    summary[st] = statusResults[idx].count ?? 0;
-  });
+  for (const l of candidateLeads) {
+    const st = (l.status ?? "new") as keyof LeadStatusSummary;
+    if (st in summary && st !== "total") {
+      summary[st]++;
+    }
+  }
 
   return summary;
 }
@@ -405,43 +392,39 @@ export async function listPaginatedLeads(
   const offset = opts.offset ?? (page - 1) * pageSize;
   const limit = opts.limit ?? pageSize;
 
-  let q = supabase().from("leads").select("*", { count: "exact" }).order("created_at", { ascending: false });
-
-  if (opts.status && opts.status !== "all") {
-    q = q.eq("status", opts.status);
-  } else if (opts.excludeStatuses && opts.excludeStatuses.length) {
-    q = q.not("status", "in", `(${opts.excludeStatuses.join(",")})`);
-  }
-
-  let allowedIds: string[] | null = null;
+  const locationIndex = await getOrBuildLocationIndex();
+  let candidateLeads = locationIndex.allLeads;
 
   if (opts.assignedAdminUserId) {
-    const { data: assignedLeadIds, error: listErr } = await supabase()
+    const { data: assignedLeadIds } = await supabase()
       .from("lead_list_items")
       .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
       .eq("lead_lists.assigned_admin_user_id", opts.assignedAdminUserId);
-    if (listErr) throw listErr;
-    allowedIds = Array.from(
-      new Set((assignedLeadIds ?? []).map((r: { lead_id: string }) => r.lead_id)),
-    );
-    if (allowedIds.length === 0) {
-      return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
-    }
+    const allowed = new Set((assignedLeadIds ?? []).map((r: { lead_id: string }) => r.lead_id));
+    candidateLeads = candidateLeads.filter((l) => allowed.has(l.id));
   }
 
-  // If filtering by a custom list UUID folder
   if (opts.folder && opts.folder.match(/^[0-9a-fA-F-]{36}$/)) {
     const { data: listItems } = await supabase()
       .from("lead_list_items")
       .select("lead_id")
       .eq("list_id", opts.folder);
-    const listLeadIds = (listItems ?? []).map((i) => i.lead_id);
-    if (listLeadIds.length === 0) {
-      return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
-    }
-    allowedIds = allowedIds
-      ? allowedIds.filter((id) => listLeadIds.includes(id))
-      : listLeadIds;
+    const listSet = new Set((listItems ?? []).map((i) => i.lead_id));
+    candidateLeads = candidateLeads.filter((l) => listSet.has(l.id));
+  }
+
+  if (opts.status && opts.status !== "all") {
+    candidateLeads = candidateLeads.filter((l) => l.status === opts.status);
+  } else if (opts.excludeStatuses && opts.excludeStatuses.length) {
+    const excl = new Set(opts.excludeStatuses);
+    candidateLeads = candidateLeads.filter((l) => !excl.has(l.status as any));
+  }
+
+  // Folder / Source filtering
+  if (opts.folder === "website_form" || opts.source === "wizard") {
+    candidateLeads = candidateLeads.filter((l) => l.source === "wizard");
+  } else if (opts.folder === "hot_leads" || opts.source === "admin") {
+    candidateLeads = candidateLeads.filter((l) => l.source === "admin" || !l.source);
   }
 
   // Year folder or year filter
@@ -452,32 +435,19 @@ export async function listPaginatedLeads(
     : null;
 
   if (targetYear) {
-    const yearLeadIds = await resolveLeadIdsForYear(targetYear);
-    if (yearLeadIds.length === 0) {
-      return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
-    }
-    allowedIds = allowedIds
-      ? allowedIds.filter((id) => yearLeadIds.includes(id))
-      : yearLeadIds;
+    candidateLeads = candidateLeads.filter((l) => l.year === targetYear);
   }
 
-  if (allowedIds) {
-    q = q.in("id", allowedIds);
+  if (opts.area && opts.area !== "all") {
+    const norm = opts.area.trim().toLowerCase();
+    candidateLeads = candidateLeads.filter((l) => l.primaryLocality.toLowerCase() === norm);
   }
 
-  // Folder / Source filtering
-  if (opts.folder === "website_form" || opts.source === "wizard") {
-    q = q.eq("source", "wizard");
-  } else if (opts.folder === "hot_leads" || opts.source === "admin") {
-    q = q.eq("source", "admin");
+  if (opts.service && opts.service !== "all") {
+    candidateLeads = candidateLeads.filter((l) => l.service === opts.service);
   }
 
-  if (opts.service && opts.service !== "all") q = q.eq("service", opts.service);
-  if (opts.serviceOption && opts.serviceOption !== "all") q = q.eq("service_option", opts.serviceOption);
-  if (opts.fromIso) q = q.gte("created_at", opts.fromIso);
-  if (opts.toIso) q = q.lte("created_at", opts.toIso);
-
-  if (opts.search) {
+  if (opts.search && opts.search.trim()) {
     const s = sanitizeSearch(opts.search);
     if (s) {
       const orParts = SEARCH_FIELDS.map((f) => `${f}.ilike.%${s}%`);
@@ -485,25 +455,40 @@ export async function listPaginatedLeads(
       if (ph && normalizePhone(opts.search).length >= 7) {
         orParts.push(`phone_hash.eq.${ph}`);
       }
-      q = q.or(orParts.join(","));
+      const { data: searchMatches } = await supabase()
+        .from("leads")
+        .select("id")
+        .or(orParts.join(","));
+      const matchSet = new Set((searchMatches ?? []).map((m: { id: string }) => m.id));
+      candidateLeads = candidateLeads.filter((l) => matchSet.has(l.id));
     }
   }
 
-  if (opts.area && opts.area !== "all") {
-    const matchingIds = await resolveLeadIdsForArea(opts.area, opts.assignedAdminUserId ? undefined : null);
-    if (matchingIds.length === 0) {
-      return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
-    }
-    q = q.in("id", matchingIds);
-  }
-
-  q = q.range(offset, offset + limit - 1);
-  const { data, count, error } = await q;
-  if (error) throw error;
-
-  const totalCount = count ?? 0;
+  const totalCount = candidateLeads.length;
   const totalPages = Math.ceil(totalCount / pageSize);
-  const leads = (data ?? []).map((r) => unsealFields(r as LeadRow, ENCRYPTED_LEAD_FIELDS)!) as LeadRow[];
+
+  if (totalCount === 0) {
+    return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
+  }
+
+  const pageSlice = candidateLeads.slice(offset, offset + limit).map((l) => l.id);
+  if (pageSlice.length === 0) {
+    return { leads: [], totalCount, page, pageSize, totalPages };
+  }
+
+  const { data: rows, error: pageErr } = await supabase()
+    .from("leads")
+    .select("*")
+    .in("id", pageSlice);
+
+  if (pageErr) throw pageErr;
+
+  const leadOrderMap = new Map(pageSlice.map((id, idx) => [id, idx]));
+  const sortedLeads = (rows ?? []).sort(
+    (a, b) => (leadOrderMap.get(a.id) ?? 0) - (leadOrderMap.get(b.id) ?? 0),
+  );
+
+  const leads = sortedLeads.map((r) => unsealFields(r as LeadRow, ENCRYPTED_LEAD_FIELDS)!) as LeadRow[];
 
   return {
     leads,
