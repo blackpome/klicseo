@@ -1102,6 +1102,8 @@ export async function bulkInsertLeads(
     }
   }
 
+  invalidateLeadCaches();
+
   return {
     total: leads.length,
     inserted,
