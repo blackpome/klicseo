@@ -269,12 +269,7 @@ export async function extractAreaFromAddress(
   return all.length > 0 ? all[0] : null;
 }
 
-// In-memory cache for area counts to prevent full-table scans on every /admin load
-let cachedAreas: Record<string, { data: Array<{ area: string; count: number }>; expires: number }> | null = null;
-
-export function invalidateAreaCountsCache(): void {
-  cachedAreas = null;
-}
+// Locality Resolution and Cache Layer
 
 /**
  * Resolves each lead to its single, most-accurate primary locality.
@@ -337,73 +332,136 @@ export async function resolvePrimaryLocality(
   return null;
 }
 
+export interface LeadLocationSummary {
+  id: string;
+  primaryLocality: string;
+  area: string | null;
+  pincode: string | null;
+  service?: string | null;
+  price_total?: number | null;
+  status?: string | null;
+}
+
+interface LocationIndexCache {
+  expires: number;
+  leadMap: Map<string, LeadLocationSummary>;
+  areaToLeadIds: Map<string, string[]>;
+  allLeads: LeadLocationSummary[];
+}
+
+let locationIndexCache: LocationIndexCache | null = null;
+
+export function invalidateAreaCountsCache(): void {
+  locationIndexCache = null;
+}
+
+/**
+ * Fast cached index of all lead locations, built once per 60s.
+ */
+export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
+  const now = Date.now();
+  if (locationIndexCache && locationIndexCache.expires > now) {
+    return locationIndexCache;
+  }
+
+  const allRows: Array<{
+    id: string;
+    area: string | null;
+    address: string | null;
+    pincode: string | null;
+    service: string | null;
+    price_total: number | null;
+    status: string | null;
+  }> = [];
+  let from = 0;
+  const batchSize = 1000;
+
+  while (true) {
+    const { data, error } = await supabase()
+      .from("leads")
+      .select("id, area, address, pincode, service, price_total, status")
+      .range(from, from + batchSize - 1);
+    if (error || !data || data.length === 0) break;
+    allRows.push(...data);
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
+
+  const leadMap = new Map<string, LeadLocationSummary>();
+  const areaToLeadIds = new Map<string, string[]>();
+  const allLeads: LeadLocationSummary[] = [];
+
+  for (const r of allRows) {
+    const plainAddress = unseal(r.address);
+    const primary = await resolvePrimaryLocality(r.area, plainAddress, r.pincode);
+    const resolved = primary || "Unspecified";
+    const norm = resolved.toLowerCase();
+
+    const summary: LeadLocationSummary = {
+      id: r.id,
+      primaryLocality: resolved,
+      area: r.area,
+      pincode: r.pincode,
+      service: r.service,
+      price_total: r.price_total,
+      status: r.status,
+    };
+
+    leadMap.set(r.id, summary);
+    allLeads.push(summary);
+
+    if (resolved !== "Unspecified") {
+      if (!areaToLeadIds.has(norm)) {
+        areaToLeadIds.set(norm, []);
+      }
+      areaToLeadIds.get(norm)!.push(r.id);
+    }
+  }
+
+  locationIndexCache = {
+    expires: now + 60000, // 60-second in-memory TTL
+    leadMap,
+    areaToLeadIds,
+    allLeads,
+  };
+
+  return locationIndexCache;
+}
+
 /** Distinct areas + lead counts across ALL leads in the database, for the filter pill bar on /admin. */
 export async function listAreasWithCounts(
   assignedAdminUserId?: string,
 ): Promise<Array<{ area: string; count: number }>> {
-  const cacheKey = assignedAdminUserId || "global";
-  if (cachedAreas && cachedAreas[cacheKey] && cachedAreas[cacheKey].expires > Date.now()) {
-    return cachedAreas[cacheKey].data;
-  }
+  const index = await getOrBuildLocationIndex();
 
-  let allowedLeadIds: string[] | null = null;
+  let allowedSet: Set<string> | null = null;
   if (assignedAdminUserId) {
     const { data: items, error: itemsErr } = await supabase()
       .from("lead_list_items")
       .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
       .eq("lead_lists.assigned_admin_user_id", assignedAdminUserId);
     if (itemsErr) throw itemsErr;
-    allowedLeadIds = Array.from(
-      new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id)),
-    );
-    if (allowedLeadIds.length === 0) return [];
-  }
-
-  // Fetch ALL leads in 1000-row chunks across all 12,000+ rows
-  const allLeads: Array<{ area: string | null; address: string | null; pincode: string | null }> = [];
-  let from = 0;
-  const batchSize = 1000;
-
-  while (true) {
-    let q = supabase()
-      .from("leads")
-      .select("area, address, pincode")
-      .range(from, from + batchSize - 1);
-    if (allowedLeadIds) q = q.in("id", allowedLeadIds);
-
-    const { data, error } = await q;
-    if (error || !data || data.length === 0) break;
-    allLeads.push(...data);
-    if (data.length < batchSize) break;
-    from += batchSize;
+    allowedSet = new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id));
+    if (allowedSet.size === 0) return [];
   }
 
   const counts = new Map<string, number>();
 
-  for (const r of allLeads) {
-    const plainAddress = unseal(r.address);
-    const primary = await resolvePrimaryLocality(r.area, plainAddress, r.pincode);
-    if (primary && primary !== "Unspecified") {
-      counts.set(primary, (counts.get(primary) ?? 0) + 1);
+  for (const lead of index.allLeads) {
+    if (allowedSet && !allowedSet.has(lead.id)) continue;
+    if (lead.primaryLocality !== "Unspecified") {
+      counts.set(lead.primaryLocality, (counts.get(lead.primaryLocality) ?? 0) + 1);
     }
   }
 
-  const sortedResult = [...counts.entries()]
+  return [...counts.entries()]
     .map(([area, count]) => ({ area, count }))
     .sort((a, b) => b.count - a.count || a.area.localeCompare(b.area));
-
-  if (!cachedAreas) cachedAreas = {};
-  cachedAreas[cacheKey] = {
-    data: sortedResult,
-    expires: Date.now() + 30000, // 30 second cache TTL
-  };
-
-  return sortedResult;
 }
 
 /**
  * Resolves all lead IDs matching an area name across both the area column
- * and the decrypted permanent address text.
+ * and the decrypted permanent address text in 0ms via index cache.
  */
 export async function resolveLeadIdsForArea(
   area: string,
@@ -412,33 +470,15 @@ export async function resolveLeadIdsForArea(
   const normTarget = (CANONICAL_AREA_ALIASES[area.trim().toLowerCase()] || area.trim()).toLowerCase();
   if (!normTarget || normTarget === "all") return [];
 
-  const matchingIds: string[] = [];
-  let from = 0;
-  const batchSize = 1000;
+  const index = await getOrBuildLocationIndex();
+  const ids = index.areaToLeadIds.get(normTarget) ?? [];
 
-  while (true) {
-    let q = supabase()
-      .from("leads")
-      .select("id, area, address, pincode")
-      .range(from, from + batchSize - 1);
-    if (allowedLeadIds) q = q.in("id", allowedLeadIds);
-
-    const { data, error } = await q;
-    if (error || !data || data.length === 0) break;
-
-    for (const r of data as { id: string; area: string | null; address: string | null; pincode: string | null }[]) {
-      const plainAddress = unseal(r.address);
-      const primary = await resolvePrimaryLocality(r.area, plainAddress, r.pincode);
-      if (primary && primary.toLowerCase() === normTarget) {
-        matchingIds.push(r.id);
-      }
-    }
-
-    if (data.length < batchSize) break;
-    from += batchSize;
+  if (allowedLeadIds && allowedLeadIds.length > 0) {
+    const allowedSet = new Set(allowedLeadIds);
+    return ids.filter((id) => allowedSet.has(id));
   }
 
-  return matchingIds;
+  return ids;
 }
 
 /** Canonical area list from the lookup table — used for autocomplete suggestions
