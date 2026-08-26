@@ -458,3 +458,167 @@ export async function getAnalyticsReportData(
     availableStaff,
   };
 }
+
+export async function getAreaTerritoryAnalytics(
+  area: string,
+  year?: string,
+  assignedAdminUserId?: string,
+): Promise<import("./analytics-shared").AreaTerritoryAnalyticsData> {
+  const index = await getOrBuildLocationIndex();
+  const allLeads = index.allLeads;
+  const targetNormArea = area.trim().toLowerCase();
+  const targetYear = year && year !== "all" ? year.trim() : null;
+
+  // Filter leads matching area across all years for historical comparison
+  const areaAllYearsLeads = allLeads.filter(
+    (l) => l.primaryLocality && l.primaryLocality.toLowerCase() === targetNormArea,
+  );
+
+  // Leads matching area AND active year
+  const activeCohortLeads = areaAllYearsLeads.filter(
+    (l) => !targetYear || l.year === targetYear,
+  );
+
+  // Check allocated leads from lead_list_items
+  const { data: listItems } = await supabase()
+    .from("lead_list_items")
+    .select("lead_id");
+  const assignedSet = new Set((listItems ?? []).map((i) => i.lead_id));
+
+  // Query details for car brands
+  const leadIds = activeCohortLeads.map((l) => l.id);
+  const brandCounts = new Map<string, number>();
+
+  if (leadIds.length > 0) {
+    const chunks: string[][] = [];
+    for (let i = 0; i < leadIds.length; i += 500) {
+      chunks.push(leadIds.slice(i, i + 500));
+    }
+    const brandResults = await Promise.all(
+      chunks.map((ids) =>
+        supabase()
+          .from("leads")
+          .select("car_brand, custom_fields")
+          .in("id", ids),
+      ),
+    );
+    for (const res of brandResults) {
+      for (const row of res.data ?? []) {
+        let brand = row.car_brand;
+        if (!brand && row.custom_fields) {
+          brand =
+            row.custom_fields["Vehicle Maker"] ||
+            row.custom_fields["Maker"] ||
+            row.custom_fields["car_brand"] ||
+            null;
+        }
+        if (brand) {
+          const cleanBrand = String(brand)
+            .replace(/\b(PVT|LTD|INDIA|MOTORS|MOTOR)\b/gi, "")
+            .trim();
+          if (cleanBrand) {
+            brandCounts.set(cleanBrand, (brandCounts.get(cleanBrand) ?? 0) + 1);
+          }
+        }
+      }
+    }
+  }
+
+  // Status breakdown
+  const statusBreakdown: Record<string, number> = {};
+  let bookedCount = 0;
+  let contactedCount = 0;
+  let followUpCount = 0;
+  let newCount = 0;
+  let lostCount = 0;
+  let estimatedRevenue = 0;
+  let allocatedCount = 0;
+  const serviceCounts = new Map<string, number>();
+
+  for (const lead of activeCohortLeads) {
+    const st = lead.status ?? "new";
+    statusBreakdown[st] = (statusBreakdown[st] ?? 0) + 1;
+
+    if (st === "booked") {
+      bookedCount++;
+      estimatedRevenue += lead.price_total ?? 0;
+    } else if (st === "contacted") {
+      contactedCount++;
+    } else if (st === "follow_up") {
+      followUpCount++;
+    } else if (st === "call_not_responded" || st === "cancelled" || st === "lost" || st === "not_interested") {
+      lostCount++;
+    } else {
+      newCount++;
+    }
+
+    if (assignedSet.has(lead.id)) {
+      allocatedCount++;
+    }
+
+    if (lead.service) {
+      serviceCounts.set(lead.service, (serviceCounts.get(lead.service) ?? 0) + 1);
+    }
+  }
+
+  const totalLeads = activeCohortLeads.length;
+  const unallocatedCount = Math.max(0, totalLeads - allocatedCount);
+  const conversionRate = totalLeads > 0 ? Math.round((bookedCount / totalLeads) * 100) : 0;
+  const allocationRate = totalLeads > 0 ? Math.round((allocatedCount / totalLeads) * 100) : 0;
+
+  // Top Car Brands
+  const topCarBrands = [...brandCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([brand, count]) => ({
+      brand,
+      count,
+      percentage: totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0,
+    }));
+
+  // Top Services
+  const topServices = [...serviceCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([service, count]) => ({
+      service,
+      count,
+      percentage: totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0,
+    }));
+
+  // Year comparison
+  const yearMap = new Map<string, { count: number; bookedCount: number }>();
+  for (const lead of areaAllYearsLeads) {
+    const yr = lead.year || "2026";
+    if (!yearMap.has(yr)) {
+      yearMap.set(yr, { count: 0, bookedCount: 0 });
+    }
+    const stat = yearMap.get(yr)!;
+    stat.count++;
+    if (lead.status === "booked") stat.bookedCount++;
+  }
+
+  const yearComparison = [...yearMap.entries()]
+    .map(([yr, stat]) => ({ year: yr, count: stat.count, bookedCount: stat.bookedCount }))
+    .sort((a, b) => b.year.localeCompare(a.year));
+
+  return {
+    area,
+    year: targetYear || "All Years",
+    totalLeads,
+    statusBreakdown,
+    bookedCount,
+    contactedCount,
+    followUpCount,
+    newCount,
+    lostCount,
+    conversionRate,
+    allocatedCount,
+    unallocatedCount,
+    allocationRate,
+    estimatedRevenue,
+    topServices,
+    topCarBrands,
+    yearComparison,
+  };
+}

@@ -47,6 +47,9 @@ import LeadViewModeSwitcher from "./LeadViewModeSwitcher";
 import AreaFilterSelect from "./AreaFilterSelect";
 import FolderAllocationButton from "./FolderAllocationButton";
 import YearAreaFoldersView from "./YearAreaFoldersView";
+import AreaTerritoryAnalytics from "./AreaTerritoryAnalytics";
+import { getAreaTerritoryAnalytics } from "@/lib/analytics";
+import type { AreaTerritoryAnalyticsData } from "@/lib/analytics-shared";
 
 function buildLeadsHref(args: {
   status?: string;
@@ -146,6 +149,7 @@ export default async function AdminLeadsPage({
   let serviceCounts: { service: string; count: number }[] = [];
   let leadListNames: Map<string, string[]> = new Map();
   let assignableUsers: Array<{ id: string; email: string; name: string }> = [];
+  let areaTerritoryAnalytics: AreaTerritoryAnalyticsData | null = null;
 
   try {
     const canManageLists = Boolean(me?.permissions.includes("leads.manage"));
@@ -179,9 +183,18 @@ export default async function AdminLeadsPage({
         source,
       }),
       canManageLists ? listLeadLists({ assignedAdminUserId }) : Promise.resolve([]),
-      listServiceCounts({ assignedAdminUserId, area: areaFilter }),
+      canManageLists ? listServiceCounts({ assignedAdminUserId, area: areaFilter }) : Promise.resolve([]),
       canManageLists ? listAssignableAdminUsers() : Promise.resolve([]),
     ]);
+
+    if (areaFilter) {
+      const activeYear = folder?.startsWith("year_") ? folder.replace("year_", "") : year;
+      areaTerritoryAnalytics = await getAreaTerritoryAnalytics(
+        areaFilter,
+        activeYear,
+        assignedAdminUserId,
+      ).catch(() => null);
+    }
 
     if (isSuperAdmin && paginated.leads.length > 0) {
       leadListNames = await mapLeadIdsToLists(paginated.leads.map((l) => l.id));
@@ -375,97 +388,107 @@ export default async function AdminLeadsPage({
               </div>
             </div>
 
-            {/* Hero KPI Stat Strip (Astryx Metrics for this Folder) */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-              {/* Card 1: Total Leads */}
-              <Link
-                href={buildLeadsHref({ status: "all", area: areaFilter, service: serviceFilter, folder, view: currentView })}
-                className={`p-4 rounded-2xl border transition-all ${
-                  filter === "all"
-                    ? "bg-[#C9A84C]/10 border-[#C9A84C]/40 ring-1 ring-[#C9A84C]/20"
-                    : "bg-[#071228] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.02]"
-                }`}
-              >
-                <div className="flex items-center justify-between text-white/50 text-[11px] font-semibold uppercase tracking-wider mb-2">
-                  <span>Folder Leads</span>
-                  <Users size={16} className="text-[#C9A84C]" />
-                </div>
-                <div className="text-2xl font-bold text-white tabular-nums">
-                  {statusSummary.total.toLocaleString("en-IN")}
-                </div>
-                <div className="text-[11px] text-white/40 mt-1">
-                  In this folder
-                </div>
-              </Link>
-
-              {/* Card 2: New Leads */}
-              <Link
-                href={buildLeadsHref({ status: "new", area: areaFilter, service: serviceFilter, folder, view: currentView })}
-                className={`p-4 rounded-2xl border transition-all ${
-                  filter === "new"
-                    ? "bg-blue-500/10 border-blue-500/40 ring-1 ring-blue-500/20"
-                    : "bg-[#071228] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.02]"
-                }`}
-              >
-                <div className="flex items-center justify-between text-blue-300 text-[11px] font-semibold uppercase tracking-wider mb-2">
-                  <span>New (To Call)</span>
-                  <Sparkles size={16} className="text-blue-400" />
-                </div>
-                <div className="text-2xl font-bold text-blue-400 tabular-nums">
-                  {statusSummary.new.toLocaleString("en-IN")}
-                </div>
-                <div className="text-[11px] text-white/40 mt-1">
-                  Awaiting first contact
-                </div>
-              </Link>
-
-              {/* Card 3: Contacted / In Progress */}
-              <Link
-                href={buildLeadsHref({ status: "contacted", area: areaFilter, service: serviceFilter, folder, view: currentView })}
-                className={`p-4 rounded-2xl border transition-all ${
-                  filter === "contacted"
-                    ? "bg-amber-500/10 border-amber-500/40 ring-1 ring-amber-500/20"
-                    : "bg-[#071228] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.02]"
-                }`}
-              >
-                <div className="flex items-center justify-between text-amber-300 text-[11px] font-semibold uppercase tracking-wider mb-2">
-                  <span>Contacted / Follow-up</span>
-                  <PhoneCall size={16} className="text-amber-400" />
-                </div>
-                <div className="text-2xl font-bold text-amber-400 tabular-nums">
-                  {(statusSummary.contacted + statusSummary.follow_up + statusSummary.call_not_responded).toLocaleString("en-IN")}
-                </div>
-                <div className="text-[11px] text-white/40 mt-1">
-                  In telecalling cycle
-                </div>
-              </Link>
-
-              {/* Card 4: Booked Conversions */}
-              <Link
-                href={buildLeadsHref({ status: "booked", area: areaFilter, service: serviceFilter, folder, view: currentView })}
-                className={`p-4 rounded-2xl border transition-all ${
-                  filter === "booked"
-                    ? "bg-emerald-500/10 border-emerald-500/40 ring-1 ring-emerald-500/20"
-                    : "bg-[#071228] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.02]"
-                }`}
-              >
-                <div className="flex items-center justify-between text-emerald-300 text-[11px] font-semibold uppercase tracking-wider mb-2">
-                  <span>Booked Conversions</span>
-                  <CheckCircle2 size={16} className="text-emerald-400" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <div className="text-2xl font-bold text-emerald-400 tabular-nums">
-                    {statusSummary.booked.toLocaleString("en-IN")}
+            {/* Dedicated Area Territory Analytics & Graphs OR Generic Folder KPI Strip */}
+            {areaTerritoryAnalytics ? (
+              <AreaTerritoryAnalytics
+                data={areaTerritoryAnalytics}
+                folder={folder}
+                adminUsers={assignableUsers}
+                leadLists={leadLists}
+                canManage={canManage}
+              />
+            ) : (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {/* Card 1: Total Leads */}
+                <Link
+                  href={buildLeadsHref({ status: "all", area: areaFilter, service: serviceFilter, folder, view: currentView })}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    filter === "all"
+                      ? "bg-[#C9A84C]/10 border-[#C9A84C]/40 ring-1 ring-[#C9A84C]/20"
+                      : "bg-[#071228] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.02]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-white/50 text-[11px] font-semibold uppercase tracking-wider mb-2">
+                    <span>Folder Leads</span>
+                    <Users size={16} className="text-[#C9A84C]" />
                   </div>
-                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
-                    {conversionRate}% conv.
-                  </span>
-                </div>
-                <div className="text-[11px] text-white/40 mt-1">
-                  Confirmed customers
-                </div>
-              </Link>
-            </div>
+                  <div className="text-2xl font-bold text-white tabular-nums">
+                    {statusSummary.total.toLocaleString("en-IN")}
+                  </div>
+                  <div className="text-[11px] text-white/40 mt-1">
+                    In this folder
+                  </div>
+                </Link>
+
+                {/* Card 2: New Leads */}
+                <Link
+                  href={buildLeadsHref({ status: "new", area: areaFilter, service: serviceFilter, folder, view: currentView })}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    filter === "new"
+                      ? "bg-blue-500/10 border-blue-500/40 ring-1 ring-blue-500/20"
+                      : "bg-[#071228] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.02]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-blue-300 text-[11px] font-semibold uppercase tracking-wider mb-2">
+                    <span>New (To Call)</span>
+                    <Sparkles size={16} className="text-blue-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-blue-400 tabular-nums">
+                    {statusSummary.new.toLocaleString("en-IN")}
+                  </div>
+                  <div className="text-[11px] text-white/40 mt-1">
+                    Awaiting first contact
+                  </div>
+                </Link>
+
+                {/* Card 3: Contacted / In Progress */}
+                <Link
+                  href={buildLeadsHref({ status: "contacted", area: areaFilter, service: serviceFilter, folder, view: currentView })}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    filter === "contacted"
+                      ? "bg-amber-500/10 border-amber-500/40 ring-1 ring-amber-500/20"
+                      : "bg-[#071228] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.02]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-amber-300 text-[11px] font-semibold uppercase tracking-wider mb-2">
+                    <span>Contacted / Follow-up</span>
+                    <PhoneCall size={16} className="text-amber-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-amber-400 tabular-nums">
+                    {(statusSummary.contacted + statusSummary.follow_up + statusSummary.call_not_responded).toLocaleString("en-IN")}
+                  </div>
+                  <div className="text-[11px] text-white/40 mt-1">
+                    In telecalling cycle
+                  </div>
+                </Link>
+
+                {/* Card 4: Booked Conversions */}
+                <Link
+                  href={buildLeadsHref({ status: "booked", area: areaFilter, service: serviceFilter, folder, view: currentView })}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    filter === "booked"
+                      ? "bg-emerald-500/10 border-emerald-500/40 ring-1 ring-emerald-500/20"
+                      : "bg-[#071228] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.02]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-emerald-300 text-[11px] font-semibold uppercase tracking-wider mb-2">
+                    <span>Booked Conversions</span>
+                    <CheckCircle2 size={16} className="text-emerald-400" />
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <div className="text-2xl font-bold text-emerald-400 tabular-nums">
+                      {statusSummary.booked.toLocaleString("en-IN")}
+                    </div>
+                    <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                      {conversionRate}% conv.
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-white/40 mt-1">
+                    Confirmed customers
+                  </div>
+                </Link>
+              </div>
+            )}
 
             {/* Unified Filter & Command Bar */}
             <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-4 space-y-4 shadow-lg">

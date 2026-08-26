@@ -98,3 +98,23 @@ export interface AnalyticsReportData {
   availableAreas: string[];
   availableStaff: Array<{ id: string; name: string }>;
 }
+
+export interface AreaTerritoryAnalyticsData {
+  area: string;
+  year: string;
+  totalLeads: number;
+  statusBreakdown: Record<string, number>;
+  bookedCount: number;
+  contactedCount: number;
+  followUpCount: number;
+  newCount: number;
+  lostCount: number;
+  conversionRate: number;
+  allocatedCount: number;
+  unallocatedCount: number;
+  allocationRate: number;
+  estimatedRevenue: number;
+  topServices: Array<{ service: string; count: number; percentage: number }>;
+  topCarBrands: Array<{ brand: string; count: number; percentage: number }>;
+  yearComparison: Array<{ year: string; count: number; bookedCount: number }>;
+}
