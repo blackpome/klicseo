@@ -171,7 +171,12 @@ export default async function AdminLeadsPage({
         source,
       }),
       listFolderSummaries(assignedAdminUserId),
-      listAreasWithCounts(assignedAdminUserId),
+      listAreasWithCounts({
+        assignedAdminUserId,
+        folder,
+        year,
+        source,
+      }),
       canManageLists ? listLeadLists({ assignedAdminUserId }) : Promise.resolve([]),
       listServiceCounts({ assignedAdminUserId, area: areaFilter }),
       canManageLists ? listAssignableAdminUsers() : Promise.resolve([]),

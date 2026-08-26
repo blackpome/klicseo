@@ -391,6 +391,11 @@ export function invalidateAreaCountsCache(): void {
   inFlightLocationIndexPromise = null;
 }
 
+export function setLocationIndexCache(cache: LocationIndexCache | null): void {
+  locationIndexCache = cache;
+  inFlightLocationIndexPromise = null;
+}
+
 /**
  * Fast parallel-cached index of all lead locations and registration years with in-flight request de-duplication.
  */
@@ -449,9 +454,73 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
       const yearToLeadIds = new Map<string, string[]>();
       const allLeads: LeadLocationSummary[] = [];
 
+      const [pincodeMap, knownAreas] = await Promise.all([
+        loadPincodeMap(),
+        listKnownAreas(),
+      ]);
+
+      const sortedKnown = [
+        ...new Set([...knownAreas, ...DEFAULT_KNOWN_AREAS, ...Object.keys(CANONICAL_AREA_ALIASES)]),
+      ].sort((a, b) => b.length - a.length);
+
+      const compiledAreaRegexes = sortedKnown.map((area) => {
+        const escaped = area
+          .replace(/[+?^${}()|[\]\\]/g, "\\$&")
+          .replace(/\./g, "\\.?")
+          .replace(/\s+/g, "\\s+");
+        return {
+          regex: new RegExp(`(^|[^a-zA-Z0-9])${escaped}([^a-zA-Z0-9]|$)`, "i"),
+          canonical: CANONICAL_AREA_ALIASES[area.toLowerCase()] || area,
+        };
+      });
+
+      function resolvePrimaryLocalityFast(
+        rawArea: string | null | undefined,
+        plainAddress: string | null | undefined,
+        pincode: string | null | undefined,
+      ): string | null {
+        const areaTrim = (rawArea || "").trim();
+        const addrTrim = (plainAddress || "").trim();
+        const pinTrim = (pincode || "").trim();
+
+        let cleanedAddr = addrTrim;
+        for (const fp of FALSE_POSITIVE_PHRASES) {
+          cleanedAddr = cleanedAddr.replace(fp, " ");
+        }
+        const addrLower = cleanedAddr.toLowerCase();
+
+        // 1. Scan address text for specific sub-localities
+        for (const item of compiledAreaRegexes) {
+          if (item.regex.test(addrLower)) {
+            return item.canonical;
+          }
+        }
+
+        // 2. Direct Area column if specified
+        if (areaTrim && areaTrim !== "null" && areaTrim !== "Unspecified") {
+          const norm = areaTrim.toLowerCase();
+          return CANONICAL_AREA_ALIASES[norm] || areaTrim;
+        }
+
+        // 3. Pincode lookup
+        if (pinTrim && pincodeMap.has(pinTrim)) {
+          const derived = pincodeMap.get(pinTrim)!;
+          return CANONICAL_AREA_ALIASES[derived.toLowerCase()] || derived;
+        }
+
+        // 4. Embedded pincode in address text
+        const pinMatch = addrTrim.match(/\b(6\d{5})\b/);
+        if (pinMatch && pincodeMap.has(pinMatch[1])) {
+          const derived = pincodeMap.get(pinMatch[1])!;
+          return CANONICAL_AREA_ALIASES[derived.toLowerCase()] || derived;
+        }
+
+        return null;
+      }
+
       for (const r of allRows) {
         const plainAddress = unseal(r.address);
-        const primary = await resolvePrimaryLocality(r.area, plainAddress, r.pincode);
+        const primary = resolvePrimaryLocalityFast(r.area, plainAddress, r.pincode);
         const resolved = primary || "Unspecified";
         const norm = resolved.toLowerCase();
         const year = extractLeadYear(r.custom_fields, r.created_at);
@@ -488,7 +557,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
       }
 
       locationIndexCache = {
-        expires: Date.now() + 120000, // 2-minute in-memory TTL
+        expires: Date.now() + 300000, // 5-minute in-memory TTL
         leadMap,
         areaToLeadIds,
         yearToLeadIds,
@@ -509,28 +578,65 @@ export async function resolveLeadIdsForYear(year: string): Promise<string[]> {
   return idx.yearToLeadIds.get(year.trim()) || [];
 }
 
-/** Distinct areas + lead counts across ALL leads in the database, for the filter pill bar on /admin. */
+export interface ListAreasOptions {
+  assignedAdminUserId?: string;
+  folder?: string;
+  year?: string;
+  source?: string;
+}
+
+/** Distinct areas + lead counts scoped to folder, year, or staff for the filter bar on /admin. */
 export async function listAreasWithCounts(
-  assignedAdminUserId?: string,
+  opts: ListAreasOptions | string = {},
 ): Promise<Array<{ area: string; count: number }>> {
+  const options: ListAreasOptions = typeof opts === "string" ? { assignedAdminUserId: opts } : opts;
   const index = await getOrBuildLocationIndex();
 
-  let allowedSet: Set<string> | null = null;
-  if (assignedAdminUserId) {
+  let candidateLeads = index.allLeads;
+
+  // 1. Telecaller scope
+  if (options.assignedAdminUserId) {
     const { data: items, error: itemsErr } = await supabase()
       .from("lead_list_items")
       .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
-      .eq("lead_lists.assigned_admin_user_id", assignedAdminUserId);
+      .eq("lead_lists.assigned_admin_user_id", options.assignedAdminUserId);
     if (itemsErr) throw itemsErr;
-    allowedSet = new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id));
-    if (allowedSet.size === 0) return [];
+    const allowedSet = new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id));
+    candidateLeads = candidateLeads.filter((l) => allowedSet.has(l.id));
+  }
+
+  // 2. Custom List folder UUID
+  if (options.folder && options.folder.match(/^[0-9a-fA-F-]{36}$/)) {
+    const { data: listItems } = await supabase()
+      .from("lead_list_items")
+      .select("lead_id")
+      .eq("list_id", options.folder);
+    const listSet = new Set((listItems ?? []).map((i) => i.lead_id));
+    candidateLeads = candidateLeads.filter((l) => listSet.has(l.id));
+  }
+
+  // 3. Folder / Source filtering
+  if (options.folder === "website_form" || options.source === "wizard") {
+    candidateLeads = candidateLeads.filter((l) => l.source === "wizard");
+  } else if (options.folder === "hot_leads" || options.source === "admin") {
+    candidateLeads = candidateLeads.filter((l) => l.source === "admin" || l.source === "manual");
+  }
+
+  // 4. Year folder or year filter
+  const targetYear = options.folder && options.folder.startsWith("year_")
+    ? options.folder.replace("year_", "")
+    : options.year && options.year !== "all"
+    ? options.year
+    : null;
+
+  if (targetYear) {
+    candidateLeads = candidateLeads.filter((l) => l.year === targetYear);
   }
 
   const counts = new Map<string, number>();
 
-  for (const lead of index.allLeads) {
-    if (allowedSet && !allowedSet.has(lead.id)) continue;
-    if (lead.primaryLocality !== "Unspecified") {
+  for (const lead of candidateLeads) {
+    if (lead.primaryLocality && lead.primaryLocality !== "Unspecified" && lead.primaryLocality !== "Unknown") {
       counts.set(lead.primaryLocality, (counts.get(lead.primaryLocality) ?? 0) + 1);
     }
   }
