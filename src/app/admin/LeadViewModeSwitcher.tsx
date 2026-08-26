@@ -2,10 +2,10 @@
 
 import { useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { LayoutGrid, TableProperties, BarChart2 } from "lucide-react";
+import { LayoutGrid, TableProperties } from "lucide-react";
 
 interface Props {
-  currentView: "cards" | "table" | "analytics";
+  currentView: "cards" | "table";
 }
 
 export default function LeadViewModeSwitcher({ currentView = "table" }: Props) {
@@ -30,15 +30,11 @@ export default function LeadViewModeSwitcher({ currentView = "table" }: Props) {
     }
   }, [searchParams, currentView, pathname, router]);
 
-  const setViewMode = (mode: "cards" | "table" | "analytics") => {
-    if (mode === "cards" || mode === "table") {
-      localStorage.setItem("klicseo_lead_view_mode", mode);
-    }
+  const setViewMode = (mode: "cards" | "table") => {
+    localStorage.setItem("klicseo_lead_view_mode", mode);
     const params = new URLSearchParams(searchParams.toString());
     if (mode === "cards") {
       params.set("view", "cards");
-    } else if (mode === "analytics") {
-      params.set("view", "analytics");
     } else {
       params.delete("view");
     }
@@ -76,21 +72,6 @@ export default function LeadViewModeSwitcher({ currentView = "table" }: Props) {
       >
         <LayoutGrid size={13} />
         <span>Cards</span>
-      </button>
-
-      {/* 3. Analytics View */}
-      <button
-        type="button"
-        onClick={() => setViewMode("analytics")}
-        className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
-          currentView === "analytics"
-            ? "bg-[#C9A84C] text-[#050E21] shadow-sm font-bold"
-            : "text-white/60 hover:text-white hover:bg-white/[0.06]"
-        }`}
-        title="Territory Analytics & Graphs"
-      >
-        <BarChart2 size={13} />
-        <span>Analytics</span>
       </button>
     </div>
   );

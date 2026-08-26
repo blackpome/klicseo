@@ -48,9 +48,9 @@ import LeadViewModeSwitcher from "./LeadViewModeSwitcher";
 import AreaFilterSelect from "./AreaFilterSelect";
 import FolderAllocationButton from "./FolderAllocationButton";
 import YearAreaFoldersView from "./YearAreaFoldersView";
-import AreaTerritoryAnalytics from "./AreaTerritoryAnalytics";
-import { getAreaTerritoryAnalytics } from "@/lib/analytics";
-import type { AreaTerritoryAnalyticsData } from "@/lib/analytics-shared";
+import AnalyticsDashboardClient from "./analytics/AnalyticsDashboardClient";
+import { getAnalyticsReportData } from "@/lib/analytics";
+import type { AnalyticsReportData } from "@/lib/analytics-shared";
 
 function buildLeadsHref(args: {
   status?: string;
@@ -133,7 +133,7 @@ export default async function AdminLeadsPage({
   const filter = statusTabs.find((t) => t.id === status)?.id ?? "all";
   const areaFilter = area && area !== "all" ? area : undefined;
   const serviceFilter = service && service !== "all" ? service : undefined;
-  const currentView = view === "cards" ? "cards" : view === "analytics" ? "analytics" : "table";
+  const currentView = view === "cards" ? "cards" : "table";
 
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const pageSize = Math.max(1, Math.min(100, parseInt(pageSizeParam ?? "25", 10) || 25));
@@ -150,11 +150,13 @@ export default async function AdminLeadsPage({
   let serviceCounts: { service: string; count: number }[] = [];
   let leadListNames: Map<string, string[]> = new Map();
   let assignableUsers: Array<{ id: string; email: string; name: string }> = [];
-  let areaTerritoryAnalytics: AreaTerritoryAnalyticsData | null = null;
+  let areaAnalyticsReport: AnalyticsReportData | null = null;
 
   try {
     const canManageLists = Boolean(me?.permissions.includes("leads.manage"));
-    [paginated, statusSummary, folderSummaries, areaCounts, leadLists, serviceCounts, assignableUsers] = await Promise.all([
+    const activeYear = folder?.startsWith("year_") ? folder.replace("year_", "") : year;
+
+    [paginated, statusSummary, folderSummaries, areaCounts, leadLists, serviceCounts, assignableUsers, areaAnalyticsReport] = await Promise.all([
       listPaginatedLeads({
         status: filter as any,
         search: q,
@@ -186,16 +188,14 @@ export default async function AdminLeadsPage({
       canManageLists ? listLeadLists({ assignedAdminUserId }) : Promise.resolve([]),
       canManageLists ? listServiceCounts({ assignedAdminUserId, area: areaFilter }) : Promise.resolve([]),
       canManageLists ? listAssignableAdminUsers() : Promise.resolve([]),
+      areaFilter
+        ? getAnalyticsReportData({
+            year: activeYear && activeYear !== "all" ? activeYear : undefined,
+            area: areaFilter,
+            assignedAdminUserId,
+          }).catch(() => null)
+        : Promise.resolve(null),
     ]);
-
-    if (areaFilter) {
-      const activeYear = folder?.startsWith("year_") ? folder.replace("year_", "") : year;
-      areaTerritoryAnalytics = await getAreaTerritoryAnalytics(
-        areaFilter,
-        activeYear,
-        assignedAdminUserId,
-      ).catch(() => null);
-    }
 
     if (isSuperAdmin && paginated.leads.length > 0) {
       leadListNames = await mapLeadIdsToLists(paginated.leads.map((l) => l.id));
@@ -372,6 +372,12 @@ export default async function AdminLeadsPage({
                 )}
 
                 <span className="text-white/20 text-sm">/</span>
+              </div>
+            </div>
+
+            {/* Header / Title */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-extrabold text-white flex items-center gap-1.5">
                     {folder?.startsWith("year_")
@@ -389,49 +395,27 @@ export default async function AdminLeadsPage({
               </div>
             </div>
 
-            {/* 1. Dedicated Analytics Tab View */}
-            {currentView === "analytics" ? (
-              areaTerritoryAnalytics ? (
-                <AreaTerritoryAnalytics
-                  data={areaTerritoryAnalytics}
-                  folder={folder}
-                  adminUsers={assignableUsers}
-                  leadLists={leadLists}
-                  canManage={canManage}
-                />
-              ) : (
-                <div className="p-10 rounded-3xl bg-[#071228] border border-white/[0.08] text-center space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-[#C9A84C]/10 border border-[#C9A84C]/25 flex items-center justify-center text-[#C9A84C] mx-auto">
-                    <BarChart3 size={24} />
-                  </div>
-                  <h3 className="text-base font-bold text-white">Area Territory Analytics</h3>
-                  <p className="text-xs text-white/50 max-w-md mx-auto">
-                    Select a specific locality folder (e.g. Velachery, Puzhuthivakkam, Madipakkam) to view dedicated territory funnel and vehicle intelligence graphs.
-                  </p>
-                  <div className="pt-2">
-                    <Link
-                      href={folder?.startsWith("year_") ? `/admin?folder=${folder}` : "/admin/analytics"}
-                      className="px-4 py-2 rounded-xl bg-[#C9A84C] text-[#050E21] text-xs font-bold hover:bg-[#E8CC7A] transition-all inline-flex items-center gap-2 shadow-md shadow-[#C9A84C]/20"
-                    >
-                      <span>{folder?.startsWith("year_") ? `Browse ${folder.replace("year_", "")} Area Folders` : "Open Global Analytics Dashboard"}</span>
-                    </Link>
-                  </div>
-                </div>
-              )
-            ) : (
-              /* 2. Clean Sheet & Cards Workspace */
-              <>
-                {/* Hero KPI Stat Strip (Astryx Metrics for this Folder) */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-                  {/* Card 1: Total Leads */}
-                  <Link
-                    href={buildLeadsHref({ status: "all", area: areaFilter, service: serviceFilter, folder, view: currentView })}
-                    className={`p-4 rounded-2xl border transition-all ${
-                      filter === "all"
-                        ? "bg-[#C9A84C]/10 border-[#C9A84C]/40 ring-1 ring-[#C9A84C]/20"
-                        : "bg-[#071228] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.02]"
-                    }`}
-                  >
+            {/* Dedicated Area Analytics Dashboard (Exact Sidebar Analytics) */}
+            {areaAnalyticsReport && (
+              <AnalyticsDashboardClient
+                initialData={areaAnalyticsReport}
+                currentUserRole={me?.role || "admin"}
+                isScopedStaff={scope.kind === "assigned"}
+              />
+            )}
+
+            {/* Hero KPI Stat Strip (Astryx Metrics for this Folder when no specific area is selected) */}
+            {!areaAnalyticsReport && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {/* Card 1: Total Leads */}
+                <Link
+                  href={buildLeadsHref({ status: "all", area: areaFilter, service: serviceFilter, folder, view: currentView })}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    filter === "all"
+                      ? "bg-[#C9A84C]/10 border-[#C9A84C]/40 ring-1 ring-[#C9A84C]/20"
+                      : "bg-[#071228] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.02]"
+                  }`}
+                >
                   <div className="flex items-center justify-between text-white/50 text-[11px] font-semibold uppercase tracking-wider mb-2">
                     <span>Folder Leads</span>
                     <Users size={16} className="text-[#C9A84C]" />
@@ -512,8 +496,9 @@ export default async function AdminLeadsPage({
                   </div>
                 </Link>
               </div>
+            )}
 
-              {/* Unified Filter & Command Bar */}
+            {/* Unified Filter & Command Bar */}
             <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-4 space-y-4 shadow-lg">
               {/* Top Row: Status Tabs Segmented Control */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
@@ -734,8 +719,6 @@ export default async function AdminLeadsPage({
                 )}
               </div>
             )}
-            </>
-          )}
           </div>
         )}
       </div>
