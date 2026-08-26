@@ -153,9 +153,11 @@ export default async function AdminLeadsPage({
   let areaAnalyticsReport: AnalyticsReportData | null = null;
 
   try {
-    const isYearSubFoldersView = Boolean(folder && folder.startsWith("year_") && !area);
+    const isAreaSubFoldersDeck = Boolean(
+      folder && !area && (folder.startsWith("year_") || folder === "website_form" || folder === "hot_leads")
+    );
     const isInsideFolder = Boolean(folder);
-    const needsSpreadsheetLeads = Boolean(isInsideFolder && !isYearSubFoldersView);
+    const needsSpreadsheetLeads = Boolean(isInsideFolder && !isAreaSubFoldersDeck);
     const canManageLists = Boolean(me?.permissions.includes("leads.manage"));
     const activeYear = folder?.startsWith("year_") ? folder.replace("year_", "") : year;
 
@@ -245,11 +247,14 @@ export default async function AdminLeadsPage({
     }
   }
 
-  const isYearSubFoldersView = Boolean(folder && folder.startsWith("year_") && !area);
+  const isAreaSubFoldersDeck = Boolean(
+    folder && !area && (folder.startsWith("year_") || folder === "website_form" || folder === "hot_leads")
+  );
   const isInsideFolder = Boolean(folder);
 
-  const yearFolderSummary = folder && folder.startsWith("year_")
-    ? folderSummaries.systemFolders.find((f) => f.id === folder)
+  const activeFolderSummary = folder
+    ? folderSummaries.systemFolders.find((f) => f.id === folder) ||
+      folderSummaries.customFolders.find((f) => f.id === folder)
     : null;
 
   return (
@@ -262,19 +267,17 @@ export default async function AdminLeadsPage({
               className="text-2xl md:text-3xl font-bold tracking-tight text-white"
               style={{ fontFamily: "var(--font-playfair)" }}
             >
-              {isYearSubFoldersView
-                ? `📅 ${folder!.replace("year_", "")} Leads Directory`
+              {isAreaSubFoldersDeck
+                ? `${activeFolderName || "Folder"} Directory`
                 : isInsideFolder
-                ? folder!.startsWith("year_")
-                  ? `📅 ${folder!.replace("year_", "")} Leads — 📍 ${area === "all" ? "All Areas" : area}`
-                  : activeFolderName || "Master Leads Sheet"
+                ? `${activeFolderName || "Master Sheet"} — 📍 ${area === "all" ? "All Areas" : area || "All Areas"}`
                 : isSuperAdmin
                 ? "Leads CRM & Folders"
                 : "My Assigned Leads"}
             </h1>
             <p className="text-xs text-white/50 mt-0.5">
-              {isYearSubFoldersView
-                ? `Select an area folder below to browse ${folder!.replace("year_", "")} leads by territory (${(yearFolderSummary?.count ?? statusSummary.total).toLocaleString("en-IN")} total records).`
+              {isAreaSubFoldersDeck
+                ? `Select an area folder below to browse ${activeFolderName || "leads"} by territory (${(activeFolderSummary?.count ?? statusSummary.total).toLocaleString("en-IN")} total records).`
                 : isInsideFolder
                 ? `Viewing spreadsheet records inside ${activeFolderName || "Master Sheet"} (${totalCount.toLocaleString("en-IN")} leads)`
                 : "Organize client inquiries across Year folders, Website Form, Hot Leads, and Custom campaigns."}
@@ -292,11 +295,27 @@ export default async function AdminLeadsPage({
           <div className="flex items-center gap-2.5">
             {isInsideFolder && (
               <Link
-                href={isYearSubFoldersView || !folder?.startsWith("year_") ? "/admin" : `/admin?folder=${folder}`}
+                href={
+                  isAreaSubFoldersDeck
+                    ? "/admin"
+                    : folder?.startsWith("year_") || folder === "website_form" || folder === "hot_leads"
+                    ? `/admin?folder=${folder}`
+                    : "/admin"
+                }
                 className="px-3.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/10 border border-white/10 text-xs font-bold text-white transition-all inline-flex items-center gap-1.5 shadow-sm"
               >
                 <ArrowLeft size={14} className="text-[#C9A84C]" />
-                <span>{isYearSubFoldersView || !folder?.startsWith("year_") ? "All Folders" : `Back to ${folder?.replace("year_", "")} Areas`}</span>
+                <span>
+                  {isAreaSubFoldersDeck
+                    ? "All Folders"
+                    : folder === "website_form"
+                    ? "Back to Website Form Areas"
+                    : folder === "hot_leads"
+                    ? "Back to Hot Leads Areas"
+                    : folder?.startsWith("year_")
+                    ? `Back to ${folder.replace("year_", "")} Areas`
+                    : "All Folders"}
+                </span>
               </Link>
             )}
 
@@ -346,14 +365,34 @@ export default async function AdminLeadsPage({
             adminUsers={assignableUsers}
             canManage={(isSuperAdmin || me?.role === "admin") && canManage}
           />
-        ) : isYearSubFoldersView ? (
-          /* LEVEL 2 VIEW: Area Sub-Folders Deck for Year Cohort */
+        ) : isAreaSubFoldersDeck ? (
+          /* LEVEL 2 VIEW: Area Sub-Folders Deck for Website Form, Hot Leads, or Year Cohort */
           <YearAreaFoldersView
-            yearFolder={folder!}
-            yearLabel={folder!.replace("year_", "")}
+            folderId={folder!}
+            folderTitle={
+              folder === "website_form"
+                ? "Website Form Leads"
+                : folder === "hot_leads"
+                ? "Hot Leads (Admin Added)"
+                : `${folder!.replace("year_", "")} Leads`
+            }
+            folderBadge={
+              folder === "website_form"
+                ? "🌐 Website Form Inquiries"
+                : folder === "hot_leads"
+                ? "🔥 Admin Hot Leads"
+                : `📁 ${folder!.replace("year_", "")} Leads Cohort`
+            }
+            folderDescription={
+              folder === "website_form"
+                ? "Select an area folder below to browse online booking inquiries by territory, or view the complete master sheet."
+                : folder === "hot_leads"
+                ? "Select an area folder below to browse manually entered hot leads by territory, or view the complete master sheet."
+                : `Select an area folder below to browse ${folder!.replace("year_", "")} leads by territory, or view the complete master sheet.`
+            }
             areaSummaries={areaCounts}
-            totalYearLeads={yearFolderSummary?.count ?? statusSummary.total}
-            totalYearBooked={yearFolderSummary?.bookedCount ?? statusSummary.booked}
+            totalLeads={activeFolderSummary?.count ?? statusSummary.total}
+            totalBooked={activeFolderSummary?.bookedCount ?? statusSummary.booked}
             adminUsers={assignableUsers}
             leadLists={leadLists}
             canManage={canManage}
@@ -372,19 +411,28 @@ export default async function AdminLeadsPage({
                   <span>All Folders</span>
                 </Link>
 
-                {folder?.startsWith("year_") && (
+                {(folder?.startsWith("year_") || folder === "website_form" || folder === "hot_leads") && (
                   <>
                     <span className="text-white/20 text-sm">/</span>
                     <Link
                       href={`/admin?folder=${folder}`}
                       className="px-2.5 py-1 rounded-xl bg-[#C9A84C]/10 hover:bg-[#C9A84C]/20 border border-[#C9A84C]/30 text-xs font-bold text-[#E8CC7A] transition-all inline-flex items-center gap-1.5"
                     >
-                      <span>📁 {folder.replace("year_", "")} Areas</span>
+                      <span>
+                        {folder === "website_form"
+                          ? "🌐 Website Form Areas"
+                          : folder === "hot_leads"
+                          ? "🔥 Hot Leads Areas"
+                          : `📁 ${folder.replace("year_", "")} Areas`}
+                      </span>
                     </Link>
                   </>
                 )}
 
                 <span className="text-white/20 text-sm">/</span>
+                <span className="px-2.5 py-1 rounded-xl bg-white/[0.04] border border-white/10 text-xs font-semibold text-white/90">
+                  {area === "all" ? "Master Sheet (All Areas)" : area ? `📍 ${area}` : activeFolderName || "Master View"}
+                </span>
               </div>
             </div>
 
@@ -393,8 +441,10 @@ export default async function AdminLeadsPage({
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-extrabold text-white flex items-center gap-1.5">
-                    {folder?.startsWith("year_")
-                      ? `📍 ${area === "all" ? "All Areas (Master View)" : area || "All Areas"}`
+                    {area === "all"
+                      ? `📊 ${activeFolderName || "Folder"} — Master Sheet (All Areas)`
+                      : area
+                      ? `📍 ${area} (${activeFolderName || "Folder"})`
                       : activeFolderName || "📊 Master Leads Sheet"}
                   </span>
                   <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#C9A84C]/20 text-[#E8CC7A] border border-[#C9A84C]/30">

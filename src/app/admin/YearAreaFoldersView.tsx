@@ -18,20 +18,33 @@ import FolderAllocationButton from "./FolderAllocationButton";
 import type { LeadListRow } from "@/lib/leadLists-shared";
 
 interface Props {
-  yearFolder: string; // e.g. "year_2026"
-  yearLabel: string; // e.g. "2026"
+  folderId?: string; // e.g. "website_form", "hot_leads", "year_2026"
+  folderTitle?: string;
+  folderBadge?: string;
+  folderDescription?: string;
+  // Legacy / fallback props
+  yearFolder?: string;
+  yearLabel?: string;
   areaSummaries: AreaCountSummary[];
-  totalYearLeads: number;
-  totalYearBooked: number;
+  totalLeads?: number;
+  totalBooked?: number;
+  totalYearLeads?: number;
+  totalYearBooked?: number;
   adminUsers?: { id: string; email: string; name: string }[];
   leadLists?: LeadListRow[];
   canManage?: boolean;
 }
 
 export default function YearAreaFoldersView({
+  folderId,
+  folderTitle,
+  folderBadge,
+  folderDescription,
   yearFolder,
   yearLabel,
   areaSummaries,
+  totalLeads,
+  totalBooked,
   totalYearLeads,
   totalYearBooked,
   adminUsers = [],
@@ -40,9 +53,18 @@ export default function YearAreaFoldersView({
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
 
+  const activeFolderId = folderId || yearFolder || "year_2026";
+  const activeTitle =
+    folderTitle || (yearLabel ? `${yearLabel} Leads` : activeFolderId.startsWith("year_") ? `${activeFolderId.replace("year_", "")} Leads` : activeFolderId === "website_form" ? "Website Form Leads" : "Hot Leads");
+  const activeBadge =
+    folderBadge || (activeFolderId === "website_form" ? "🌐 Website Form Inquiries" : activeFolderId === "hot_leads" ? "🔥 Admin Hot Leads" : `📁 ${yearLabel || activeFolderId.replace("year_", "")} Leads Cohort`);
+  const activeDescription =
+    folderDescription || `Select an area folder below to browse ${activeTitle} by territory, or view the complete master sheet.`;
+  const countTotal = totalLeads ?? totalYearLeads ?? 0;
+  const countBooked = totalBooked ?? totalYearBooked ?? 0;
+
   const q = searchQuery.toLowerCase().trim();
   const filteredAreas = areaSummaries.filter((a) => !q || a.area.toLowerCase().includes(q));
-
   const totalFilteredLeads = filteredAreas.reduce((sum, a) => sum + a.count, 0);
 
   return (
@@ -60,17 +82,17 @@ export default function YearAreaFoldersView({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#C9A84C]/15 text-[#E8CC7A] border border-[#C9A84C]/30">
-                📁 {yearLabel} Leads Cohort
+                {activeBadge}
               </span>
               <span className="text-xs text-white/40 font-medium">
-                {totalYearLeads.toLocaleString("en-IN")} Total Records
+                {countTotal.toLocaleString("en-IN")} Total Records
               </span>
             </div>
             <h2 className="text-lg font-bold text-white tracking-tight mt-1 flex items-center gap-2">
-              <span>{yearLabel} Area & Locality Folders</span>
+              <span>{activeTitle} Area & Locality Folders</span>
             </h2>
             <p className="text-xs text-white/50">
-              Select an area folder below to browse {yearLabel} leads by territory, or view the complete master sheet.
+              {activeDescription}
             </p>
           </div>
         </div>
@@ -83,15 +105,15 @@ export default function YearAreaFoldersView({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={`Filter ${yearLabel} areas...`}
+              placeholder={`Filter ${activeTitle} areas...`}
               className="w-48 md:w-56 bg-[#050E21] border border-white/10 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#C9A84C]"
             />
           </div>
 
           {canManage && (
             <FolderAllocationButton
-              folder={yearFolder}
-              folderName={`${yearLabel} Leads`}
+              folder={activeFolderId}
+              folderName={activeTitle}
               adminUsers={adminUsers}
               lists={leadLists}
               availableAreas={areaSummaries.map((a) => a.area)}
@@ -100,11 +122,11 @@ export default function YearAreaFoldersView({
           )}
 
           <Link
-            href={`/admin?folder=${yearFolder}&area=all`}
+            href={`/admin?folder=${activeFolderId}&area=all`}
             className="px-3.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-xs font-semibold text-white/80 hover:text-white transition-all inline-flex items-center gap-1.5 shadow-sm"
           >
             <FileSpreadsheet size={14} className="text-[#C9A84C]" />
-            <span>Master Sheet (All {totalYearLeads.toLocaleString("en-IN")})</span>
+            <span>Master Sheet (All {countTotal.toLocaleString("en-IN")})</span>
           </Link>
         </div>
       </div>
@@ -115,7 +137,7 @@ export default function YearAreaFoldersView({
           <div className="flex items-center gap-2 font-semibold text-[#E8CC7A]">
             <MapPin size={14} className="text-[#C9A84C]" />
             <span className="uppercase tracking-wider">
-              {filteredAreas.length} Area Folders in {yearLabel}
+              {filteredAreas.length} Area Folders in {activeTitle}
             </span>
           </div>
           {searchQuery && (
@@ -144,7 +166,7 @@ export default function YearAreaFoldersView({
               return (
                 <Link
                   key={a.area}
-                  href={`/admin?folder=${yearFolder}&area=${encodeURIComponent(a.area)}`}
+                  href={`/admin?folder=${activeFolderId}&area=${encodeURIComponent(a.area)}`}
                   className="group p-5 rounded-3xl bg-[#071228] border border-white/[0.08] hover:border-[#C9A84C]/50 hover:bg-[#C9A84C]/[0.03] transition-all shadow-lg hover:shadow-2xl flex flex-col justify-between"
                 >
                   <div>
@@ -161,7 +183,7 @@ export default function YearAreaFoldersView({
                       📍 {a.area}
                     </h4>
                     <p className="text-[11px] text-white/40 mt-1">
-                      {yearLabel} territory leads
+                      {activeTitle} territory
                     </p>
                   </div>
 

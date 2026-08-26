@@ -42,6 +42,7 @@ export function matchesFilter(
   if (filter.folder) {
     if (filter.folder.startsWith("year_")) {
       const yr = filter.folder.replace("year_", "");
+      if ((lead as any).source === "wizard") return false;
       const leadYear = (lead as any).year || ((lead as any).created_at ? (lead as any).created_at.slice(0, 4) : "2026");
       if (leadYear !== yr) return false;
     } else if (filter.folder === "website_form") {
@@ -50,6 +51,7 @@ export function matchesFilter(
       if (((lead as any).source !== "admin" && (lead as any).source !== "manual") || (lead as any).isBulkUpload) return false;
     }
   } else if (filter.year && filter.year !== "all") {
+    if ((lead as any).source === "wizard") return false;
     const leadYear = (lead as any).year || ((lead as any).created_at ? (lead as any).created_at.slice(0, 4) : "2026");
     if (leadYear !== filter.year) return false;
   }
@@ -198,14 +200,14 @@ export async function countMatchingLeads(
       if (filter.folder && filter.folder !== "all") {
         if (filter.folder.startsWith("year_")) {
           const yr = filter.folder.replace("year_", "");
-          if (lead.year !== yr) return false;
+          if (lead.source === "wizard" || lead.year !== yr) return false;
         } else if (filter.folder === "website_form") {
           if (lead.source !== "wizard") return false;
         } else if (filter.folder === "hot_leads") {
           if ((lead.source !== "admin" && lead.source !== "manual") || lead.isBulkUpload) return false;
         }
       } else if (filter.year && filter.year !== "all") {
-        if (lead.year !== filter.year) return false;
+        if (lead.source === "wizard" || lead.year !== filter.year) return false;
       }
       return true;
     });
@@ -353,14 +355,14 @@ export async function executeLeadAllocation(req: {
     if (req.conditions.folder && req.conditions.folder !== "all") {
       if (req.conditions.folder.startsWith("year_")) {
         const yr = req.conditions.folder.replace("year_", "");
-        if (lead.year !== yr) return false;
+        if (lead.source === "wizard" || lead.year !== yr) return false;
       } else if (req.conditions.folder === "website_form") {
         if (lead.source !== "wizard") return false;
       } else if (req.conditions.folder === "hot_leads") {
-        if (lead.source === "wizard") return false;
+        if ((lead.source !== "admin" && lead.source !== "manual") || lead.isBulkUpload) return false;
       }
     } else if (req.conditions.year && req.conditions.year !== "all") {
-      if (lead.year !== req.conditions.year) return false;
+      if (lead.source === "wizard" || lead.year !== req.conditions.year) return false;
     }
 
     // 1. Area filter (Location-scoped matching)

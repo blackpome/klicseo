@@ -88,6 +88,9 @@ export interface LeadRow {
   discount_percent: number | null;
   custom_fields: Record<string, string> | null;
   notes: string | null;
+
+  primaryLocality?: string | null;
+  assigned_admin_user?: { email: string; employees?: { name: string } | null } | null;
 }
 
 export type NewLead = Omit<LeadRow, "id" | "created_at" | "status" | "price_base" | "price_interior_addon" | "add_on_labels" | "client_timezone"> & {
@@ -287,7 +290,7 @@ export async function listLeadStatusSummary(
     : null;
 
   if (targetYear) {
-    candidateLeads = candidateLeads.filter((l) => l.year === targetYear);
+    candidateLeads = candidateLeads.filter((l) => l.year === targetYear && l.source !== "wizard");
   }
 
   if (options.area && options.area !== "all") {
@@ -418,7 +421,7 @@ export async function listPaginatedLeads(
     : null;
 
   if (targetYear) {
-    candidateLeads = candidateLeads.filter((l) => l.year === targetYear);
+    candidateLeads = candidateLeads.filter((l) => l.year === targetYear && l.source !== "wizard");
   }
 
   if (opts.area && opts.area !== "all") {
@@ -448,33 +451,47 @@ export async function listPaginatedLeads(
   }
 
   const totalCount = candidateLeads.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const from = (page - 1) * pageSize;
+  const slice = candidateLeads.slice(from, from + pageSize);
 
-  if (totalCount === 0) {
-    return { leads: [], totalCount: 0, page, pageSize, totalPages: 0 };
+  const idsToFetch = slice.map((l) => l.id);
+  if (idsToFetch.length === 0) {
+    return {
+      leads: [],
+      totalCount,
+      page,
+      pageSize,
+      totalPages,
+    };
   }
 
-  const pageSlice = candidateLeads.slice(offset, offset + limit).map((l) => l.id);
-  if (pageSlice.length === 0) {
-    return { leads: [], totalCount, page, pageSize, totalPages };
-  }
-
-  const { data: rows, error: pageErr } = await supabase()
+  const { data: fullRows, error: fetchErr } = await supabase()
     .from("leads")
-    .select("*")
-    .in("id", pageSlice);
+    .select("*, assigned_admin_user:assigned_admin_user_id (email, employees:employee_id (name))")
+    .in("id", idsToFetch);
 
-  if (pageErr) throw pageErr;
+  if (fetchErr) throw fetchErr;
 
-  const leadOrderMap = new Map(pageSlice.map((id, idx) => [id, idx]));
-  const sortedLeads = (rows ?? []).sort(
-    (a, b) => (leadOrderMap.get(a.id) ?? 0) - (leadOrderMap.get(b.id) ?? 0),
-  );
+  const fullMap = new Map((fullRows ?? []).map((r: any) => [r.id, r]));
+  const hydratedLeads: LeadRow[] = [];
 
-  const leads = sortedLeads.map((r) => unsealFields(r as LeadRow, ENCRYPTED_LEAD_FIELDS)!) as LeadRow[];
+  for (const item of slice) {
+    const raw = fullMap.get(item.id);
+    if (raw) {
+      const unsealed = unsealFields(raw as LeadRow, ENCRYPTED_LEAD_FIELDS as unknown as string[])!;
+      hydratedLeads.push({
+        ...unsealed,
+        primaryLocality: item.primaryLocality,
+        assigned_admin_user: Array.isArray(raw.assigned_admin_user)
+          ? raw.assigned_admin_user[0] ?? null
+          : raw.assigned_admin_user ?? null,
+      });
+    }
+  }
 
   return {
-    leads,
+    leads: hydratedLeads,
     totalCount,
     page,
     pageSize,
@@ -538,15 +555,15 @@ export async function listFolderSummaries(assignedAdminUserId?: string): Promise
     } else if ((lead.source === "admin" || lead.source === "manual") && !lead.isBulkUpload) {
       adminCount++;
       if (isBooked) adminBooked++;
+    } else {
+      const year = lead.year || (lead.created_at ? new Date(lead.created_at).getFullYear().toString() : "2026");
+      if (!yearCounts.has(year)) {
+        yearCounts.set(year, { count: 0, booked: 0 });
+      }
+      const yStat = yearCounts.get(year)!;
+      yStat.count++;
+      if (isBooked) yStat.booked++;
     }
-
-    const year = lead.year || (lead.created_at ? new Date(lead.created_at).getFullYear().toString() : "2026");
-    if (!yearCounts.has(year)) {
-      yearCounts.set(year, { count: 0, booked: 0 });
-    }
-    const yStat = yearCounts.get(year)!;
-    yStat.count++;
-    if (isBooked) yStat.booked++;
   }
 
   const systemFolders: FolderSummary[] = [

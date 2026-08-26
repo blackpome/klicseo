@@ -564,7 +564,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
           areaToLeadIds.get(norm)!.push(r.id);
         }
 
-        if (year) {
+        if (year && r.source !== "wizard") {
           if (!yearToLeadIds.has(year)) {
             yearToLeadIds.set(year, []);
           }
@@ -652,7 +652,7 @@ export async function listAreasWithCounts(
     : null;
 
   if (targetYear) {
-    candidateLeads = candidateLeads.filter((l) => l.year === targetYear);
+    candidateLeads = candidateLeads.filter((l) => l.year === targetYear && l.source !== "wizard");
   }
 
   const counts = new Map<string, { count: number; bookedCount: number }>();
