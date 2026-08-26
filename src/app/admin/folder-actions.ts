@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { currentAdmin } from "@/lib/admin-auth";
-import { insertLeadList, addLeadsToList, removeLeadFromList } from "@/lib/leadLists";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
+import { getAdminUser } from "@/lib/admin-users";
+import { insertLeadList, addLeadsToList, removeLeadFromList, getLeadList } from "@/lib/leadLists";
+import { assertLeadInScope } from "@/lib/leads";
 import { logAudit } from "@/lib/audit";
 import { invalidateAssignedLeadsCache, markLeadsAsAssigned } from "@/lib/lead-routing";
 
@@ -27,9 +29,12 @@ export async function createFolderAction(formData: {
   }
 
   try {
+    const adminRow = me.email ? await getAdminUser(me.email) : null;
+    const assignedUserId = me.role === "staff" ? (adminRow?.id || null) : (formData.assignedAdminUserId || null);
+
     const list = await insertLeadList({
       name,
-      assigned_admin_user_id: formData.assignedAdminUserId || null,
+      assigned_admin_user_id: assignedUserId,
     });
 
     await logAudit("create", {
@@ -60,6 +65,17 @@ export async function moveLeadToFolderAction(
   }
 
   try {
+    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+    await assertLeadInScope(leadId, scope);
+
+    // If staff, verify destination folder is also assigned to them
+    if (me.role === "staff" && scope.kind === "assigned") {
+      const targetList = await getLeadList(targetListId);
+      if (!targetList || targetList.assigned_admin_user_id !== scope.adminUserId) {
+        return { ok: false, error: "Forbidden: Cannot move lead to another staff's folder." };
+      }
+    }
+
     await addLeadsToList(targetListId, [leadId]);
     markLeadsAsAssigned([leadId]);
 
@@ -89,6 +105,9 @@ export async function removeLeadFromFolderAction(
   }
 
   try {
+    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+    await assertLeadInScope(leadId, scope);
+
     await removeLeadFromList(listId, leadId);
     invalidateAssignedLeadsCache();
 

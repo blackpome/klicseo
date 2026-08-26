@@ -637,21 +637,23 @@ export default function LeadUploadClient({
                       className="w-full rounded-lg px-3 py-2 text-xs bg-[#050E21] border border-white/15 focus:outline-none focus:border-[#C9A84C] text-white"
                     />
                   </div>
-                  <div>
-                    <label className="text-xs text-white/60 mb-1 block">Assign to Staff Member (Optional)</label>
-                    <select
-                      value={assignedAdminUserId}
-                      onChange={(e) => setAssignedAdminUserId(e.target.value)}
-                      className="w-full rounded-lg px-3 py-2 text-xs bg-[#050E21] border border-white/15 focus:outline-none focus:border-[#C9A84C] text-white"
-                    >
-                      <option value="">— Unassigned (super-admin only) —</option>
-                      {assignableAdmins.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.employees?.name ? `${u.employees.name} (${u.email})` : u.email}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {assignableAdmins.length > 0 && (
+                    <div>
+                      <label className="text-xs text-white/60 mb-1 block">Assign to Staff Member (Optional)</label>
+                      <select
+                        value={assignedAdminUserId}
+                        onChange={(e) => setAssignedAdminUserId(e.target.value)}
+                        className="w-full rounded-lg px-3 py-2 text-xs bg-[#050E21] border border-white/15 focus:outline-none focus:border-[#C9A84C] text-white"
+                      >
+                        <option value="">— Unassigned (super-admin only) —</option>
+                        {assignableAdmins.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.employees?.name ? `${u.employees.name} (${u.email})` : u.email}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
 

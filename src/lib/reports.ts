@@ -100,7 +100,9 @@ export async function getDailyStaffReport(
 
   // 1. Fetch active staff / admin users
   const adminUsers = await listAdminUsers().catch(() => []);
-  const activeStaff = adminUsers.filter((u) => u.status === "active");
+  const activeStaff = adminUsers.filter(
+    (u) => u.status === "active" && (!filter?.assignedAdminUserId || u.id === filter.assignedAdminUserId),
+  );
 
   // Map of email → AdminUser
   const staffByEmail = new Map<string, (typeof activeStaff)[0]>();

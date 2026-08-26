@@ -20,19 +20,17 @@ export default async function EditEmployeePage({
   let employee;
   try {
     employee = await getEmployee(id);
+    if (!employee) notFound();
+    if (me) {
+      const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+      await assertEmployeeInScope(id, scope);
+    }
   } catch (err) {
     return (
       <AdminShell require="employees.manage" section="employees">
         <AdminError err={err} />
       </AdminShell>
     );
-  }
-  if (!employee) notFound();
-
-  // Scope guard: non-super-admins may only edit employees assigned to them.
-  if (me) {
-    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
-    if (!(await assertEmployeeInScope(id, scope))) notFound();
   }
 
   const [jobs, adminUsers] = await Promise.all([listJobs(), listAssignableAdminUsers()]);

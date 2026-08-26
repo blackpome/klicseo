@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/admin-auth";
+import { requirePermission, currentAdmin } from "@/lib/admin-auth";
 import { logAudit } from "@/lib/audit";
 import {
   countMatchingLeads,
@@ -17,6 +17,15 @@ import {
   type RecycleLeadsRequest,
   type RecycleLeadsResult,
 } from "@/lib/lead-routing";
+
+async function requireAdminManager() {
+  const me = await currentAdmin();
+  if (!me) throw new Error("Unauthorized");
+  if (me.role !== "super_admin" && me.role !== "admin") {
+    throw new Error("Forbidden: Only administrators can allocate or reassign leads.");
+  }
+  return me;
+}
 
 /**
  * Preview how many unallocated leads match the given conditions.
@@ -40,7 +49,7 @@ export async function submitLeadAllocationAction(
   req: NewLeadAllocationRequest,
 ): Promise<{ ok: boolean; allocatedCount?: number; mode?: string; error?: string }> {
   try {
-    await requirePermission("leads.manage");
+    await requireAdminManager();
 
     if (!req.lead_count || req.lead_count <= 0) {
       return { ok: false, error: "Please enter a valid number of leads to allocate." };
@@ -92,7 +101,7 @@ export async function cancelScheduledAllocationAction(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requirePermission("leads.manage");
+    await requireAdminManager();
     await cancelScheduledAllocation(id);
     await logAudit("lead_schedule.cancel", {
       entity: "lead_allocation_schedule",
@@ -117,7 +126,7 @@ export async function pauseScheduledAllocationAction(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requirePermission("leads.manage");
+    await requireAdminManager();
     await pauseScheduledAllocation(id);
     await logAudit("lead_schedule.pause", {
       entity: "lead_allocation_schedule",
@@ -142,7 +151,7 @@ export async function resumeScheduledAllocationAction(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requirePermission("leads.manage");
+    await requireAdminManager();
     await resumeScheduledAllocation(id);
     await logAudit("lead_schedule.resume", {
       entity: "lead_allocation_schedule",
@@ -167,7 +176,7 @@ export async function deleteScheduledAllocationAction(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requirePermission("leads.manage");
+    await requireAdminManager();
     await deleteScheduledAllocation(id);
     await logAudit("lead_schedule.delete", {
       entity: "lead_allocation_schedule",
@@ -194,7 +203,7 @@ export async function transferStaffLeadsAction(
   reason: string,
 ): Promise<{ ok: boolean; transferredCount?: number; error?: string }> {
   try {
-    await requirePermission("leads.manage");
+    await requireAdminManager();
     if (!fromAdminUserId || !toAdminUserId) {
       return { ok: false, error: "Source and destination staff must be selected." };
     }
@@ -223,7 +232,7 @@ export async function recycleLeadsAction(
   req: RecycleLeadsRequest,
 ): Promise<{ ok: boolean; result?: RecycleLeadsResult; error?: string }> {
   try {
-    await requirePermission("leads.manage");
+    await requireAdminManager();
     if (!req.target_admin_user_ids?.length && !req.target_list_id) {
       return { ok: false, error: "Please select at least one target telecaller or destination list." };
     }

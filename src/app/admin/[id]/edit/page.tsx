@@ -22,19 +22,17 @@ export default async function EditLeadPage({
   let lead;
   try {
     lead = await getLead(id);
+    if (!lead) notFound();
+    if (me) {
+      const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+      await assertLeadInScope(id, scope);
+    }
   } catch (err) {
     return (
       <AdminShell require="leads.manage">
         <AdminError err={err} />
       </AdminShell>
     );
-  }
-  if (!lead) notFound();
-
-  // Scope guard: non-super-admins may only edit leads in their assigned lists.
-  if (me) {
-    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
-    if (!(await assertLeadInScope(id, scope))) notFound();
   }
   const knownAreas = await listKnownAreas();
 

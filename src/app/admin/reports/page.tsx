@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AdminShell from "../AdminShell";
 import DailyReportsClient from "./DailyReportsClient";
 import { currentAdmin } from "@/lib/admin-auth";
+import { getAdminUser } from "@/lib/admin-users";
 import { getDailyStaffReport } from "@/lib/reports";
 
 export default async function DailyReportsPage({
@@ -18,12 +19,15 @@ export default async function DailyReportsPage({
     redirect("/admin");
   }
 
+  const adminRow = me.email ? await getAdminUser(me.email) : null;
+  const isStaff = me.role === "staff";
   const { date, startDate, endDate } = await searchParams;
 
   const initialSummary = await getDailyStaffReport({
     date,
     startDate,
     endDate,
+    assignedAdminUserId: isStaff && adminRow?.id ? adminRow.id : undefined,
   });
 
   return (

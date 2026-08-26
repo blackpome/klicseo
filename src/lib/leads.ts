@@ -764,8 +764,8 @@ export async function promoteLeadDraft(id: string, patch: LeadUpdate): Promise<L
 // Used by detail pages to enforce that a non-super-admin can only open rows
 // that fall within their assigned scope.
 
-/** Return true if `leadId` is visible within `scope`. */
-export async function assertLeadInScope(leadId: string, scope: LeadScope): Promise<boolean> {
+/** Check if `leadId` is visible within `scope`. Returns boolean. */
+export async function isLeadInScope(leadId: string, scope: LeadScope): Promise<boolean> {
   if (scope.kind === "all") return true;
   const { data, error } = await supabase()
     .from("lead_list_items")
@@ -774,8 +774,17 @@ export async function assertLeadInScope(leadId: string, scope: LeadScope): Promi
     .eq("lead_lists.assigned_admin_user_id", scope.adminUserId)
     .limit(1)
     .maybeSingle();
-  if (error) throw error;
-  return !!data;
+  if (error || !data) return false;
+  return true;
+}
+
+/** Assert that `leadId` is visible within `scope`. Throws an error if outside scope. */
+export async function assertLeadInScope(leadId: string, scope: LeadScope): Promise<void> {
+  if (scope.kind === "all") return;
+  const inScope = await isLeadInScope(leadId, scope);
+  if (!inScope) {
+    throw new Error("Access Denied: This lead is outside your assigned scope.");
+  }
 }
 
 // Today's date as an IST wall-clock YYYY-MM-DD.

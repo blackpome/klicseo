@@ -171,8 +171,8 @@ export async function deleteEmployee(id: string): Promise<void> {
 
 // --- scope guards -----------------------------------------------------------
 
-/** Return true if `employeeId` is visible within `scope`. */
-export async function assertEmployeeInScope(employeeId: string, scope: EmployeeScope): Promise<boolean> {
+/** Check if `employeeId` is visible within `scope`. Returns boolean. */
+export async function isEmployeeInScope(employeeId: string, scope: EmployeeScope): Promise<boolean> {
   if (scope.kind === "all") return true;
   const { data, error } = await supabase()
     .from("employees")
@@ -180,8 +180,17 @@ export async function assertEmployeeInScope(employeeId: string, scope: EmployeeS
     .eq("id", employeeId)
     .eq("assigned_admin_user_id", scope.adminUserId)
     .maybeSingle();
-  if (error) throw error;
-  return !!data;
+  if (error || !data) return false;
+  return true;
+}
+
+/** Assert that `employeeId` is visible within `scope`. Throws an error if outside scope. */
+export async function assertEmployeeInScope(employeeId: string, scope: EmployeeScope): Promise<void> {
+  if (scope.kind === "all") return;
+  const inScope = await isEmployeeInScope(employeeId, scope);
+  if (!inScope) {
+    throw new Error("Access Denied: This employee is outside your assigned scope.");
+  }
 }
 
 /**

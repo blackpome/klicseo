@@ -69,54 +69,72 @@ describe("resolveScope", () => {
   });
 });
 
-describe("assertLeadInScope", () => {
+describe("assertLeadInScope & isLeadInScope", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it("returns true immediately for super_admin (kind=all)", async () => {
-    const { assertLeadInScope } = await import("@/lib/leads");
-    const result = await assertLeadInScope("lead-1", { kind: "all" });
-    expect(result).toBe(true);
+  it("isLeadInScope returns true immediately for super_admin (kind=all)", async () => {
+    const { isLeadInScope, assertLeadInScope } = await import("@/lib/leads");
+    const inScope = await isLeadInScope("lead-1", { kind: "all" });
+    expect(inScope).toBe(true);
+    await expect(assertLeadInScope("lead-1", { kind: "all" })).resolves.toBeUndefined();
     expect(mockFrom).not.toHaveBeenCalled();
   });
 
-  it("returns true when lead is in the admin's assigned list", async () => {
+  it("isLeadInScope returns true and assertLeadInScope succeeds when lead is in assigned list", async () => {
     mockMaybeSingle.mockResolvedValueOnce({ data: { lead_id: "lead-1" } });
-    const { assertLeadInScope } = await import("@/lib/leads");
-    const result = await assertLeadInScope("lead-1", { kind: "assigned", adminUserId: "sf-1" });
-    expect(result).toBe(true);
+    const { isLeadInScope, assertLeadInScope } = await import("@/lib/leads");
+    const inScope = await isLeadInScope("lead-1", { kind: "assigned", adminUserId: "sf-1" });
+    expect(inScope).toBe(true);
     expect(mockFrom).toHaveBeenCalledWith("lead_list_items");
+
+    mockMaybeSingle.mockResolvedValueOnce({ data: { lead_id: "lead-1" } });
+    await expect(assertLeadInScope("lead-1", { kind: "assigned", adminUserId: "sf-1" })).resolves.toBeUndefined();
   });
 
-  it("returns false when lead is NOT in the admin's assigned list", async () => {
+  it("isLeadInScope returns false and assertLeadInScope throws when lead is NOT in assigned list", async () => {
     mockMaybeSingle.mockResolvedValueOnce({ data: null });
-    const { assertLeadInScope } = await import("@/lib/leads");
-    const result = await assertLeadInScope("lead-1", { kind: "assigned", adminUserId: "sf-1" });
-    expect(result).toBe(false);
+    const { isLeadInScope, assertLeadInScope } = await import("@/lib/leads");
+    const inScope = await isLeadInScope("lead-1", { kind: "assigned", adminUserId: "sf-1" });
+    expect(inScope).toBe(false);
+
+    mockMaybeSingle.mockResolvedValueOnce({ data: null });
+    await expect(assertLeadInScope("lead-1", { kind: "assigned", adminUserId: "sf-1" })).rejects.toThrow(
+      "Access Denied: This lead is outside your assigned scope."
+    );
   });
 });
 
-describe("assertEmployeeInScope", () => {
+describe("assertEmployeeInScope & isEmployeeInScope", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it("returns true immediately for super_admin (kind=all)", async () => {
-    const { assertEmployeeInScope } = await import("@/lib/employees");
-    const result = await assertEmployeeInScope("emp-1", { kind: "all" });
-    expect(result).toBe(true);
+  it("isEmployeeInScope returns true immediately for super_admin (kind=all)", async () => {
+    const { isEmployeeInScope, assertEmployeeInScope } = await import("@/lib/employees");
+    const inScope = await isEmployeeInScope("emp-1", { kind: "all" });
+    expect(inScope).toBe(true);
+    await expect(assertEmployeeInScope("emp-1", { kind: "all" })).resolves.toBeUndefined();
     expect(mockFrom).not.toHaveBeenCalled();
   });
 
-  it("returns true when employee is assigned to the admin", async () => {
+  it("isEmployeeInScope returns true and assertEmployeeInScope succeeds when employee is assigned", async () => {
     mockMaybeSingle.mockResolvedValueOnce({ data: { id: "emp-1" } });
-    const { assertEmployeeInScope } = await import("@/lib/employees");
-    const result = await assertEmployeeInScope("emp-1", { kind: "assigned", adminUserId: "sf-1" });
-    expect(result).toBe(true);
+    const { isEmployeeInScope, assertEmployeeInScope } = await import("@/lib/employees");
+    const inScope = await isEmployeeInScope("emp-1", { kind: "assigned", adminUserId: "sf-1" });
+    expect(inScope).toBe(true);
     expect(mockFrom).toHaveBeenCalledWith("employees");
+
+    mockMaybeSingle.mockResolvedValueOnce({ data: { id: "emp-1" } });
+    await expect(assertEmployeeInScope("emp-1", { kind: "assigned", adminUserId: "sf-1" })).resolves.toBeUndefined();
   });
 
-  it("returns false when employee is NOT assigned to the admin", async () => {
+  it("isEmployeeInScope returns false and assertEmployeeInScope throws when employee is NOT assigned", async () => {
     mockMaybeSingle.mockResolvedValueOnce({ data: null });
-    const { assertEmployeeInScope } = await import("@/lib/employees");
-    const result = await assertEmployeeInScope("emp-1", { kind: "assigned", adminUserId: "sf-1" });
-    expect(result).toBe(false);
+    const { isEmployeeInScope, assertEmployeeInScope } = await import("@/lib/employees");
+    const inScope = await isEmployeeInScope("emp-1", { kind: "assigned", adminUserId: "sf-1" });
+    expect(inScope).toBe(false);
+
+    mockMaybeSingle.mockResolvedValueOnce({ data: null });
+    await expect(assertEmployeeInScope("emp-1", { kind: "assigned", adminUserId: "sf-1" })).rejects.toThrow(
+      "Access Denied: This employee is outside your assigned scope."
+    );
   });
 });

@@ -291,18 +291,20 @@ export default async function AdminLeadsPage({
 
             {canManage && (
               <>
-                <FolderAllocationButton
-                  folder={folder}
-                  area={areaFilter}
-                  folderName={activeFolderName}
-                  adminUsers={assignableUsers}
-                  lists={leadLists}
-                  availableAreas={areaCounts.map((a) => a.area)}
-                  allFolders={[
-                    ...folderSummaries.systemFolders.map((f) => ({ id: f.id, name: f.name, count: f.count })),
-                    ...folderSummaries.customFolders.map((f) => ({ id: f.id, name: f.name, count: f.count })),
-                  ]}
-                />
+                {(isSuperAdmin || me?.role === "admin") && (
+                  <FolderAllocationButton
+                    folder={folder}
+                    area={areaFilter}
+                    folderName={activeFolderName}
+                    adminUsers={assignableUsers}
+                    lists={leadLists}
+                    availableAreas={areaCounts.map((a) => a.area)}
+                    allFolders={[
+                      ...folderSummaries.systemFolders.map((f) => ({ id: f.id, name: f.name, count: f.count })),
+                      ...folderSummaries.customFolders.map((f) => ({ id: f.id, name: f.name, count: f.count })),
+                    ]}
+                  />
+                )}
 
                 <Link
                   href="/admin/upload"
@@ -331,7 +333,7 @@ export default async function AdminLeadsPage({
             customFolders={folderSummaries.customFolders}
             totalLeads={folderSummaries.totalLeads}
             adminUsers={assignableUsers}
-            canManage={canManage}
+            canManage={(isSuperAdmin || me?.role === "admin") && canManage}
           />
         ) : isYearSubFoldersView ? (
           /* LEVEL 2 VIEW: Area Sub-Folders Deck for Year Cohort */

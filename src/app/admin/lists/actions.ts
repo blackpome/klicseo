@@ -15,7 +15,7 @@ import {
   getLeadsInList,
 } from "@/lib/leadLists";
 import { listLeads, mapLeadIdsToLists } from "@/lib/leads";
-import { listAssignableAdminUsers } from "@/lib/admin-users";
+import { getAdminUser, listAssignableAdminUsers } from "@/lib/admin-users";
 import { logAudit } from "@/lib/audit";
 import type { LeadStatus } from "@/lib/leads-shared";
 
@@ -27,15 +27,17 @@ export async function createLeadListAction(
   _prev: { error?: string },
   formData: FormData
 ): Promise<{ error?: string; redirectTo?: string }> {
-  await requirePermission("leads.manage");
+  const me = await requirePermission("leads.manage");
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) {
     return { error: "List name is required" };
   }
-  const assigned_admin_user_id = String(formData.get("assigned_admin_user_id") ?? "").trim() || null;
+  const assigned_admin_user_id_raw = String(formData.get("assigned_admin_user_id") ?? "").trim() || null;
+  const adminRow = me.email ? await getAdminUser(me.email) : null;
+  const assigned_admin_user_id = me.role === "staff" ? (adminRow?.id || null) : assigned_admin_user_id_raw;
 
-  if (assigned_admin_user_id) {
+  if (assigned_admin_user_id && me.role !== "staff") {
     const adminUsers = await listAssignableAdminUsers();
     const allowed = adminUsers.some((u) => u.id === assigned_admin_user_id);
     if (!allowed) {
@@ -193,7 +195,10 @@ export async function removeLeadFromListAction(formData: FormData): Promise<{ er
  * Delete a lead list action.
  */
 export async function deleteLeadListAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("leads.manage");
+  const me = await requirePermission("leads.manage");
+  if (me.role !== "super_admin" && me.role !== "admin") {
+    return { ok: false, error: "Forbidden: Only administrators can delete lead lists." };
+  }
 
   const listId = String(formData.get("id") ?? "");
   if (!listId) return { ok: false, error: "Missing list ID" };

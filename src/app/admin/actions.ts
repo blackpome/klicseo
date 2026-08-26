@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requirePermission, currentAdmin } from "@/lib/admin-auth";
+import { requirePermission, currentAdmin, resolveScope } from "@/lib/admin-auth";
 import { getAdminUser } from "@/lib/admin-users";
 import { addLeadsToList, insertLeadList } from "@/lib/leadLists";
 import { supabase } from "@/lib/supabase";
@@ -12,6 +12,7 @@ import {
   updateLead,
   updateLeadStatus,
   getLead,
+  assertLeadInScope,
   type LeadStatus,
   type LeadUpdate,
   type NewLead,
@@ -23,10 +24,14 @@ import { logAudit } from "@/lib/audit";
 import { processQueueAutoRefills } from "@/lib/lead-routing";
 
 export async function setStatusAction(formData: FormData) {
-  await requirePermission("leads.manage");
+  const me = await requirePermission("leads.manage");
   const id = String(formData.get("id") ?? "");
   const status = String(formData.get("status") ?? "") as LeadStatus;
   if (!id || !status) return;
+
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+  await assertLeadInScope(id, scope);
+
   await updateLeadStatus(id, status);
   await logAudit("lead.status", { entity: "lead", entityId: id, summary: `Set lead status → ${status}` });
   
@@ -40,7 +45,10 @@ export async function setStatusAction(formData: FormData) {
 }
 
 export async function deleteLeadAction(formData: FormData) {
-  await requirePermission("leads.manage");
+  const me = await requirePermission("leads.manage");
+  if (me.role !== "super_admin" && me.role !== "admin") {
+    throw new Error("Forbidden: Only administrators can delete leads.");
+  }
   const id = String(formData.get("id") ?? "");
   const returnTo = String(formData.get("returnTo") ?? "");
   if (!id) return;
@@ -54,10 +62,14 @@ export async function deleteLeadAction(formData: FormData) {
 }
 
 export async function updateLeadNotesAction(formData: FormData) {
-  await requirePermission("leads.manage");
+  const me = await requirePermission("leads.manage");
   const id = String(formData.get("id") ?? "");
   const notes = String(formData.get("notes") ?? "");
   if (!id) return;
+
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+  await assertLeadInScope(id, scope);
+
   // Route through updateLead so the notes field is encrypted by the lib.
   await updateLead(id, { notes: notes || null });
   await logAudit("lead.notes", { entity: "lead", entityId: id, summary: "Updated lead notes" });
@@ -186,10 +198,13 @@ export async function createLeadAction(
 }
 
 export async function updateLeadAction(_prev: { error?: string }, formData: FormData) {
-  await requirePermission("leads.manage");
+  const me = await requirePermission("leads.manage");
   const id = String(formData.get("id") ?? "");
   const returnTo = String(formData.get("returnTo") ?? "");
   if (!id) return { error: "Missing lead id." };
+
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+  await assertLeadInScope(id, scope);
 
   const data = readLeadFromForm(formData, await getServiceDiscounts());
   // Snapshot before/after so the audit log carries the field-level diff.
@@ -247,7 +262,7 @@ export interface BulkImportActionResult {
 export async function bulkImportLeadsAction(
   payload: BulkImportActionPayload,
 ): Promise<BulkImportActionResult> {
-  await requirePermission("leads.manage");
+  const me = await requirePermission("leads.manage");
 
   if (!payload || !Array.isArray(payload.leads) || payload.leads.length === 0) {
     return {
@@ -263,6 +278,10 @@ export async function bulkImportLeadsAction(
     };
   }
 
+  const adminRow = me.email ? await getAdminUser(me.email) : null;
+  // If caller is staff, force assignedAdminUserId = adminRow.id
+  const effectiveAssignedUserId = me.role === "staff" ? (adminRow?.id || null) : (payload.assignedAdminUserId || null);
+
   let finalTargetListId: string | null = payload.targetListId || null;
   let finalListName: string | null = null;
 
@@ -272,7 +291,7 @@ export async function bulkImportLeadsAction(
       const { insertLeadList } = await import("@/lib/leadLists");
       const listRow = await insertLeadList({
         name: payload.newListName.trim(),
-        assigned_admin_user_id: payload.assignedAdminUserId || null,
+        assigned_admin_user_id: effectiveAssignedUserId,
       });
       finalTargetListId = listRow.id;
       finalListName = listRow.name;

@@ -4,7 +4,7 @@ import AdminShell from "../AdminShell";
 import AdminBackButton from "@/components/AdminBackButton";
 import { currentAdmin } from "@/lib/admin-auth";
 import { listLeadLists } from "@/lib/leadLists";
-import { listAdminUsers } from "@/lib/admin-users";
+import { getAdminUser, listAdminUsers } from "@/lib/admin-users";
 import LeadUploadClient from "./LeadUploadClient";
 
 export const dynamic = "force-dynamic";
@@ -19,10 +19,12 @@ export default async function LeadUploadPage({
   if (!me.permissions.includes("leads.manage")) redirect("/admin");
 
   const { listId } = await searchParams;
+  const adminRow = me.email ? await getAdminUser(me.email) : null;
+  const isStaff = me.role === "staff";
 
   const [leadLists, adminUsers] = await Promise.all([
-    listLeadLists(),
-    listAdminUsers(),
+    listLeadLists(isStaff && adminRow?.id ? { assignedAdminUserId: adminRow.id } : undefined),
+    isStaff ? Promise.resolve([]) : listAdminUsers(),
   ]);
 
   const activeAdmins = adminUsers.filter((u) => u.status === "active");

@@ -3,7 +3,7 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requirePermission } from "@/lib/admin-auth";
+import { requirePermission, resolveScope } from "@/lib/admin-auth";
 import { supabase } from "@/lib/supabase";
 import {
   BUCKET,
@@ -12,6 +12,7 @@ import {
   updateEmployee,
   updateEmployeeStatus,
   getEmployee,
+  assertEmployeeInScope,
   type EmployeeStatus,
   type EmployeeUpdate,
   type NewEmployee,
@@ -19,10 +20,14 @@ import {
 import { logAudit } from "@/lib/audit";
 
 export async function setEmployeeStatusAction(formData: FormData) {
-  await requirePermission("employees.manage");
+  const me = await requirePermission("employees.manage");
   const id = String(formData.get("id") ?? "");
   const status = String(formData.get("status") ?? "") as EmployeeStatus;
   if (!id || !status) return;
+
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+  await assertEmployeeInScope(id, scope);
+
   await updateEmployeeStatus(id, status);
   await logAudit("employee.status", { entity: "employee", entityId: id, summary: `Set employee status → ${status}` });
   revalidatePath("/admin/employees");
@@ -30,7 +35,10 @@ export async function setEmployeeStatusAction(formData: FormData) {
 }
 
 export async function deleteEmployeeAction(formData: FormData) {
-  await requirePermission("employees.manage");
+  const me = await requirePermission("employees.manage");
+  if (me.role !== "super_admin" && me.role !== "admin") {
+    throw new Error("Forbidden: Only administrators can delete employees.");
+  }
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await deleteEmployee(id);
@@ -121,9 +129,12 @@ export async function createEmployeeAction(_prev: { error?: string }, formData: 
 }
 
 export async function updateEmployeeAction(_prev: { error?: string }, formData: FormData) {
-  await requirePermission("employees.manage");
+  const me = await requirePermission("employees.manage");
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Missing employee id." };
+
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+  await assertEmployeeInScope(id, scope);
 
   const data = readCommonFields(formData);
   const err = validate(data.name, data.phone);
@@ -157,7 +168,10 @@ export async function updateEmployeeAction(_prev: { error?: string }, formData: 
 }
 
 export async function assignEmployeesAction(formData: FormData): Promise<{ error?: string }> {
-  await requirePermission("employees.manage");
+  const me = await requirePermission("employees.manage");
+  if (me.role !== "super_admin" && me.role !== "admin") {
+    return { error: "Forbidden: Only administrators can assign employees." };
+  }
   const adminUserId = String(formData.get("adminUserId") ?? "").trim() || null;
   const ids = formData.getAll("employeeIds").map((v) => String(v));
   if (!adminUserId) return { error: "Choose a team member to assign to." };

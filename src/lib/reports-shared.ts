@@ -61,4 +61,5 @@ export interface DailyReportFilter {
   startDate?: string;        // YYYY-MM-DD for range start
   endDate?: string;          // YYYY-MM-DD for range end
   preset?: "today" | "yesterday" | "last7days" | "thismonth" | "custom";
+  assignedAdminUserId?: string;
 }

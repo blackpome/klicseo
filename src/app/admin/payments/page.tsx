@@ -33,6 +33,7 @@ export default async function PaymentsPage({
 }) {
   const me = await currentAdmin();
   if (!me) redirect("/admin/login");
+  if (!me.permissions.includes("payments.view")) redirect("/admin");
 
   const { month } = await searchParams;
   const period = month && isValidPeriod(month) ? month : currentPeriod();
@@ -46,7 +47,7 @@ export default async function PaymentsPage({
     ]);
   } catch (err) {
     return (
-      <AdminShell><AdminError err={err} /></AdminShell>
+      <AdminShell require="payments.view"><AdminError err={err} /></AdminShell>
     );
   }
 
