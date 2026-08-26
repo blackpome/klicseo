@@ -11,13 +11,17 @@ import { searchCars, getCar, listAllCars } from "@/lib/cars";
 //                 Used by the admin tier picker so cars already in other
 //                 tiers can be moved without scrolling through fuzzy results.
 //   (none)     → []
+const CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+};
+
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
   const id = params.get("id");
   if (id) {
     try {
       const car = await getCar(id);
-      return NextResponse.json({ cars: car ? [car] : [] });
+      return NextResponse.json({ cars: car ? [car] : [] }, { headers: CACHE_HEADERS });
     } catch (err) {
       console.error("Car lookup failed:", err);
       return NextResponse.json({ cars: [], error: "Lookup failed" }, { status: 500 });
@@ -26,7 +30,7 @@ export async function GET(req: NextRequest) {
   if (params.get("all") === "1") {
     try {
       const cars = await listAllCars(500);
-      return NextResponse.json({ cars });
+      return NextResponse.json({ cars }, { headers: CACHE_HEADERS });
     } catch (err) {
       console.error("Car list failed:", err);
       return NextResponse.json({ cars: [], error: "List failed" }, { status: 500 });
@@ -34,13 +38,13 @@ export async function GET(req: NextRequest) {
   }
   const q = params.get("q") ?? "";
   if (q.trim().length < 1) {
-    return NextResponse.json({ cars: [] });
+    return NextResponse.json({ cars: [] }, { headers: CACHE_HEADERS });
   }
   const limitRaw = Number(params.get("limit"));
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(200, Math.round(limitRaw)) : 8;
   try {
     const cars = await searchCars(q, limit);
-    return NextResponse.json({ cars });
+    return NextResponse.json({ cars }, { headers: CACHE_HEADERS });
   } catch (err) {
     console.error("Car search failed:", err);
     return NextResponse.json({ cars: [], error: "Search failed" }, { status: 500 });

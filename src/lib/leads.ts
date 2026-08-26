@@ -158,47 +158,30 @@ export async function listServiceCounts(
   const options: ListServiceCountsOptions =
     typeof opts === "string" ? { assignedAdminUserId: opts } : opts;
 
-  // If scoped, first resolve the lead ids the admin can see.
-  let allowedLeadIds: string[] | null = null;
+  const locationIndex = await getOrBuildLocationIndex();
+  let candidateLeads = locationIndex.allLeads;
+
   if (options.assignedAdminUserId) {
     const { data: items, error: itemsErr } = await supabase()
       .from("lead_list_items")
       .select("lead_id, lead_lists!inner(assigned_admin_user_id)")
       .eq("lead_lists.assigned_admin_user_id", options.assignedAdminUserId);
     if (itemsErr) throw itemsErr;
-    allowedLeadIds = Array.from(
-      new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id)),
-    );
-    if (allowedLeadIds.length === 0) return [];
+    const allowed = new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id));
+    candidateLeads = candidateLeads.filter((l) => allowed.has(l.id));
   }
 
-  const allRows: Array<{ service: string | null }> = [];
-  let from = 0;
-  const batchSize = 1000;
-
-  while (true) {
-    let q = supabase().from("leads").select("service, area, address").range(from, from + batchSize - 1);
-    if (allowedLeadIds) q = q.in("id", allowedLeadIds);
-    if (options.area && options.area !== "all") {
-      const sArea = sanitizeSearch(options.area);
-      if (sArea) {
-        q = q.or(`area.eq.${options.area},address.ilike.%${sArea}%`);
-      } else {
-        q = q.eq("area", options.area);
-      }
-    }
-    const { data, error } = await q;
-    if (error || !data || data.length === 0) break;
-    allRows.push(...data);
-    if (data.length < batchSize) break;
-    from += batchSize;
+  if (options.area && options.area !== "all") {
+    const norm = options.area.trim().toLowerCase();
+    candidateLeads = candidateLeads.filter((l) => l.primaryLocality.toLowerCase() === norm);
   }
 
   const counts = new Map<string, number>();
-  for (const r of allRows) {
-    if (!r.service) continue;
-    counts.set(r.service, (counts.get(r.service) ?? 0) + 1);
+  for (const l of candidateLeads) {
+    if (!l.service) continue;
+    counts.set(l.service, (counts.get(l.service) ?? 0) + 1);
   }
+
   return [...counts.entries()]
     .map(([service, count]) => ({ service, count }))
     .sort((a, b) => b.count - a.count || a.service.localeCompare(b.service));
@@ -520,17 +503,23 @@ export async function listFolderSummaries(assignedAdminUserId?: string): Promise
   customFolders: FolderSummary[];
   totalLeads: number;
 }> {
+  let listQuery = supabase()
+    .from("lead_lists")
+    .select("id, name, assigned_admin_user_id, admin_users(email, employees(name)), lead_list_items(lead_id)")
+    .order("created_at", { ascending: false });
+
+  if (assignedAdminUserId) {
+    listQuery = listQuery.eq("assigned_admin_user_id", assignedAdminUserId);
+  }
+
   const [locationIndex, leadListsRes] = await Promise.all([
     getOrBuildLocationIndex(),
-    supabase()
-      .from("lead_lists")
-      .select("id, name, assigned_admin_user_id, admin_users(email, employees(name)), lead_list_items(lead_id)")
-      .order("created_at", { ascending: false }),
+    listQuery,
   ]);
 
   let allLeads = locationIndex.allLeads;
   if (assignedAdminUserId) {
-    const userLists = (leadListsRes.data ?? []).filter((l: any) => l.assigned_admin_user_id === assignedAdminUserId);
+    const userLists = (leadListsRes.data ?? []);
     const allowedIds = new Set(userLists.flatMap((l: any) => (l.lead_list_items ?? []).map((i: any) => i.lead_id)));
     allLeads = allLeads.filter((l) => allowedIds.has(l.id));
   }

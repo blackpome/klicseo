@@ -19,6 +19,20 @@ type RawCar = {
   tier_id: string | null;
 };
 
+interface TierPriceCacheEntry {
+  amounts: Record<string, number | null>;
+  mrpAmounts: Record<string, number | null>;
+  legacy: Record<string, number | null>;
+  legacyMrp: Record<string, number | null>;
+  expires: number;
+}
+
+const tierPriceCache = new Map<string, TierPriceCacheEntry>();
+
+export function invalidateTierPriceCache(): void {
+  tierPriceCache.clear();
+}
+
 /**
  * Bulk-resolve cars into full CarRecord by joining each tier's prices from
  * price_tier_amounts in one extra query. Cars without a tier get null prices
@@ -26,23 +40,22 @@ type RawCar = {
  */
 async function withTierPrices(rows: RawCar[]): Promise<CarRecord[]> {
   if (rows.length === 0) return [];
-  const tierIds = Array.from(new Set(rows.map((r) => r.tier_id).filter((x): x is string => !!x)));
-  // Parallel maps from the SAME source data:
-  //   legacyByTier   — legacy 9-key amount lookup (used by carPriceFor)
-  //   amountsByTier  — line_id-keyed amount lookup (used by carPriceForCatalog)
-  //   legacyMrpByTier / mrpAmountsByTier — same shapes but for the optional
-  //   MRP override (price_tier_amounts.mrp_amount). Null/missing means the
-  //   strike price will be computed via grossUp() at price-resolution time.
-  const legacyByTier = new Map<string, Record<string, number | null>>();
-  const amountsByTier = new Map<string, Record<string, number | null>>();
-  const legacyMrpByTier = new Map<string, Record<string, number | null>>();
-  const mrpAmountsByTier = new Map<string, Record<string, number | null>>();
-  if (tierIds.length > 0) {
+  const now = Date.now();
+  const allTierIds = Array.from(new Set(rows.map((r) => r.tier_id).filter((x): x is string => !!x)));
+  
+  // Find which tier IDs are missing from cache or expired
+  const missingTierIds = allTierIds.filter((id) => {
+    const cached = tierPriceCache.get(id);
+    return !cached || cached.expires <= now;
+  });
+
+  if (missingTierIds.length > 0) {
     const { data, error } = await supabase()
       .from("price_tier_amounts")
       .select("tier_id, line_id, amount, mrp_amount, service_price_lines!inner(legacy_line)")
-      .in("tier_id", tierIds);
+      .in("tier_id", missingTierIds);
     if (error) throw error;
+
     type Row = {
       tier_id: string;
       line_id: string;
@@ -50,25 +63,50 @@ async function withTierPrices(rows: RawCar[]): Promise<CarRecord[]> {
       mrp_amount: number | null;
       service_price_lines: { legacy_line: string | null } | Array<{ legacy_line: string | null }>;
     };
+
+    // Group fetched rows by tier_id
+    const fetchedByTier = new Map<string, Row[]>();
     for (const row of (data ?? []) as unknown as Row[]) {
-      // line-id maps: always populate
-      (amountsByTier.get(row.tier_id) ?? amountsByTier.set(row.tier_id, {}).get(row.tier_id)!)[row.line_id] = row.amount;
-      (mrpAmountsByTier.get(row.tier_id) ?? mrpAmountsByTier.set(row.tier_id, {}).get(row.tier_id)!)[row.line_id] = row.mrp_amount;
-      // legacy maps: only if this line has a known legacy_line
-      const rel = row.service_price_lines;
-      const relRow = Array.isArray(rel) ? rel[0] : rel;
-      const key = relRow?.legacy_line;
-      if (key && (ALL_PRICE_LINES as string[]).includes(key)) {
-        (legacyByTier.get(row.tier_id) ?? legacyByTier.set(row.tier_id, {}).get(row.tier_id)!)[key] = row.amount;
-        (legacyMrpByTier.get(row.tier_id) ?? legacyMrpByTier.set(row.tier_id, {}).get(row.tier_id)!)[key] = row.mrp_amount;
+      const list = fetchedByTier.get(row.tier_id) ?? [];
+      list.push(row);
+      fetchedByTier.set(row.tier_id, list);
+    }
+
+    // Cache each missing tier ID (even if it has no price rows yet)
+    for (const tid of missingTierIds) {
+      const rowsForTier = fetchedByTier.get(tid) ?? [];
+      const amounts: Record<string, number | null> = {};
+      const mrpAmounts: Record<string, number | null> = {};
+      const legacy: Record<string, number | null> = {};
+      const legacyMrp: Record<string, number | null> = {};
+
+      for (const row of rowsForTier) {
+        amounts[row.line_id] = row.amount;
+        mrpAmounts[row.line_id] = row.mrp_amount;
+        const rel = row.service_price_lines;
+        const relRow = Array.isArray(rel) ? rel[0] : rel;
+        const key = relRow?.legacy_line;
+        if (key && (ALL_PRICE_LINES as string[]).includes(key)) {
+          legacy[key] = row.amount;
+          legacyMrp[key] = row.mrp_amount;
+        }
       }
+
+      tierPriceCache.set(tid, {
+        amounts,
+        mrpAmounts,
+        legacy,
+        legacyMrp,
+        expires: now + 60_000,
+      });
     }
   }
   return rows.map((c) => {
-    const tp = c.tier_id ? legacyByTier.get(c.tier_id) ?? {} : {};
-    const tpMrp = c.tier_id ? legacyMrpByTier.get(c.tier_id) ?? {} : {};
-    const amounts = c.tier_id ? amountsByTier.get(c.tier_id) ?? {} : {};
-    const mrpAmounts = c.tier_id ? mrpAmountsByTier.get(c.tier_id) ?? {} : {};
+    const cached = c.tier_id ? tierPriceCache.get(c.tier_id) : null;
+    const tp = cached?.legacy ?? {};
+    const tpMrp = cached?.legacyMrp ?? {};
+    const amounts = cached?.amounts ?? {};
+    const mrpAmounts = cached?.mrpAmounts ?? {};
     const mrp: Record<string, number | null> = {};
     const merged: Record<string, unknown> = { ...c, amounts, mrpAmounts, mrp };
     for (const line of ALL_PRICE_LINES) {

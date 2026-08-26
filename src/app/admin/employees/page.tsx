@@ -65,14 +65,12 @@ export default async function AdminEmployeesPage({
   let jobCounts: Array<{ job_role: string; count: number }> = [];
   try {
     const canManage = Boolean(me?.permissions.includes("employees.manage"));
-    [employees, roleLabel, adminUsers] = await Promise.all([
+    [employees, roleLabel, adminUsers, jobCounts] = await Promise.all([
       listEmployees({ status: filter, search: q, assignedAdminUserId, jobRole: roleFilter }),
       jobTitleMap(),
       canManage ? listAssignableAdminUsers() : Promise.resolve([]),
+      listJobCounts({ assignedAdminUserId }),
     ]);
-
-    // Job counts for the pill bar — scoped to the caller's visible employees.
-    jobCounts = await listJobCounts({ assignedAdminUserId });
   } catch (err) {
     return (
       <AdminShell require="employees.view" section="employees">

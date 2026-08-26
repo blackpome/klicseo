@@ -111,7 +111,7 @@ export async function getDailyStaffReport(
   }
 
   // 2. Fetch queue stats (assigned leads & pending uncalled per staff)
-  const { data: queueItems } = await supabase()
+  let queueQuery = supabase()
     .from("lead_list_items")
     .select(`
       list_id,
@@ -119,6 +119,12 @@ export async function getDailyStaffReport(
       lead_lists!inner(assigned_admin_user_id),
       leads:lead_id (status)
     `);
+
+  if (filter?.assignedAdminUserId) {
+    queueQuery = queueQuery.eq("lead_lists.assigned_admin_user_id", filter.assignedAdminUserId);
+  }
+
+  const { data: queueItems } = await queueQuery;
 
   const assignedCountByStaff = new Map<string, number>();
   const pendingCountByStaff = new Map<string, number>();
@@ -137,13 +143,19 @@ export async function getDailyStaffReport(
   }
 
   // 3. Fetch audit logs in the date window for lead actions
-  const { data: logs, error: logsErr } = await supabase()
+  let auditQuery = supabase()
     .from("audit_logs")
     .select("id, created_at, actor_email, action, entity, entity_id, summary, metadata")
     .in("action", ["lead.status", "lead.create", "lead.notes", "lead.update"])
     .gte("created_at", startUtc)
     .lte("created_at", endUtc)
     .order("created_at", { ascending: true });
+
+  if (filter?.assignedAdminUserId && activeStaff.length === 1) {
+    auditQuery = auditQuery.eq("actor_email", activeStaff[0].email);
+  }
+
+  const { data: logs, error: logsErr } = await auditQuery;
 
   if (logsErr) {
     console.error("Failed to query audit logs for daily report:", logsErr);
