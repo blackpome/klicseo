@@ -362,6 +362,19 @@ export function extractLeadYear(
   return "2026";
 }
 
+export function isBulkUploadLead(
+  customFields?: Record<string, any> | null,
+  source?: string | null,
+): boolean {
+  if (source === "upload" || source === "csv_import") return true;
+  if (!customFields) return false;
+  const cf = customFields;
+  if (cf["upload_file"] || cf["file_name"] || cf["source_file"]) return true;
+  if (cf["Reg. Date"] || cf["REG DATE"] || cf["REG. DATE"] || cf["REG_DATE"] || cf["Registration Date"]) return true;
+  if (cf["Vehicle Maker"] || cf["Vehicle Model"] || cf["Vehicle Class"] || cf["Owner Name"] || cf["Sale Amount"]) return true;
+  return false;
+}
+
 export interface LeadLocationSummary {
   id: string;
   primaryLocality: string;
@@ -373,6 +386,7 @@ export interface LeadLocationSummary {
   source?: string | null;
   created_at?: string | null;
   year?: string;
+  isBulkUpload?: boolean;
 }
 
 interface LocationIndexCache {
@@ -524,6 +538,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
         const resolved = primary || "Unspecified";
         const norm = resolved.toLowerCase();
         const year = extractLeadYear(r.custom_fields, r.created_at);
+        const isBulk = isBulkUploadLead(r.custom_fields, r.source);
 
         const summary: LeadLocationSummary = {
           id: r.id,
@@ -536,6 +551,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
           source: r.source,
           created_at: r.created_at,
           year,
+          isBulkUpload: isBulk,
         };
 
         leadMap.set(r.id, summary);
@@ -619,7 +635,7 @@ export async function listAreasWithCounts(
   if (options.folder === "website_form" || options.source === "wizard") {
     candidateLeads = candidateLeads.filter((l) => l.source === "wizard");
   } else if (options.folder === "hot_leads" || options.source === "admin") {
-    candidateLeads = candidateLeads.filter((l) => l.source === "admin" || l.source === "manual");
+    candidateLeads = candidateLeads.filter((l) => (l.source === "admin" || l.source === "manual") && !l.isBulkUpload);
   }
 
   // 4. Year folder or year filter

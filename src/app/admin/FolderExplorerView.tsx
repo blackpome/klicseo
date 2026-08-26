@@ -174,7 +174,7 @@ export default function FolderExplorerView({
                   🔥 Hot Leads (Admin Added)
                 </h4>
                 <p className="text-xs text-white/50 mt-1">
-                  Manually captured leads and bulk-imported CSV batches managed by administrators.
+                  Manually created leads added directly by administrators and staff.
                 </p>
               </div>
 

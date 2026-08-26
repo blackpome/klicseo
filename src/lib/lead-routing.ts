@@ -47,7 +47,7 @@ export function matchesFilter(
     } else if (filter.folder === "website_form") {
       if ((lead as any).source !== "wizard") return false;
     } else if (filter.folder === "hot_leads") {
-      if ((lead as any).source !== "admin" && (lead as any).source !== "manual") return false;
+      if (((lead as any).source !== "admin" && (lead as any).source !== "manual") || (lead as any).isBulkUpload) return false;
     }
   } else if (filter.year && filter.year !== "all") {
     const leadYear = (lead as any).year || ((lead as any).created_at ? (lead as any).created_at.slice(0, 4) : "2026");
@@ -202,7 +202,7 @@ export async function countMatchingLeads(
         } else if (filter.folder === "website_form") {
           if (lead.source !== "wizard") return false;
         } else if (filter.folder === "hot_leads") {
-          if (lead.source !== "admin" && lead.source !== "manual") return false;
+          if ((lead.source !== "admin" && lead.source !== "manual") || lead.isBulkUpload) return false;
         }
       } else if (filter.year && filter.year !== "all") {
         if (lead.year !== filter.year) return false;

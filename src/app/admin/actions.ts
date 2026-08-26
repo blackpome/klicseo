@@ -308,7 +308,7 @@ export async function bulkImportLeadsAction(
       upload_file: payload.sourceFileName || "Spreadsheet Upload",
     },
     status: payload.defaultStatus || "new",
-    source: "admin",
+    source: "upload",
     service: null,
     service_option: null,
     interior_add_on: false,

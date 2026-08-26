@@ -293,7 +293,7 @@ export async function listLeadStatusSummary(
   if (options.folder === "website_form" || options.source === "wizard") {
     candidateLeads = candidateLeads.filter((l) => l.source === "wizard");
   } else if (options.folder === "hot_leads" || options.source === "admin") {
-    candidateLeads = candidateLeads.filter((l) => l.source === "admin" || l.source === "manual");
+    candidateLeads = candidateLeads.filter((l) => (l.source === "admin" || l.source === "manual") && !l.isBulkUpload);
   }
 
   // Year folder or year filter
@@ -424,7 +424,7 @@ export async function listPaginatedLeads(
   if (opts.folder === "website_form" || opts.source === "wizard") {
     candidateLeads = candidateLeads.filter((l) => l.source === "wizard");
   } else if (opts.folder === "hot_leads" || opts.source === "admin") {
-    candidateLeads = candidateLeads.filter((l) => l.source === "admin" || l.source === "manual");
+    candidateLeads = candidateLeads.filter((l) => (l.source === "admin" || l.source === "manual") && !l.isBulkUpload);
   }
 
   // Year folder or year filter
@@ -546,7 +546,7 @@ export async function listFolderSummaries(assignedAdminUserId?: string): Promise
     if (lead.source === "wizard") {
       websiteCount++;
       if (isBooked) websiteBooked++;
-    } else if (lead.source === "admin" || lead.source === "manual") {
+    } else if ((lead.source === "admin" || lead.source === "manual") && !lead.isBulkUpload) {
       adminCount++;
       if (isBooked) adminBooked++;
     }

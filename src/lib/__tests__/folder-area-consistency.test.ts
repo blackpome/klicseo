@@ -97,20 +97,28 @@ describe("Folder-Scoped Area Counts & Strict Hot Leads Consistency", () => {
   });
 
   it("strictly differentiates hot_leads vs bulk uploads vs website leads in lead routing", () => {
-    const adminLead = { id: "1", source: "admin", status: "new" };
+    const adminManualLead = { id: "1", source: "admin", status: "new" };
     const manualLead = { id: "2", source: "manual", status: "new" };
     const uploadLead = { id: "3", source: "upload", status: "new" };
     const wizardLead = { id: "4", source: "wizard", status: "new" };
+    const legacyBulkUploadTaggedAdmin = {
+      id: "5",
+      source: "admin",
+      status: "new",
+      isBulkUpload: true,
+      custom_fields: { upload_file: "leads_2026.xlsx", "Reg. Date": "2026-01-15" },
+    };
 
-    // Hot Leads folder strictly matches admin and manual leads
-    expect(matchesFilter(adminLead as any, { folder: "hot_leads" })).toBe(true);
+    // Hot Leads folder strictly matches non-bulk admin and manual leads
+    expect(matchesFilter(adminManualLead as any, { folder: "hot_leads" })).toBe(true);
     expect(matchesFilter(manualLead as any, { folder: "hot_leads" })).toBe(true);
     expect(matchesFilter(uploadLead as any, { folder: "hot_leads" })).toBe(false);
     expect(matchesFilter(wizardLead as any, { folder: "hot_leads" })).toBe(false);
+    expect(matchesFilter(legacyBulkUploadTaggedAdmin as any, { folder: "hot_leads" })).toBe(false);
 
     // Website Form folder strictly matches wizard leads
     expect(matchesFilter(wizardLead as any, { folder: "website_form" })).toBe(true);
-    expect(matchesFilter(adminLead as any, { folder: "website_form" })).toBe(false);
+    expect(matchesFilter(adminManualLead as any, { folder: "website_form" })).toBe(false);
     expect(matchesFilter(uploadLead as any, { folder: "website_form" })).toBe(false);
   });
 });
