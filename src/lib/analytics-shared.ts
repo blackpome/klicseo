@@ -3,6 +3,8 @@ export interface AnalyticsFilterOptions {
   area?: string; // "all" | specific locality name
   assignedAdminUserId?: string; // "all" | specific staff ID
   service?: string;
+  folder?: string;
+  source?: string;
 }
 
 export interface YearStatusCount {

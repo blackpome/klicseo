@@ -154,9 +154,9 @@ export default async function AdminLeadsPage({
 
   try {
     const isAreaSubFoldersDeck = Boolean(
-      folder && !area && (folder.startsWith("year_") || folder === "website_form" || folder === "hot_leads")
+      folder && !area && folder !== "all_master" && folder !== "all" && (folder.startsWith("year_") || folder === "website_form" || folder === "hot_leads")
     );
-    const isInsideFolder = Boolean(folder);
+    const isInsideFolder = Boolean(folder && folder !== "all");
     const needsSpreadsheetLeads = Boolean(isInsideFolder && !isAreaSubFoldersDeck);
     const canManageLists = Boolean(me?.permissions.includes("leads.manage"));
     const activeYear = folder?.startsWith("year_") ? folder.replace("year_", "") : year;
@@ -199,11 +199,21 @@ export default async function AdminLeadsPage({
         source,
       }),
       canManageLists ? listLeadLists({ assignedAdminUserId }) : Promise.resolve([]),
-      canManageLists ? listServiceCounts({ assignedAdminUserId, area: areaFilter }) : Promise.resolve([]),
+      canManageLists
+        ? listServiceCounts({
+            assignedAdminUserId,
+            area: areaFilter,
+            folder,
+            year,
+            source,
+          })
+        : Promise.resolve([]),
       canManageLists ? listAssignableAdminUsers() : Promise.resolve([]),
       areaFilter
         ? getAnalyticsReportData({
+            folder,
             year: activeYear && activeYear !== "all" ? activeYear : undefined,
+            source,
             area: areaFilter,
             assignedAdminUserId,
           }).catch(() => null)
@@ -235,7 +245,9 @@ export default async function AdminLeadsPage({
 
   let activeFolderName = "";
   if (folder && folder !== "all") {
-    if (folder === "website_form") {
+    if (folder === "all_master") {
+      activeFolderName = "📊 Master Leads Sheet (All Sources)";
+    } else if (folder === "website_form") {
       activeFolderName = "🌐 Website Form Leads";
     } else if (folder === "hot_leads") {
       activeFolderName = "🔥 Hot Leads (Admin Added)";
@@ -248,9 +260,9 @@ export default async function AdminLeadsPage({
   }
 
   const isAreaSubFoldersDeck = Boolean(
-    folder && !area && (folder.startsWith("year_") || folder === "website_form" || folder === "hot_leads")
+    folder && !area && folder !== "all_master" && folder !== "all" && (folder.startsWith("year_") || folder === "website_form" || folder === "hot_leads")
   );
-  const isInsideFolder = Boolean(folder);
+  const isInsideFolder = Boolean(folder && folder !== "all");
 
   const activeFolderSummary = folder
     ? folderSummaries.systemFolders.find((f) => f.id === folder) ||
@@ -680,6 +692,8 @@ export default async function AdminLeadsPage({
                             status={filter}
                             q={q}
                             service={serviceFilter}
+                            folder={folder}
+                            view={currentView}
                           />
                         )}
                       </div>

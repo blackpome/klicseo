@@ -125,9 +125,17 @@ describe("Analytics Engine: getAnalyticsReportData", () => {
   it("filters correctly when a specific year is requested", async () => {
     const report2026 = await getAnalyticsReportData({ year: "2026" });
 
-    expect(report2026.summary.totalLeads).toBe(2); // l-1 and l-4
+    // l-1 is in 2026; l-4 is source: wizard and thus isolated from year cohorts
+    expect(report2026.summary.totalLeads).toBe(1); // l-1
     expect(report2026.summary.totalBooked).toBe(1); // l-1
-    expect(report2026.summary.totalNew).toBe(1); // l-4
+    expect(report2026.summary.totalNew).toBe(0);
+  });
+
+  it("filters correctly when website_form folder is requested", async () => {
+    const reportWebsite = await getAnalyticsReportData({ folder: "website_form" });
+
+    expect(reportWebsite.summary.totalLeads).toBe(1); // l-4
+    expect(reportWebsite.summary.totalNew).toBe(1); // l-4
   });
 
   it("filters correctly when an area is requested", async () => {

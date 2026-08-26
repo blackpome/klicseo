@@ -152,6 +152,9 @@ function sanitizeSearch(raw: string): string {
 export interface ListServiceCountsOptions {
   assignedAdminUserId?: string;
   area?: string;
+  folder?: string;
+  year?: string;
+  source?: string;
 }
 
 /** Distinct service values + counts for the lead filter pill bar. */
@@ -172,6 +175,33 @@ export async function listServiceCounts(
     if (itemsErr) throw itemsErr;
     const allowed = new Set((items ?? []).map((r: { lead_id: string }) => r.lead_id));
     candidateLeads = candidateLeads.filter((l) => allowed.has(l.id));
+  }
+
+  if (options.folder && options.folder.match(/^[0-9a-fA-F-]{36}$/)) {
+    const { data: listItems } = await supabase()
+      .from("lead_list_items")
+      .select("lead_id")
+      .eq("list_id", options.folder);
+    const listSet = new Set((listItems ?? []).map((i) => i.lead_id));
+    candidateLeads = candidateLeads.filter((l) => listSet.has(l.id));
+  }
+
+  // Folder / Source filtering
+  if (options.folder === "website_form" || options.source === "wizard") {
+    candidateLeads = candidateLeads.filter((l) => l.source === "wizard");
+  } else if (options.folder === "hot_leads" || options.source === "admin") {
+    candidateLeads = candidateLeads.filter((l) => (l.source === "admin" || l.source === "manual") && !l.isBulkUpload);
+  }
+
+  // Year folder or year filter
+  const targetYear = options.folder && options.folder.startsWith("year_")
+    ? options.folder.replace("year_", "")
+    : options.year && options.year !== "all"
+    ? options.year
+    : null;
+
+  if (targetYear) {
+    candidateLeads = candidateLeads.filter((l) => l.year === targetYear && l.source !== "wizard");
   }
 
   if (options.area && options.area !== "all") {

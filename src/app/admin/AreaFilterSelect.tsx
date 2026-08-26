@@ -8,6 +8,8 @@ interface AreaFilterSelectProps {
   status?: string;
   q?: string;
   service?: string;
+  folder?: string;
+  view?: string;
 }
 
 export default function AreaFilterSelect({
@@ -16,15 +18,19 @@ export default function AreaFilterSelect({
   status = "all",
   q = "",
   service,
+  folder,
+  view,
 }: AreaFilterSelectProps) {
   const router = useRouter();
 
   const handleChange = (newArea: string) => {
     const params = new URLSearchParams();
+    if (folder) params.set("folder", folder);
     if (status && status !== "all") params.set("status", status);
     if (q) params.set("q", q);
     if (service && service !== "all") params.set("service", service);
     if (newArea && newArea !== "all") params.set("area", newArea);
+    if (view && view !== "cards") params.set("view", view);
     params.set("page", "1");
 
     router.push(`/admin?${params.toString()}`);

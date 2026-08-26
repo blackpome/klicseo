@@ -67,9 +67,10 @@ export async function getAnalyticsReportData(
   const areaSet = new Set<string>();
 
   for (const lead of allLeads) {
-    const yr = lead.year || "2026";
-    yearSet.add(yr);
-    if (lead.primaryLocality && lead.primaryLocality !== "Unknown") {
+    if (lead.year && lead.source !== "wizard") {
+      yearSet.add(lead.year);
+    }
+    if (lead.primaryLocality && lead.primaryLocality !== "Unknown" && lead.primaryLocality !== "Unspecified") {
       areaSet.add(lead.primaryLocality);
     }
   }
@@ -81,15 +82,48 @@ export async function getAnalyticsReportData(
     .sort((a, b) => a.name.localeCompare(b.name));
 
   // 2. Filter leads based on user filter selections
-  const selectedYear = filters.year && filters.year !== "all" ? filters.year : "all";
+  const selectedYear =
+    filters.folder && filters.folder.startsWith("year_")
+      ? filters.folder.replace("year_", "")
+      : filters.year && filters.year !== "all"
+      ? filters.year
+      : "all";
+
   const selectedArea = filters.area && filters.area !== "all" ? filters.area.trim().toLowerCase() : "all";
   const selectedStaffId = filters.assignedAdminUserId && filters.assignedAdminUserId !== "all" ? filters.assignedAdminUserId : "all";
   const selectedService = filters.service && filters.service !== "all" ? filters.service : "all";
 
+  let customFolderLeadIds: Set<string> | null = null;
+  if (filters.folder && filters.folder.match(/^[0-9a-fA-F-]{36}$/)) {
+    const list = leadLists.find((l: any) => l.id === filters.folder);
+    if (list) {
+      customFolderLeadIds = new Set((list.lead_list_items ?? []).map((i: any) => i.lead_id));
+    }
+  }
+
   const filteredLeads = allLeads.filter((lead) => {
-    if (selectedYear !== "all" && lead.year !== selectedYear) return false;
+    // Custom folder check
+    if (customFolderLeadIds && !customFolderLeadIds.has(lead.id)) return false;
+
+    // Folder / Source check
+    if (filters.folder === "website_form" || filters.source === "wizard") {
+      if (lead.source !== "wizard") return false;
+    } else if (filters.folder === "hot_leads" || filters.source === "admin") {
+      if ((lead.source !== "admin" && lead.source !== "manual") || lead.isBulkUpload) return false;
+    }
+
+    // Year check (strictly excludes wizard leads)
+    if (selectedYear !== "all") {
+      if (lead.source === "wizard" || lead.year !== selectedYear) return false;
+    }
+
+    // Area check
     if (selectedArea !== "all" && lead.primaryLocality.toLowerCase() !== selectedArea) return false;
+
+    // Service check
     if (selectedService !== "all" && lead.service !== selectedService) return false;
+
+    // Staff assignment check
     if (selectedStaffId !== "all") {
       const assigned = leadToStaffMap.get(lead.id);
       if (!assigned || assigned.staffId !== selectedStaffId) return false;
@@ -373,7 +407,8 @@ export async function getAnalyticsReportData(
   }
 
   for (const lead of allLeads) {
-    const yr = lead.year || "2026";
+    if (lead.source === "wizard") continue; // Exclude website form leads from historical year cohorts
+    const yr = lead.year || (lead.created_at ? new Date(lead.created_at).getFullYear().toString() : "2026");
     if (!yearCohortsMap.has(yr)) {
       yearCohortsMap.set(yr, { total: 0, booked: 0, followUp: 0, areaCounts: new Map() });
     }

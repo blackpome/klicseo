@@ -12,6 +12,8 @@ export default async function AdminAnalyticsPage({
     area?: string;
     staff?: string;
     service?: string;
+    folder?: string;
+    source?: string;
   }>;
 }) {
   const me = await currentAdmin();
@@ -19,7 +21,7 @@ export default async function AdminAnalyticsPage({
     redirect("/admin");
   }
 
-  const { year, area, staff, service } = await searchParams;
+  const { year, area, staff, service, folder, source } = await searchParams;
   const scope = (await resolveScope(me)) ?? { kind: "all" as const };
   const effectiveStaff = scope.kind === "assigned" ? scope.adminUserId : staff;
 
@@ -28,6 +30,8 @@ export default async function AdminAnalyticsPage({
     area,
     assignedAdminUserId: effectiveStaff,
     service,
+    folder,
+    source,
   });
 
   return (
