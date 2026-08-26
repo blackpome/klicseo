@@ -80,6 +80,8 @@ export default function LeadListDetailClient({
   const [pending, startTransition] = useTransition();
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
   const [serviceFilter, setServiceFilter] = useState<string>("all");
+  const [pageSize, setPageSize] = useState<number | "all">(50);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const colPrefs = useColumnPreferences(
     "klicseo_lead_list_detail_columns_v1",
@@ -126,6 +128,17 @@ export default function LeadListDetailClient({
     });
   }, [leads, statusFilter, serviceFilter]);
 
+  const totalPages = useMemo(() => {
+    if (pageSize === "all") return 1;
+    return Math.max(1, Math.ceil(filteredLeads.length / pageSize));
+  }, [filteredLeads.length, pageSize]);
+
+  const paginatedLeads = useMemo(() => {
+    if (pageSize === "all") return filteredLeads;
+    const start = (currentPage - 1) * pageSize;
+    return filteredLeads.slice(start, start + pageSize);
+  }, [filteredLeads, currentPage, pageSize]);
+
   // Counts per status
   const statusCounts = useMemo(() => {
     const counts = new Map<LeadStatus | "all", number>();
@@ -145,6 +158,10 @@ export default function LeadListDetailClient({
     }
     return counts;
   }, [leads]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, serviceFilter]);
 
   useEffect(() => {
     // Announce selection mode changes
@@ -674,8 +691,9 @@ export default function LeadListDetailClient({
               </tr>
             </thead>
             <tbody>
-              {filteredLeads.map((lead, index) => {
+              {paginatedLeads.map((lead, index) => {
                 const isHighlighted = lead.id === highlightedLeadId;
+                const globalIndex = pageSize === "all" ? index + 1 : (currentPage - 1) * pageSize + index + 1;
                 return (
                   <tr
                     key={lead.id}
@@ -689,7 +707,7 @@ export default function LeadListDetailClient({
                     <td className={`sticky left-0 z-10 w-12 min-w-[48px] px-3 py-2 text-white/40 text-xs tabular-nums border-r border-white/[0.04] transition-colors ${
                       isHighlighted ? "bg-[#252015]" : "bg-[#071228] group-hover:bg-[#0c1a36]"
                     }`}>
-                      {index + 1}
+                      {globalIndex}
                     </td>
                     <td className="px-3 py-2">
                       <Link
@@ -772,6 +790,68 @@ export default function LeadListDetailClient({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar */}
+        {filteredLeads.length > 0 && (
+          <div className="flex items-center justify-between gap-4 flex-wrap pt-3 pb-4 px-1 text-xs">
+            <div className="text-white/50">
+              Showing <span className="font-semibold text-white">
+                {pageSize === "all" ? 1 : Math.min((currentPage - 1) * pageSize + 1, filteredLeads.length)}
+              </span>–<span className="font-semibold text-white">
+                {pageSize === "all" ? filteredLeads.length : Math.min(currentPage * pageSize, filteredLeads.length)}
+              </span> of <span className="font-semibold text-white">{filteredLeads.length}</span> leads
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Per page switcher */}
+              <div className="flex items-center gap-1.5 bg-white/[0.03] border border-white/10 rounded-xl px-2.5 py-1">
+                <span className="text-[11px] text-white/40">Per page:</span>
+                {([25, 50, 100, "all"] as const).map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => {
+                      setPageSize(size);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-2 py-0.5 rounded-lg text-xs font-semibold transition-all ${
+                      pageSize === size
+                        ? "bg-[#C9A84C] text-[#050E21]"
+                        : "text-white/60 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    {size === "all" ? "All" : size}
+                  </button>
+                ))}
+              </div>
+
+              {/* Page buttons */}
+              {pageSize !== "all" && totalPages > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 rounded-xl border border-white/10 bg-white/[0.04] text-white font-medium hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none transition-all"
+                  >
+                    ‹ Prev
+                  </button>
+                  <span className="px-2 text-white/60 text-xs">
+                    Page <strong className="text-white">{currentPage}</strong> of <strong className="text-white">{totalPages}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 rounded-xl border border-white/10 bg-white/[0.04] text-white font-medium hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none transition-all"
+                  >
+                    Next ›
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       )}
     </>

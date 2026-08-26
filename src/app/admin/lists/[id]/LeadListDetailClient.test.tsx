@@ -68,3 +68,42 @@ test('pointer drag selects range on touch', async () => {
   // check that selection summary appears with 2 leads selected
   await waitFor(() => expect(container.textContent).toContain("2 leads selected"));
 });
+
+test('handles pagination correctly when 150 leads are passed', async () => {
+  const mock150Leads = Array.from({ length: 150 }, (_, i) => ({
+    id: `lead-${i + 1}`,
+    name: `Lead ${i + 1}`,
+    phone: `9876543${String(i).padStart(3, "0")}`,
+    service: "Foam Wash",
+    service_option: null,
+    add_on_labels: null,
+    vehicle_type: null,
+    car_brand: "Hyundai",
+    car_model: "Creta",
+    car_number: null,
+    status: "new" as const,
+  }));
+
+  const { container } = render(
+    <LeadListDetailClient
+      list={{ ...fakeList, lead_count: 150 } as any}
+      initialLeads={mock150Leads}
+      isSuperAdmin={true}
+    />
+  );
+
+  // Checks that header displays 150 leads total
+  expect(container.textContent).toContain("150 leads");
+  // Checks that pagination displays Page 1 of 3 and Showing 1–50 of 150 leads
+  expect(container.textContent).toContain("Page 1 of 3");
+  expect(container.textContent).toContain("Showing 1–50 of 150 leads");
+
+  // Click Next ›
+  const nextBtn = screen.getByRole("button", { name: /Next ›/i });
+  await userEvent.click(nextBtn);
+
+  expect(container.textContent).toContain("Page 2 of 3");
+  expect(container.textContent).toContain("Showing 51–100 of 150 leads");
+  expect(container.textContent).toContain("Lead 51");
+});
+

@@ -191,6 +191,34 @@ export async function getLeadList(listId: string): Promise<LeadListRow | null> {
 
   const leadCount = countResult.count ?? 0;
 
+  // Fetch stats for this list in a single fast query
+  const { data: allItems } = await supabase()
+    .from("lead_list_items")
+    .select("lead_id, leads:lead_id (status)")
+    .eq("list_id", listId)
+    .range(0, 49999);
+
+  let total = countResult.count ?? 0;
+  let completed = 0;
+  let pending = 0;
+  const statuses: Record<string, number> = {};
+
+  if (allItems) {
+    total = allItems.length;
+    for (const item of allItems) {
+      const lead: any = Array.isArray(item.leads) ? item.leads[0] : item.leads;
+      const status = (lead?.status ?? "new") as string;
+      statuses[status] = (statuses[status] ?? 0) + 1;
+      if (["contacted", "booked", "cancelled", "follow_up"].includes(status)) {
+        completed += 1;
+      } else {
+        pending += 1;
+      }
+    }
+  }
+
+  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
   const assignedAdminUser = data.assigned_admin_user_id
     ? await (async () => {
         const { data: assignedUser, error: assignedUserErr } = await supabase()
@@ -210,7 +238,11 @@ export async function getLeadList(listId: string): Promise<LeadListRow | null> {
     ...data,
     assigned_admin_user: assignedAdminUser,
     admin_users: data.admin_users,
-    lead_count: leadCount,
+    lead_count: total,
+    completed_count: completed,
+    pending_count: pending,
+    completion_rate: completionRate,
+    status_counts: statuses,
   } as LeadListRow;
 }
 
@@ -291,11 +323,14 @@ export async function getLeadsInList(listId: string, opts: {
     .eq("list_id", listId);
 
   if (opts.limit) {
-    q = q.limit(opts.limit);
-  }
-
-  if (opts.offset) {
-    q = q.range(opts.offset, opts.offset + (opts.limit ?? 50) - 1);
+    if (opts.offset) {
+      q = q.range(opts.offset, opts.offset + opts.limit - 1);
+    } else {
+      q = q.limit(opts.limit);
+    }
+  } else {
+    // Default to high capacity range (50000) so large lists are never cut off
+    q = q.range(opts.offset ?? 0, (opts.offset ?? 0) + 49999);
   }
 
   const { data, error } = await q;

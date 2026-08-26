@@ -45,7 +45,7 @@ export default async function LeadListPage({
 
     if (!notFoundError) {
       const [fetchedLeads, assignableUsers] = await Promise.all([
-        getLeadsInList(id, { limit: 100 }),
+        getLeadsInList(id),
         listAssignableAdminUsers().catch(() => []),
       ]);
       leads = fetchedLeads;
