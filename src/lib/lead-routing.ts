@@ -3,6 +3,7 @@ import { supabase } from "./supabase";
 import { unseal } from "./crypto";
 import { addLeadsToList, insertLeadList } from "./leadLists";
 import { resolveLeadIdsForArea, resolvePrimaryLocality, getOrBuildLocationIndex, invalidateAreaCountsCache, CANONICAL_AREA_ALIASES } from "./area";
+import { isWebsiteFormLead, isHotLead, isYearLead } from "./leads-shared";
 import type {
   LeadAllocationFilter,
   LeadAllocationSchedule,
@@ -40,20 +41,18 @@ export function matchesFilter(
 
   // 1.5 Folder / Year / Source Filter
   if (filter.folder) {
-    if (filter.folder.startsWith("year_")) {
+    if (filter.folder === "all_master" || filter.folder === "all") {
+      // Show all
+    } else if (filter.folder.startsWith("year_")) {
       const yr = filter.folder.replace("year_", "");
-      if ((lead as any).source === "wizard") return false;
-      const leadYear = (lead as any).year || ((lead as any).created_at ? (lead as any).created_at.slice(0, 4) : "2026");
-      if (leadYear !== yr) return false;
+      if (!isYearLead(lead as any, yr)) return false;
     } else if (filter.folder === "website_form") {
-      if ((lead as any).source !== "wizard") return false;
+      if (!isWebsiteFormLead(lead as any)) return false;
     } else if (filter.folder === "hot_leads") {
-      if (((lead as any).source !== "admin" && (lead as any).source !== "manual") || (lead as any).isBulkUpload) return false;
+      if (!isHotLead(lead as any)) return false;
     }
   } else if (filter.year && filter.year !== "all") {
-    if ((lead as any).source === "wizard") return false;
-    const leadYear = (lead as any).year || ((lead as any).created_at ? (lead as any).created_at.slice(0, 4) : "2026");
-    if (leadYear !== filter.year) return false;
+    if (!isYearLead(lead as any, filter.year)) return false;
   }
 
   // 2. Area (checks both area column and permanent address text with unseal & canonical matching)
@@ -198,16 +197,18 @@ export async function countMatchingLeads(
     // If a folder/year filter is specified, totalUnallocated is scoped to that folder/year
     const folderFilteredLeads = statusFilteredLeads.filter((lead) => {
       if (filter.folder && filter.folder !== "all") {
-        if (filter.folder.startsWith("year_")) {
+        if (filter.folder === "all_master") {
+          // Show all
+        } else if (filter.folder.startsWith("year_")) {
           const yr = filter.folder.replace("year_", "");
-          if (lead.source === "wizard" || lead.year !== yr) return false;
+          if (!isYearLead(lead, yr)) return false;
         } else if (filter.folder === "website_form") {
-          if (lead.source !== "wizard") return false;
+          if (!isWebsiteFormLead(lead)) return false;
         } else if (filter.folder === "hot_leads") {
-          if ((lead.source !== "admin" && lead.source !== "manual") || lead.isBulkUpload) return false;
+          if (!isHotLead(lead)) return false;
         }
       } else if (filter.year && filter.year !== "all") {
-        if (lead.source === "wizard" || lead.year !== filter.year) return false;
+        if (!isYearLead(lead, filter.year)) return false;
       }
       return true;
     });
@@ -353,16 +354,18 @@ export async function executeLeadAllocation(req: {
 
     // 0.5 Folder / Year / Source filter
     if (req.conditions.folder && req.conditions.folder !== "all") {
-      if (req.conditions.folder.startsWith("year_")) {
+      if (req.conditions.folder === "all_master") {
+        // Show all
+      } else if (req.conditions.folder.startsWith("year_")) {
         const yr = req.conditions.folder.replace("year_", "");
-        if (lead.source === "wizard" || lead.year !== yr) return false;
+        if (!isYearLead(lead, yr)) return false;
       } else if (req.conditions.folder === "website_form") {
-        if (lead.source !== "wizard") return false;
+        if (!isWebsiteFormLead(lead)) return false;
       } else if (req.conditions.folder === "hot_leads") {
-        if ((lead.source !== "admin" && lead.source !== "manual") || lead.isBulkUpload) return false;
+        if (!isHotLead(lead)) return false;
       }
     } else if (req.conditions.year && req.conditions.year !== "all") {
-      if (lead.source === "wizard" || lead.year !== req.conditions.year) return false;
+      if (!isYearLead(lead, req.conditions.year)) return false;
     }
 
     // 1. Area filter (Location-scoped matching)

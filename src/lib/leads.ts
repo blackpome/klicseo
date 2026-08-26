@@ -10,7 +10,14 @@ import {
   invalidateAreaCountsCache,
   getOrBuildLocationIndex,
 } from "./area";
-import type { CallReminder, LeadStatus, LeadSource } from "./leads-shared";
+import {
+  isWebsiteFormLead,
+  isHotLead,
+  isYearLead,
+  type CallReminder,
+  type LeadStatus,
+  type LeadSource,
+} from "./leads-shared";
 import type { LeadScope } from "./admin-auth";
 
 export * from "./leads-shared";
@@ -187,10 +194,12 @@ export async function listServiceCounts(
   }
 
   // Folder / Source filtering
-  if (options.folder === "website_form" || options.source === "wizard") {
-    candidateLeads = candidateLeads.filter((l) => l.source === "wizard");
+  if (options.folder === "all_master" || options.folder === "all") {
+    // Show all
+  } else if (options.folder === "website_form" || options.source === "wizard") {
+    candidateLeads = candidateLeads.filter(isWebsiteFormLead);
   } else if (options.folder === "hot_leads" || options.source === "admin") {
-    candidateLeads = candidateLeads.filter((l) => (l.source === "admin" || l.source === "manual") && !l.isBulkUpload);
+    candidateLeads = candidateLeads.filter(isHotLead);
   }
 
   // Year folder or year filter
@@ -201,7 +210,7 @@ export async function listServiceCounts(
     : null;
 
   if (targetYear) {
-    candidateLeads = candidateLeads.filter((l) => l.year === targetYear && l.source !== "wizard");
+    candidateLeads = candidateLeads.filter((l) => isYearLead(l, targetYear));
   }
 
   if (options.area && options.area !== "all") {
@@ -306,10 +315,12 @@ export async function listLeadStatusSummary(
   }
 
   // Folder / Source filtering
-  if (options.folder === "website_form" || options.source === "wizard") {
-    candidateLeads = candidateLeads.filter((l) => l.source === "wizard");
+  if (options.folder === "all_master" || options.folder === "all") {
+    // Show all
+  } else if (options.folder === "website_form" || options.source === "wizard") {
+    candidateLeads = candidateLeads.filter(isWebsiteFormLead);
   } else if (options.folder === "hot_leads" || options.source === "admin") {
-    candidateLeads = candidateLeads.filter((l) => (l.source === "admin" || l.source === "manual") && !l.isBulkUpload);
+    candidateLeads = candidateLeads.filter(isHotLead);
   }
 
   // Year folder or year filter
@@ -320,7 +331,7 @@ export async function listLeadStatusSummary(
     : null;
 
   if (targetYear) {
-    candidateLeads = candidateLeads.filter((l) => l.year === targetYear && l.source !== "wizard");
+    candidateLeads = candidateLeads.filter((l) => isYearLead(l, targetYear));
   }
 
   if (options.area && options.area !== "all") {
@@ -437,10 +448,12 @@ export async function listPaginatedLeads(
   }
 
   // Folder / Source filtering
-  if (opts.folder === "website_form" || opts.source === "wizard") {
-    candidateLeads = candidateLeads.filter((l) => l.source === "wizard");
+  if (opts.folder === "all_master" || opts.folder === "all") {
+    // Show all
+  } else if (opts.folder === "website_form" || opts.source === "wizard") {
+    candidateLeads = candidateLeads.filter(isWebsiteFormLead);
   } else if (opts.folder === "hot_leads" || opts.source === "admin") {
-    candidateLeads = candidateLeads.filter((l) => (l.source === "admin" || l.source === "manual") && !l.isBulkUpload);
+    candidateLeads = candidateLeads.filter(isHotLead);
   }
 
   // Year folder or year filter
@@ -451,7 +464,7 @@ export async function listPaginatedLeads(
     : null;
 
   if (targetYear) {
-    candidateLeads = candidateLeads.filter((l) => l.year === targetYear && l.source !== "wizard");
+    candidateLeads = candidateLeads.filter((l) => isYearLead(l, targetYear));
   }
 
   if (opts.area && opts.area !== "all") {
@@ -576,13 +589,13 @@ export async function listFolderSummaries(assignedAdminUserId?: string): Promise
 
   for (const lead of allLeads) {
     const isBooked = lead.status === "booked";
-    if (lead.source === "wizard") {
+    if (isWebsiteFormLead(lead)) {
       websiteCount++;
       if (isBooked) websiteBooked++;
-    } else if ((lead.source === "admin" || lead.source === "manual") && !lead.isBulkUpload) {
+    } else if (isHotLead(lead)) {
       adminCount++;
       if (isBooked) adminBooked++;
-    } else {
+    } else if (isYearLead(lead)) {
       const year = lead.year || (lead.created_at ? new Date(lead.created_at).getFullYear().toString() : "2026");
       if (!yearCounts.has(year)) {
         yearCounts.set(year, { count: 0, booked: 0 });

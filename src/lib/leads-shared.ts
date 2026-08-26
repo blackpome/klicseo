@@ -114,6 +114,43 @@ export function getLeadSourceInfo(lead: {
   };
 }
 
+export function isWebsiteFormLead(lead: { source?: string | null }): boolean {
+  return lead.source === "wizard";
+}
+
+export function isHotLead(lead: {
+  source?: string | null;
+  isBulkUpload?: boolean | null;
+  notes?: string | null;
+  custom_fields?: Record<string, string> | null;
+}): boolean {
+  if (lead.source === "wizard") return false;
+  if (lead.isBulkUpload) return false;
+  const notes = lead.notes ?? "";
+  const custom = lead.custom_fields ?? {};
+  const isUpload =
+    lead.source === "upload" ||
+    notes.startsWith("Imported from") ||
+    notes.includes("uploaded via spreadsheet") ||
+    Boolean(custom["upload_file"] || custom["Upload Source"]);
+  if (isUpload) return false;
+  return lead.source === "admin" || lead.source === "manual";
+}
+
+export function isYearLead(
+  lead: {
+    source?: string | null;
+    year?: string | null;
+    created_at?: string | null;
+  },
+  targetYear?: string | null
+): boolean {
+  if (isWebsiteFormLead(lead)) return false;
+  const yr = lead.year || (lead.created_at ? new Date(lead.created_at).getFullYear().toString() : "2026");
+  if (!targetYear || targetYear === "all") return true;
+  return yr === targetYear;
+}
+
 // A lead OR employee surfaced as a "call reminder" in the notification bell.
 //   due     → a scheduled callback whose date+time has arrived
 //   new     → a fresh, uncontacted lead with no scheduled callback

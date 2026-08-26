@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { supabase } from "./supabase";
 import { unseal } from "./crypto";
+import { isWebsiteFormLead, isHotLead, isYearLead } from "./leads-shared";
 
 // Resolve a pincode → locality name via the pincode_areas lookup table. The
 // table is small + stable, so React-cache the full map per-request rather
@@ -638,10 +639,12 @@ export async function listAreasWithCounts(
   }
 
   // 3. Folder / Source filtering
-  if (options.folder === "website_form" || options.source === "wizard") {
-    candidateLeads = candidateLeads.filter((l) => l.source === "wizard");
+  if (options.folder === "all_master" || options.folder === "all") {
+    // Show all
+  } else if (options.folder === "website_form" || options.source === "wizard") {
+    candidateLeads = candidateLeads.filter(isWebsiteFormLead);
   } else if (options.folder === "hot_leads" || options.source === "admin") {
-    candidateLeads = candidateLeads.filter((l) => (l.source === "admin" || l.source === "manual") && !l.isBulkUpload);
+    candidateLeads = candidateLeads.filter(isHotLead);
   }
 
   // 4. Year folder or year filter
@@ -652,7 +655,7 @@ export async function listAreasWithCounts(
     : null;
 
   if (targetYear) {
-    candidateLeads = candidateLeads.filter((l) => l.year === targetYear && l.source !== "wizard");
+    candidateLeads = candidateLeads.filter((l) => isYearLead(l, targetYear));
   }
 
   const counts = new Map<string, { count: number; bookedCount: number }>();

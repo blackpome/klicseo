@@ -2,6 +2,7 @@ import "server-only";
 import { supabase } from "./supabase";
 import { getOrBuildLocationIndex } from "./area";
 import { listAdminUsers } from "./admin-users";
+import { isWebsiteFormLead, isHotLead, isYearLead } from "./leads-shared";
 import type {
   AnalyticsFilterOptions,
   AnalyticsReportData,
@@ -67,8 +68,9 @@ export async function getAnalyticsReportData(
   const areaSet = new Set<string>();
 
   for (const lead of allLeads) {
-    if (lead.year && lead.source !== "wizard") {
-      yearSet.add(lead.year);
+    if (isYearLead(lead)) {
+      const yr = lead.year || (lead.created_at ? new Date(lead.created_at).getFullYear().toString() : "2026");
+      yearSet.add(yr);
     }
     if (lead.primaryLocality && lead.primaryLocality !== "Unknown" && lead.primaryLocality !== "Unspecified") {
       areaSet.add(lead.primaryLocality);
@@ -106,15 +108,17 @@ export async function getAnalyticsReportData(
     if (customFolderLeadIds && !customFolderLeadIds.has(lead.id)) return false;
 
     // Folder / Source check
-    if (filters.folder === "website_form" || filters.source === "wizard") {
-      if (lead.source !== "wizard") return false;
+    if (filters.folder === "all_master" || filters.folder === "all") {
+      // Show all
+    } else if (filters.folder === "website_form" || filters.source === "wizard") {
+      if (!isWebsiteFormLead(lead)) return false;
     } else if (filters.folder === "hot_leads" || filters.source === "admin") {
-      if ((lead.source !== "admin" && lead.source !== "manual") || lead.isBulkUpload) return false;
+      if (!isHotLead(lead)) return false;
     }
 
-    // Year check (strictly excludes wizard leads)
+    // Year check
     if (selectedYear !== "all") {
-      if (lead.source === "wizard" || lead.year !== selectedYear) return false;
+      if (!isYearLead(lead, selectedYear)) return false;
     }
 
     // Area check
@@ -407,7 +411,7 @@ export async function getAnalyticsReportData(
   }
 
   for (const lead of allLeads) {
-    if (lead.source === "wizard") continue; // Exclude website form leads from historical year cohorts
+    if (!isYearLead(lead)) continue; // Only historical/bulk-uploaded year cohort leads
     const yr = lead.year || (lead.created_at ? new Date(lead.created_at).getFullYear().toString() : "2026");
     if (!yearCohortsMap.has(yr)) {
       yearCohortsMap.set(yr, { total: 0, booked: 0, followUp: 0, areaCounts: new Map() });
