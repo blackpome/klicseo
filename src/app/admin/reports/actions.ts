@@ -1,6 +1,6 @@
 "use server";
 
-import { requirePermission } from "@/lib/admin-auth";
+import { requirePermission, resolveScope } from "@/lib/admin-auth";
 import { getDailyStaffReport, getStaffTimelineForDate } from "@/lib/reports";
 import type {
   DailyReportFilter,
@@ -12,8 +12,16 @@ export async function fetchDailyReportAction(
   filter: DailyReportFilter,
 ): Promise<{ ok: boolean; summary?: DailyReportSummary; error?: string }> {
   try {
-    await requirePermission("leads.view");
-    const summary = await getDailyStaffReport(filter);
+    const me = await requirePermission("leads.view");
+    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+
+    const effectiveFilter: DailyReportFilter = { ...filter };
+    if (scope.kind === "assigned") {
+      // Force staff to only see their own assigned stats
+      effectiveFilter.assignedAdminUserId = scope.adminUserId;
+    }
+
+    const summary = await getDailyStaffReport(effectiveFilter);
     return { ok: true, summary };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Failed to load report data." };
@@ -25,7 +33,16 @@ export async function fetchStaffTimelineAction(
   date: string,
 ): Promise<{ ok: boolean; events?: StaffTimelineEvent[]; error?: string }> {
   try {
-    await requirePermission("leads.view");
+    const me = await requirePermission("leads.view");
+    const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+
+    if (scope.kind === "assigned") {
+      // Staff can ONLY view their own timeline
+      if (email.toLowerCase() !== me.email.toLowerCase()) {
+        throw new Error("Forbidden: You can only view your own timeline activity.");
+      }
+    }
+
     const events = await getStaffTimelineForDate(email, date);
     return { ok: true, events };
   } catch (err: any) {

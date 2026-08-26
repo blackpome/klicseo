@@ -31,9 +31,17 @@ import type {
 
 interface Props {
   initialSummary: DailyReportSummary;
+  currentUserRole?: string;
+  isScopedStaff?: boolean;
+  currentUserEmail?: string;
 }
 
-export default function DailyReportsClient({ initialSummary }: Props) {
+export default function DailyReportsClient({
+  initialSummary,
+  currentUserRole = "super_admin",
+  isScopedStaff = false,
+  currentUserEmail = "",
+}: Props) {
   const router = useRouter();
   const [summary, setSummary] = useState<DailyReportSummary>(initialSummary);
   const [filterMode, setFilterMode] = useState<"single" | "range">(
@@ -98,6 +106,7 @@ export default function DailyReportsClient({ initialSummary }: Props) {
       const now = new Date();
       const istOffset = 5.5 * 60 * 60 * 1000;
       const s = new Date(now.getTime() + istOffset - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      setSelectedDate(todayIST);
       setStartDate(s);
       setEndDate(todayIST);
       setFilterMode("range");
@@ -106,7 +115,10 @@ export default function DailyReportsClient({ initialSummary }: Props) {
       const now = new Date();
       const istOffset = 5.5 * 60 * 60 * 1000;
       const istDate = new Date(now.getTime() + istOffset);
-      const s = `${istDate.getFullYear()}-${String(istDate.getMonth() + 1).padStart(2, "0")}-01`;
+      const y = istDate.getFullYear();
+      const m = String(istDate.getMonth() + 1).padStart(2, "0");
+      const s = `${y}-${m}-01`;
+      setSelectedDate(todayIST);
       setStartDate(s);
       setEndDate(todayIST);
       setFilterMode("range");
@@ -114,6 +126,7 @@ export default function DailyReportsClient({ initialSummary }: Props) {
     }
   };
 
+  // Custom Range Handler
   const handleCustomRangeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!startDate || !endDate) return;
@@ -149,6 +162,8 @@ export default function DailyReportsClient({ initialSummary }: Props) {
     return `${summary.startDate} to ${summary.endDate}`;
   }, [summary, todayIST, yesterdayIST]);
 
+  const myMetric = isScopedStaff ? summary.staffMetrics[0] : null;
+
   return (
     <div className="space-y-7">
       {/* Top Banner & Title */}
@@ -162,11 +177,13 @@ export default function DailyReportsClient({ initialSummary }: Props) {
               className="text-2xl sm:text-3xl font-bold text-white tracking-tight"
               style={{ fontFamily: "var(--font-playfair)" }}
             >
-              Daily Staff Progress Reports
+              {isScopedStaff ? "My Daily Progress Report" : "Daily Staff Progress Reports"}
             </h1>
           </div>
           <p className="text-xs text-white/50 mt-1">
-            Live telecaller metrics, call disposition breakdowns, and team velocity.
+            {isScopedStaff
+              ? "Your personal telecaller metrics, call disposition breakdowns, and daily target tracking."
+              : "Live telecaller metrics, call disposition breakdowns, and team velocity."}
           </p>
         </div>
 
@@ -301,7 +318,7 @@ export default function DailyReportsClient({ initialSummary }: Props) {
         {/* Total Booked */}
         <div className="p-4 rounded-3xl bg-gradient-to-br from-emerald-500/15 via-emerald-500/5 to-transparent border border-emerald-500/30 space-y-1">
           <div className="flex items-center justify-between text-emerald-300">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Booked Deals</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider">{isScopedStaff ? "My Bookings" : "Booked Deals"}</span>
             <Trophy size={16} />
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-white tabular-nums">
@@ -315,14 +332,16 @@ export default function DailyReportsClient({ initialSummary }: Props) {
         {/* Total Calls Made */}
         <div className="p-4 rounded-3xl bg-gradient-to-br from-purple-500/15 via-purple-500/5 to-transparent border border-purple-500/30 space-y-1">
           <div className="flex items-center justify-between text-purple-300">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Calls Logged</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider">{isScopedStaff ? "My Calls Made" : "Calls Logged"}</span>
             <PhoneCall size={16} />
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-white tabular-nums">
             {summary.totalCalls}
           </div>
           <div className="text-[11px] text-purple-400/80 font-medium">
-            Across {summary.activeStaffCount} active staff
+            {isScopedStaff
+              ? `Target: ${myMetric?.targetCalls ?? 40} calls`
+              : `Across ${summary.activeStaffCount} active staff`}
           </div>
         </div>
 
@@ -364,17 +383,27 @@ export default function DailyReportsClient({ initialSummary }: Props) {
           <div className="text-[11px] text-rose-400/80 font-medium">Unanswered attempts</div>
         </div>
 
-        {/* Active Staff on Duty */}
+        {/* Active Staff / My Queue */}
         <div className="p-4 rounded-3xl bg-gradient-to-br from-indigo-500/15 via-indigo-500/5 to-transparent border border-indigo-500/30 space-y-1">
           <div className="flex items-center justify-between text-indigo-300">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Active Staff</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider">{isScopedStaff ? "My Queue" : "Active Staff"}</span>
             <UserCheck size={16} />
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-white tabular-nums">
-            {summary.activeStaffCount}{" "}
-            <span className="text-sm font-normal text-white/40">/ {summary.staffMetrics.length}</span>
+            {isScopedStaff ? (
+              myMetric?.pendingUncalledLeads ?? 0
+            ) : (
+              <>
+                {summary.activeStaffCount}{" "}
+                <span className="text-sm font-normal text-white/40">/ {summary.staffMetrics.length}</span>
+              </>
+            )}
           </div>
-          <div className="text-[11px] text-indigo-400/80 font-medium">Calling on this date</div>
+          <div className="text-[11px] text-indigo-400/80 font-medium">
+            {isScopedStaff
+              ? `of ${myMetric?.totalAssignedLeads ?? 0} assigned leads`
+              : "Calling on this date"}
+          </div>
         </div>
       </div>
 
@@ -388,20 +417,22 @@ export default function DailyReportsClient({ initialSummary }: Props) {
               {isPending && <RefreshCw size={14} className="animate-spin text-amber-400" />}
             </h2>
             <p className="text-xs text-white/40">
-              Ranked by Bookings closed and Call volume
+              {isScopedStaff ? "Your personal performance metrics for this period" : "Ranked by Bookings closed and Call volume"}
             </p>
           </div>
 
-          <div className="relative max-w-xs w-full">
-            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
-            <input
-              type="text"
-              placeholder="Search staff by name or email…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3.5 py-2 rounded-2xl bg-white/[0.04] border border-white/10 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#C9A84C]"
-            />
-          </div>
+          {!isScopedStaff && (
+            <div className="relative max-w-xs w-full">
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+              <input
+                type="text"
+                placeholder="Search staff by name or email…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3.5 py-2 rounded-2xl bg-white/[0.04] border border-white/10 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#C9A84C]"
+              />
+            </div>
+          )}
         </div>
 
         {/* Table Content */}
@@ -426,7 +457,7 @@ export default function DailyReportsClient({ initialSummary }: Props) {
               {filteredStaff.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="py-12 text-center text-white/40 text-xs">
-                    No staff members found matching &quot;{searchQuery}&quot;.
+                    No staff records found for this period.
                   </td>
                 </tr>
               ) : (
@@ -445,9 +476,11 @@ export default function DailyReportsClient({ initialSummary }: Props) {
                       {/* Staff Name & Rank */}
                       <td className="sticky left-0 z-10 min-w-[200px] bg-[#071228] group-hover:bg-[#0c1a36] py-4 pl-6 pr-3 border-r border-white/[0.04] transition-colors">
                         <div className="flex items-center gap-3">
-                          <span className="w-5 text-center font-extrabold text-sm tabular-nums text-white/30 group-hover:text-amber-400 transition-colors">
-                            {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`}
-                          </span>
+                          {!isScopedStaff && (
+                            <span className="w-5 text-center font-extrabold text-sm tabular-nums text-white/30 group-hover:text-amber-400 transition-colors">
+                              {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`}
+                            </span>
+                          )}
                           <div>
                             <div className="font-bold text-white text-xs group-hover:text-amber-300 transition-colors flex items-center gap-1.5">
                               <span>{staff.name}</span>

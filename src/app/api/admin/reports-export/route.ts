@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentAdmin } from "@/lib/admin-auth";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 import { getDailyStaffReport } from "@/lib/reports";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date") || undefined;
   const startDate = searchParams.get("startDate") || undefined;
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
     date,
     startDate,
     endDate,
+    assignedAdminUserId: scope.kind === "assigned" ? scope.adminUserId : undefined,
   });
 
   const headers = [

@@ -148,14 +148,13 @@ export async function getDailyStaffReport(
     .select("id, created_at, actor_email, action, entity, entity_id, summary, metadata")
     .in("action", ["lead.status", "lead.create", "lead.notes", "lead.update"])
     .gte("created_at", startUtc)
-    .lte("created_at", endUtc)
-    .order("created_at", { ascending: true });
+    .lte("created_at", endUtc);
 
   if (filter?.assignedAdminUserId && activeStaff.length === 1) {
     auditQuery = auditQuery.eq("actor_email", activeStaff[0].email);
   }
 
-  const { data: logs, error: logsErr } = await auditQuery;
+  const { data: logs, error: logsErr } = await auditQuery.order("created_at", { ascending: true });
 
   if (logsErr) {
     console.error("Failed to query audit logs for daily report:", logsErr);

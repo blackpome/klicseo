@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import AdminShell from "../AdminShell";
 import DailyReportsClient from "./DailyReportsClient";
-import { currentAdmin } from "@/lib/admin-auth";
-import { getAdminUser } from "@/lib/admin-users";
+import { currentAdmin, resolveScope } from "@/lib/admin-auth";
 import { getDailyStaffReport } from "@/lib/reports";
 
 export default async function DailyReportsPage({
@@ -19,20 +18,25 @@ export default async function DailyReportsPage({
     redirect("/admin");
   }
 
-  const adminRow = me.email ? await getAdminUser(me.email) : null;
-  const isStaff = me.role === "staff";
+  const scope = (await resolveScope(me)) ?? { kind: "all" as const };
+  const isScopedStaff = scope.kind === "assigned";
   const { date, startDate, endDate } = await searchParams;
 
   const initialSummary = await getDailyStaffReport({
     date,
     startDate,
     endDate,
-    assignedAdminUserId: isStaff && adminRow?.id ? adminRow.id : undefined,
+    assignedAdminUserId: isScopedStaff ? scope.adminUserId : undefined,
   });
 
   return (
     <AdminShell require="leads.view">
-      <DailyReportsClient initialSummary={initialSummary} />
+      <DailyReportsClient
+        initialSummary={initialSummary}
+        currentUserRole={me.role}
+        isScopedStaff={isScopedStaff}
+        currentUserEmail={me.email}
+      />
     </AdminShell>
   );
 }
