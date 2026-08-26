@@ -601,10 +601,16 @@ export interface ListAreasOptions {
   source?: string;
 }
 
+export interface AreaCountSummary {
+  area: string;
+  count: number;
+  bookedCount: number;
+}
+
 /** Distinct areas + lead counts scoped to folder, year, or staff for the filter bar on /admin. */
 export async function listAreasWithCounts(
   opts: ListAreasOptions | string = {},
-): Promise<Array<{ area: string; count: number }>> {
+): Promise<AreaCountSummary[]> {
   const options: ListAreasOptions = typeof opts === "string" ? { assignedAdminUserId: opts } : opts;
   const index = await getOrBuildLocationIndex();
 
@@ -649,16 +655,22 @@ export async function listAreasWithCounts(
     candidateLeads = candidateLeads.filter((l) => l.year === targetYear);
   }
 
-  const counts = new Map<string, number>();
+  const counts = new Map<string, { count: number; bookedCount: number }>();
 
   for (const lead of candidateLeads) {
     if (lead.primaryLocality && lead.primaryLocality !== "Unspecified" && lead.primaryLocality !== "Unknown") {
-      counts.set(lead.primaryLocality, (counts.get(lead.primaryLocality) ?? 0) + 1);
+      const isBooked = lead.status === "booked";
+      if (!counts.has(lead.primaryLocality)) {
+        counts.set(lead.primaryLocality, { count: 0, bookedCount: 0 });
+      }
+      const stat = counts.get(lead.primaryLocality)!;
+      stat.count++;
+      if (isBooked) stat.bookedCount++;
     }
   }
 
   return [...counts.entries()]
-    .map(([area, count]) => ({ area, count }))
+    .map(([area, stat]) => ({ area, count: stat.count, bookedCount: stat.bookedCount }))
     .sort((a, b) => b.count - a.count || a.area.localeCompare(b.area));
 }
 

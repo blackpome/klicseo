@@ -24,7 +24,7 @@ import {
   listLeadStatusSummary,
   listFolderSummaries,
 } from "@/lib/leads";
-import { listAreasWithCounts } from "@/lib/area";
+import { listAreasWithCounts, type AreaCountSummary } from "@/lib/area";
 import {
   LEAD_STATUSES,
   LEAD_STATUS_COLOR,
@@ -46,6 +46,7 @@ import FolderExplorerView from "./FolderExplorerView";
 import LeadViewModeSwitcher from "./LeadViewModeSwitcher";
 import AreaFilterSelect from "./AreaFilterSelect";
 import FolderAllocationButton from "./FolderAllocationButton";
+import YearAreaFoldersView from "./YearAreaFoldersView";
 
 function buildLeadsHref(args: {
   status?: string;
@@ -141,7 +142,7 @@ export default async function AdminLeadsPage({
   let statusSummary;
   let folderSummaries;
   let leadLists: LeadListRow[] = [];
-  let areaCounts: { area: string; count: number }[] = [];
+  let areaCounts: AreaCountSummary[] = [];
   let serviceCounts: { service: string; count: number }[] = [];
   let leadListNames: Map<string, string[]> = new Map();
   let assignableUsers: Array<{ id: string; email: string; name: string }> = [];
@@ -219,7 +220,12 @@ export default async function AdminLeadsPage({
     }
   }
 
+  const isYearSubFoldersView = Boolean(folder && folder.startsWith("year_") && !area);
   const isInsideFolder = Boolean(folder);
+
+  const yearFolderSummary = folder && folder.startsWith("year_")
+    ? folderSummaries.systemFolders.find((f) => f.id === folder)
+    : null;
 
   return (
     <AdminShell require="leads.view">
@@ -231,14 +237,20 @@ export default async function AdminLeadsPage({
               className="text-2xl md:text-3xl font-bold tracking-tight text-white"
               style={{ fontFamily: "var(--font-playfair)" }}
             >
-              {isInsideFolder
-                ? activeFolderName || "Master Leads Sheet"
+              {isYearSubFoldersView
+                ? `📅 ${folder!.replace("year_", "")} Leads Directory`
+                : isInsideFolder
+                ? folder!.startsWith("year_")
+                  ? `📅 ${folder!.replace("year_", "")} Leads — 📍 ${area === "all" ? "All Areas" : area}`
+                  : activeFolderName || "Master Leads Sheet"
                 : isSuperAdmin
                 ? "Leads CRM & Folders"
                 : "My Assigned Leads"}
             </h1>
             <p className="text-xs text-white/50 mt-0.5">
-              {isInsideFolder
+              {isYearSubFoldersView
+                ? `Select an area folder below to browse ${folder!.replace("year_", "")} leads by territory (${(yearFolderSummary?.count ?? statusSummary.total).toLocaleString("en-IN")} total records).`
+                : isInsideFolder
                 ? `Viewing spreadsheet records inside ${activeFolderName || "Master Sheet"} (${totalCount.toLocaleString("en-IN")} leads)`
                 : "Organize client inquiries across Year folders, Website Form, Hot Leads, and Custom campaigns."}
               {!isSuperAdmin && leadLists.length > 0 && (
@@ -255,11 +267,11 @@ export default async function AdminLeadsPage({
           <div className="flex items-center gap-2.5">
             {isInsideFolder && (
               <Link
-                href="/admin"
+                href={isYearSubFoldersView || !folder?.startsWith("year_") ? "/admin" : `/admin?folder=${folder}`}
                 className="px-3.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/10 border border-white/10 text-xs font-bold text-white transition-all inline-flex items-center gap-1.5 shadow-sm"
               >
                 <ArrowLeft size={14} className="text-[#C9A84C]" />
-                <span>All Folders</span>
+                <span>{isYearSubFoldersView || !folder?.startsWith("year_") ? "All Folders" : `Back to ${folder?.replace("year_", "")} Areas`}</span>
               </Link>
             )}
 
@@ -307,12 +319,24 @@ export default async function AdminLeadsPage({
             adminUsers={assignableUsers}
             canManage={canManage}
           />
+        ) : isYearSubFoldersView ? (
+          /* LEVEL 2 VIEW: Area Sub-Folders Deck for Year Cohort */
+          <YearAreaFoldersView
+            yearFolder={folder!}
+            yearLabel={folder!.replace("year_", "")}
+            areaSummaries={areaCounts}
+            totalYearLeads={yearFolderSummary?.count ?? statusSummary.total}
+            totalYearBooked={yearFolderSummary?.bookedCount ?? statusSummary.booked}
+            adminUsers={assignableUsers}
+            leadLists={leadLists}
+            canManage={canManage}
+          />
         ) : (
           /* INSIDE FOLDER VIEW: Excel Spreadsheet Sheet & Controls */
           <div className="space-y-6 animate-in fade-in duration-150">
             {/* Breadcrumb Navigation Header */}
             <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-[#071228] border border-white/[0.08] text-white shadow-md flex-wrap">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <Link
                   href="/admin"
                   className="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/10 border border-white/10 text-xs font-bold text-white transition-all inline-flex items-center gap-1.5 shadow-sm"
@@ -320,10 +344,25 @@ export default async function AdminLeadsPage({
                   <ArrowLeft size={13} className="text-[#C9A84C]" />
                   <span>All Folders</span>
                 </Link>
+
+                {folder?.startsWith("year_") && (
+                  <>
+                    <span className="text-white/20 text-sm">/</span>
+                    <Link
+                      href={`/admin?folder=${folder}`}
+                      className="px-2.5 py-1 rounded-xl bg-[#C9A84C]/10 hover:bg-[#C9A84C]/20 border border-[#C9A84C]/30 text-xs font-bold text-[#E8CC7A] transition-all inline-flex items-center gap-1.5"
+                    >
+                      <span>📁 {folder.replace("year_", "")} Areas</span>
+                    </Link>
+                  </>
+                )}
+
                 <span className="text-white/20 text-sm">/</span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-extrabold text-white flex items-center gap-1.5">
-                    {activeFolderName || "📊 Master Leads Sheet"}
+                    {folder?.startsWith("year_")
+                      ? `📍 ${area === "all" ? "All Areas (Master View)" : area || "All Areas"}`
+                      : activeFolderName || "📊 Master Leads Sheet"}
                   </span>
                   <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#C9A84C]/20 text-[#E8CC7A] border border-[#C9A84C]/30">
                     {totalCount.toLocaleString("en-IN")} records
