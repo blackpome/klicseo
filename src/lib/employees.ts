@@ -99,12 +99,15 @@ export async function listEmployees(
     toIso?: string;
     /** Filter by job role */
     jobRole?: string;
+    /** Filter by specific employee IDs */
+    ids?: string[];
   } = {},
 ): Promise<EmployeeRow[]> {
   let q = supabase()
     .from("employees")
     .select("*, assigned_admin_user:assigned_admin_user_id (email, employees:employee_id (name))")
     .order("created_at", { ascending: false });
+  if (opts.ids && opts.ids.length > 0) q = q.in("id", opts.ids);
   if (opts.status && opts.status !== "all") q = q.eq("status", opts.status);
   if (opts.assignedAdminUserId) q = q.eq("assigned_admin_user_id", opts.assignedAdminUserId);
   if (opts.jobRole && opts.jobRole !== "all") q = q.eq("job_role", opts.jobRole);

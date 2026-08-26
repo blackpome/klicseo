@@ -6,12 +6,24 @@ import type { LeadListRow, NewLeadList, LeadListItem } from "./leadLists-shared"
 import type { LeadRow } from "./leads";
 import { sealFields, unsealFields } from "./crypto";
 
+interface LeadListsCacheEntry {
+  data: LeadListRow[];
+  expires: number;
+}
+
+const leadListsCache = new Map<string, LeadListsCacheEntry>();
+
+export function invalidateLeadListCache(): void {
+  leadListsCache.clear();
+}
+
 /**
  * Insert a new lead list.
  * @param list - The lead list data (name, optional created_by, optional assigned_employee_id)
  * @returns The created lead list row
  */
 export async function insertLeadList(list: NewLeadList): Promise<LeadListRow> {
+  invalidateLeadListCache();
   // Get current admin to set created_by if not provided
   const admin = await currentAdmin();
   if (!admin) {
@@ -45,6 +57,13 @@ export async function listLeadLists(opts: {
   assignedAdminUserId?: string;
   search?: string;
 } = {}): Promise<LeadListRow[]> {
+  const cacheKey = `${opts.createdBy || ""}_${opts.assignedAdminUserId || ""}_${opts.search || ""}`;
+  const now = Date.now();
+  const cached = leadListsCache.get(cacheKey);
+  if (cached && cached.expires > now) {
+    return cached.data;
+  }
+
   let q = supabase()
     .from("lead_lists")
     .select(`
@@ -161,6 +180,7 @@ export async function listLeadLists(opts: {
     } as LeadListRow;
   });
 
+  leadListsCache.set(cacheKey, { data: result, expires: now + 30_000 });
   return result;
 }
 
@@ -180,23 +200,20 @@ export async function getLeadList(listId: string): Promise<LeadListRow | null> {
     .maybeSingle();
 
   if (error) throw error;
-
   if (!data) return null;
 
-  // Get lead count
-  const countResult = await supabase()
-    .from("lead_list_items")
-    .select("lead_id", { count: "exact" })
-    .eq("list_id", listId);
-
-  const leadCount = countResult.count ?? 0;
-
-  // Fetch stats for this list in a single fast query
-  const { data: allItems } = await supabase()
-    .from("lead_list_items")
-    .select("lead_id, leads:lead_id (status)")
-    .eq("list_id", listId)
-    .range(0, 49999);
+  // Single fast query for exact list lead counts and status breakdown
+  const [countResult, { data: allItems }] = await Promise.all([
+    supabase()
+      .from("lead_list_items")
+      .select("*", { count: "exact", head: true })
+      .eq("list_id", listId),
+    supabase()
+      .from("lead_list_items")
+      .select("lead_id, leads:lead_id (status)")
+      .eq("list_id", listId)
+      .range(0, 49999),
+  ]);
 
   let total = countResult.count ?? 0;
   let completed = 0;
@@ -253,6 +270,7 @@ export async function getLeadList(listId: string): Promise<LeadListRow | null> {
  */
 export async function addLeadsToList(listId: string, leadIds: string[]): Promise<void> {
   if (leadIds.length === 0) return;
+  invalidateLeadListCache();
 
   const uniqueLeadIds = Array.from(new Set(leadIds));
 
@@ -283,6 +301,7 @@ export async function addLeadsToList(listId: string, leadIds: string[]): Promise
  * @param leadId - The ID of the lead to remove
  */
 export async function removeLeadFromList(listId: string, leadId: string): Promise<void> {
+  invalidateLeadListCache();
   const { error } = await supabase()
     .from("lead_list_items")
     .delete()
@@ -369,6 +388,7 @@ export async function getLeadsInList(listId: string, opts: {
  * @param updates - Partial updates for the list
  */
 export async function updateLeadList(listId: string, updates: Partial<NewLeadList>): Promise<void> {
+  invalidateLeadListCache();
   const { error } = await supabase()
     .from("lead_lists")
     .update(updates)
@@ -382,6 +402,7 @@ export async function updateLeadList(listId: string, updates: Partial<NewLeadLis
  * @param listId - The ID of the lead list to delete
  */
 export async function deleteLeadList(listId: string): Promise<void> {
+  invalidateLeadListCache();
   // 1. Delete junction table entries
   await supabase()
     .from("lead_list_items")

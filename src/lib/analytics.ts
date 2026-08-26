@@ -15,13 +15,19 @@ import type {
 export async function getAnalyticsReportData(
   filters: AnalyticsFilterOptions = {},
 ): Promise<AnalyticsReportData> {
+  let listsQuery = supabase()
+    .from("lead_lists")
+    .select("id, name, assigned_admin_user_id, admin_users(id, email, employees(name)), lead_list_items(lead_id)")
+    .order("created_at", { ascending: false });
+
+  if (filters.assignedAdminUserId && filters.assignedAdminUserId !== "all") {
+    listsQuery = listsQuery.eq("assigned_admin_user_id", filters.assignedAdminUserId);
+  }
+
   const [locationIndex, adminUsersRes, leadListsRes] = await Promise.all([
     getOrBuildLocationIndex(),
     listAdminUsers().catch(() => []),
-    supabase()
-      .from("lead_lists")
-      .select("id, name, assigned_admin_user_id, admin_users(id, email, employees(name)), lead_list_items(lead_id)")
-      .order("created_at", { ascending: false }),
+    listsQuery,
   ]);
 
   const allLeads = locationIndex.allLeads;

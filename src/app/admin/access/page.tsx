@@ -30,8 +30,8 @@ export default async function AccessPage() {
   let employees: EmployeeRow[] = [];
   try {
     users = await listAdminUsers();
-    const linkedIds = new Set(users.map((u) => u.employee_id).filter(Boolean) as string[]);
-    employees = linkedIds.size > 0 ? (await listEmployees({ limit: 100 })).filter((e) => linkedIds.has(e.id)) : [];
+    const linkedIds = users.map((u) => u.employee_id).filter(Boolean) as string[];
+    employees = linkedIds.length > 0 ? await listEmployees({ ids: linkedIds, limit: linkedIds.length }) : [];
   } catch (err) {
     return (
       <AdminShell>

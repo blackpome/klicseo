@@ -153,22 +153,33 @@ export default async function AdminLeadsPage({
   let areaAnalyticsReport: AnalyticsReportData | null = null;
 
   try {
+    const isYearSubFoldersView = Boolean(folder && folder.startsWith("year_") && !area);
+    const isInsideFolder = Boolean(folder);
+    const needsSpreadsheetLeads = Boolean(isInsideFolder && !isYearSubFoldersView);
     const canManageLists = Boolean(me?.permissions.includes("leads.manage"));
     const activeYear = folder?.startsWith("year_") ? folder.replace("year_", "") : year;
 
     [paginated, statusSummary, folderSummaries, areaCounts, leadLists, serviceCounts, assignableUsers, areaAnalyticsReport] = await Promise.all([
-      listPaginatedLeads({
-        status: filter as any,
-        search: q,
-        area: areaFilter,
-        service: serviceFilter,
-        folder,
-        year,
-        source,
-        assignedAdminUserId,
-        page,
-        pageSize,
-      }),
+      needsSpreadsheetLeads
+        ? listPaginatedLeads({
+            status: filter as any,
+            search: q,
+            area: areaFilter,
+            service: serviceFilter,
+            folder,
+            year,
+            source,
+            assignedAdminUserId,
+            page,
+            pageSize,
+          })
+        : Promise.resolve({
+            leads: [],
+            totalCount: 0,
+            page: 1,
+            pageSize: 25,
+            totalPages: 1,
+          }),
       listLeadStatusSummary({
         assignedAdminUserId,
         search: q,
@@ -197,7 +208,7 @@ export default async function AdminLeadsPage({
         : Promise.resolve(null),
     ]);
 
-    if (isSuperAdmin && paginated.leads.length > 0) {
+    if (needsSpreadsheetLeads && isSuperAdmin && paginated.leads.length > 0) {
       leadListNames = await mapLeadIdsToLists(paginated.leads.map((l) => l.id));
     }
   } catch (err) {
