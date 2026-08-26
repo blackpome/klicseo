@@ -468,7 +468,7 @@ export async function listPaginatedLeads(
 
   const { data: fullRows, error: fetchErr } = await supabase()
     .from("leads")
-    .select("*, assigned_admin_user:assigned_admin_user_id (email, employees:employee_id (name))")
+    .select("*")
     .in("id", idsToFetch);
 
   if (fetchErr) throw fetchErr;
@@ -483,9 +483,6 @@ export async function listPaginatedLeads(
       hydratedLeads.push({
         ...unsealed,
         primaryLocality: item.primaryLocality,
-        assigned_admin_user: Array.isArray(raw.assigned_admin_user)
-          ? raw.assigned_admin_user[0] ?? null
-          : raw.assigned_admin_user ?? null,
       });
     }
   }
