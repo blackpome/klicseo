@@ -277,7 +277,7 @@ export async function listEmployeeCallReminders(opts: { limit?: number; assigned
   }
 
   const res = out.slice(0, limit);
-  employeeRemindersCache.set(cacheKey, { data: res, expires: now + 15_000 });
+  employeeRemindersCache.set(cacheKey, { data: res, expires: now + 60_000 });
   return res;
 }
 

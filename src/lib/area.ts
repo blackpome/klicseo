@@ -159,16 +159,23 @@ export const CANONICAL_AREA_ALIASES: Record<string, string> = {
   "bv nagar": "Nanganallur",
 };
 
-const loadPincodeMap = cache(async (): Promise<Map<string, string>> => {
+let pincodeMapCache: { map: Map<string, string>; expires: number } | null = null;
+
+export async function loadPincodeMap(): Promise<Map<string, string>> {
+  const now = Date.now();
+  if (pincodeMapCache && pincodeMapCache.expires > now) {
+    return pincodeMapCache.map;
+  }
   const m = new Map<string, string>();
   try {
     const { data } = await supabase().from("pincode_areas").select("pincode,area");
     for (const r of (data ?? []) as PincodeAreaRow[]) m.set(r.pincode, r.area);
+    pincodeMapCache = { map: m, expires: now + 3600_000 };
   } catch {
     // best-effort — unknown pincodes simply don't auto-derive
   }
   return m;
-});
+}
 
 export async function areaFromPincode(pincode: string | null | undefined): Promise<string | null> {
   if (!pincode) return null;
@@ -505,7 +512,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
         }
         const addrLower = cleanedAddr.toLowerCase();
 
-        // 1. Scan address text for specific sub-localities
+        // 1. Scan address text for specific sub-localities (e.g. Adyar, Besant Nagar, T. Nagar, Porur, Perungudi, etc.)
         for (const item of compiledAreaRegexes) {
           if (item.regex.test(addrLower)) {
             return item.canonical;
@@ -513,7 +520,7 @@ export async function getOrBuildLocationIndex(): Promise<LocationIndexCache> {
         }
 
         // 2. Direct Area column if specified
-        if (areaTrim && areaTrim !== "null" && areaTrim !== "Unspecified") {
+        if (areaTrim && areaTrim !== "null" && areaTrim !== "Unspecified" && areaTrim !== "Unknown") {
           const norm = areaTrim.toLowerCase();
           return CANONICAL_AREA_ALIASES[norm] || areaTrim;
         }

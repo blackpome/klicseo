@@ -173,6 +173,8 @@ export default async function AdminLeadsPage({
     const canManageLists = Boolean(me?.permissions.includes("leads.manage"));
     const activeYear = folder?.startsWith("year_") ? folder.replace("year_", "") : year;
 
+    const isRootFoldersView = !isInsideFolder;
+
     [paginated, statusSummary, folderSummaries, areaCounts, leadLists, serviceCounts, assignableUsers, areaAnalyticsReport] = await Promise.all([
       needsSpreadsheetLeads
         ? listPaginatedLeads({
@@ -206,15 +208,19 @@ export default async function AdminLeadsPage({
         source,
       }),
       listFolderSummaries(assignedAdminUserId),
-      listAreasWithCounts({
-        assignedAdminUserId,
-        folder,
-        year,
-        source,
-        assignment: assignmentFilter,
-      }),
-      canManageLists ? listLeadLists({ assignedAdminUserId }) : Promise.resolve([]),
-      canManageLists
+      !isRootFoldersView
+        ? listAreasWithCounts({
+            assignedAdminUserId,
+            folder,
+            year,
+            source,
+            assignment: assignmentFilter,
+          })
+        : Promise.resolve([]),
+      canManageLists && !isRootFoldersView
+        ? listLeadLists({ assignedAdminUserId })
+        : Promise.resolve([]),
+      canManageLists && needsSpreadsheetLeads
         ? listServiceCounts({
             assignedAdminUserId,
             area: areaFilter,
@@ -224,8 +230,10 @@ export default async function AdminLeadsPage({
             assignment: assignmentFilter,
           })
         : Promise.resolve([]),
-      canManageLists ? listAssignableAdminUsers() : Promise.resolve([]),
-      areaFilter
+      canManageLists && !isRootFoldersView
+        ? listAssignableAdminUsers()
+        : Promise.resolve([]),
+      areaFilter && needsSpreadsheetLeads
         ? getAnalyticsReportData({
             folder,
             year: activeYear && activeYear !== "all" ? activeYear : undefined,

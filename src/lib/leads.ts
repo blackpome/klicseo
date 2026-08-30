@@ -1039,7 +1039,7 @@ export async function listCallReminders(opts: { limit?: number; assignedAdminUse
     id: r.id, name: r.name, phone: r.phone, reason: r.reason, kind: r.kind, href: r.href,
   }));
   const res = [...dueClean, ...fresh].slice(0, limit);
-  callRemindersCache.set(cacheKey, { data: res, expires: now + 15_000 });
+  callRemindersCache.set(cacheKey, { data: res, expires: now + 60_000 });
   return res;
 }
 

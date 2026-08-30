@@ -13,9 +13,27 @@ import type {
   YearStatusCount,
 } from "./analytics-shared";
 
+interface AnalyticsCacheEntry {
+  data: AnalyticsReportData;
+  expires: number;
+}
+
+const analyticsReportCache = new Map<string, AnalyticsCacheEntry>();
+
+export function invalidateAnalyticsCache(): void {
+  analyticsReportCache.clear();
+}
+
 export async function getAnalyticsReportData(
   filters: AnalyticsFilterOptions = {},
 ): Promise<AnalyticsReportData> {
+  const cacheKey = JSON.stringify(filters);
+  const now = Date.now();
+  const cached = analyticsReportCache.get(cacheKey);
+  if (cached && cached.expires > now) {
+    return cached.data;
+  }
+
   let listsQuery = supabase()
     .from("lead_lists")
     .select("id, name, assigned_admin_user_id, admin_users(id, email, employees(name)), lead_list_items(lead_id)")
@@ -493,7 +511,7 @@ export async function getAnalyticsReportData(
     selectedYear,
   };
 
-  return {
+  const result = {
     summary,
     areaMetrics,
     staffMetrics,
@@ -502,6 +520,9 @@ export async function getAnalyticsReportData(
     availableAreas,
     availableStaff,
   };
+
+  analyticsReportCache.set(cacheKey, { data: result, expires: now + 30_000 });
+  return result;
 }
 
 export async function getAreaTerritoryAnalytics(

@@ -43,10 +43,12 @@ export default async function LeadListPage({
       }
     }
 
+    const isSuperAdmin = me?.role === "super_admin";
+
     if (!notFoundError) {
       const [fetchedLeads, assignableUsers] = await Promise.all([
         getLeadsInList(id),
-        listAssignableAdminUsers().catch(() => []),
+        isSuperAdmin ? listAssignableAdminUsers().catch(() => []) : Promise.resolve([]),
       ]);
       leads = fetchedLeads;
       adminUsers = assignableUsers.map((u) => ({ id: u.id, email: u.email, name: u.name }));

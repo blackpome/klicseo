@@ -21,8 +21,9 @@ import {
   BarChart3,
   RefreshCw,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { fetchDailyReportAction } from "./actions";
-import StaffTimelineModal from "./StaffTimelineModal";
+const StaffTimelineModal = dynamic(() => import("./StaffTimelineModal"), { ssr: false });
 import type {
   DailyReportSummary,
   StaffDailyMetric,
