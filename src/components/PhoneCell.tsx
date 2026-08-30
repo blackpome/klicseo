@@ -68,14 +68,14 @@ export default function PhoneCell({
             onClick={handleCopy}
             title={copied ? "Copied!" : "Copy phone number"}
             aria-label="Copy phone number"
-            className={`p-1 rounded transition-all flex items-center gap-1 ${
+            className={`p-1.5 sm:p-1 rounded-lg sm:rounded transition-all flex items-center gap-1 min-h-[32px] sm:min-h-0 ${
               copied
                 ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40"
-                : "text-white/40 hover:text-white hover:bg-white/10"
+                : "text-white/40 hover:text-white hover:bg-white/10 active:bg-white/20"
             }`}
           >
-            {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-            {copied && <span className="text-[9px] font-sans font-semibold text-emerald-300">Copied</span>}
+            {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+            {copied && <span className="text-[10px] font-sans font-semibold text-emerald-300">Copied</span>}
           </button>
         )}
 
@@ -83,8 +83,8 @@ export default function PhoneCell({
           <WhatsAppLink
             phone={phone}
             label={`WhatsApp ${name ?? formatted}`}
-            size={12}
-            className="!h-5 !w-5"
+            size={13}
+            className="!h-7 !w-7 sm:!h-5 sm:!w-5"
           />
         )}
       </div>

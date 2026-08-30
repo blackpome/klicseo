@@ -265,7 +265,7 @@ export default function LeadStatusCustomizer({
                   value={status.description ?? ""}
                   onChange={(e) => handleUpdateStatus(index, "description", e.target.value)}
                   className="w-full bg-[#050E21] border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white/70 focus:outline-none focus:border-[#C9A84C]"
-                  placeholder="e.g. Callback scheduled"
+                  placeholder="e.g. Follow-up scheduled"
                 />
               </div>
             </div>

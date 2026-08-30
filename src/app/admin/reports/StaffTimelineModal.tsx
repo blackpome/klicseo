@@ -27,10 +27,23 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   staff: StaffDailyMetric;
-  date: string;
+  date?: string;
+  startDate?: string;
+  endDate?: string;
+  isAllTime?: boolean;
+  displayLabel?: string;
 }
 
-export default function StaffTimelineModal({ isOpen, onClose, staff, date }: Props) {
+export default function StaffTimelineModal({
+  isOpen,
+  onClose,
+  staff,
+  date,
+  startDate,
+  endDate,
+  isAllTime,
+  displayLabel,
+}: Props) {
   const [events, setEvents] = useState<StaffTimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +55,12 @@ export default function StaffTimelineModal({ isOpen, onClose, staff, date }: Pro
     setError(null);
 
     startTransition(async () => {
-      const res = await fetchStaffTimelineAction(staff.email, date);
+      const res = await fetchStaffTimelineAction(staff.email, {
+        date,
+        startDate,
+        endDate,
+        isAllTime,
+      });
       if (res.ok && res.events) {
         setEvents(res.events);
       } else {
@@ -50,38 +68,44 @@ export default function StaffTimelineModal({ isOpen, onClose, staff, date }: Pro
       }
       setLoading(false);
     });
-  }, [isOpen, staff.email, date]);
+  }, [isOpen, staff.email, date, startDate, endDate, isAllTime]);
 
   if (!isOpen) return null;
 
-  const dateFormatted = new Date(date + "T00:00:00").toLocaleDateString("en-IN", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const headerLabel =
+    displayLabel ||
+    (isAllTime
+      ? "All-Time Calling Activity"
+      : date
+      ? new Date(date + "T00:00:00").toLocaleDateString("en-IN", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })
+      : `${startDate || ""} to ${endDate || ""}`);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-3xl bg-[#071228] border border-white/15 rounded-3xl p-6 sm:p-7 shadow-2xl space-y-6 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+      <div className="relative w-full max-w-3xl bg-[#071228] border border-white/15 rounded-3xl p-4 sm:p-7 shadow-2xl space-y-5 sm:space-y-6 max-h-[92vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-white/[0.08] pb-4 shrink-0">
+        <div className="flex items-start justify-between gap-3 border-b border-white/[0.08] pb-3 sm:pb-4 shrink-0">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <div className="grid h-9 w-9 place-items-center rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <div className="grid h-9 w-9 place-items-center rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
                 <PhoneCall size={18} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h3
-                  className="text-lg sm:text-xl font-bold text-white tracking-tight flex items-center gap-2"
+                  className="text-base sm:text-xl font-bold text-white tracking-tight flex items-center gap-2 flex-wrap"
                   style={{ fontFamily: "var(--font-playfair)" }}
                 >
-                  <span>{staff.name}</span>
-                  <span className="text-xs font-normal text-white/50 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10">
-                    {dateFormatted}
+                  <span className="truncate">{staff.name}</span>
+                  <span className="text-[11px] sm:text-xs font-normal text-white/50 px-2 py-0.5 rounded-full bg-white/5 border border-white/10">
+                    {headerLabel}
                   </span>
                 </h3>
-                <p className="text-xs text-white/50">{staff.email}</p>
+                <p className="text-xs text-white/50 truncate">{staff.email}</p>
               </div>
             </div>
           </div>
@@ -89,7 +113,8 @@ export default function StaffTimelineModal({ isOpen, onClose, staff, date }: Pro
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+            aria-label="Close modal"
+            className="grid h-9 w-9 place-items-center rounded-xl text-white/40 hover:text-white hover:bg-white/10 active:bg-white/20 transition-colors shrink-0"
           >
             <X size={18} />
           </button>

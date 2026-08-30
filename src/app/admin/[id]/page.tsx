@@ -189,7 +189,7 @@ export default async function LeadDetailPage({
     fromListName
       ? `Back to ${fromListName}`
       : returnTo?.includes("my-lists")
-      ? "Back to My Lists"
+      ? "Back to My Leads"
       : returnTo?.includes("/lists/")
       ? "Back to List"
       : me?.role === "super_admin"
@@ -227,12 +227,12 @@ export default async function LeadDetailPage({
         </div>
 
         {/* Lead Profile Header Card */}
-        <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-6 shadow-xl">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-4 sm:p-6 shadow-xl">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <h1
-                  className="text-2xl md:text-3xl font-bold text-white tracking-tight"
+                  className="text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-tight"
                   style={{ fontFamily: "var(--font-playfair)" }}
                 >
                   {lead.name || "(Unnamed Lead)"}
@@ -245,7 +245,7 @@ export default async function LeadDetailPage({
                 )}
               </div>
 
-              <div className="flex items-center gap-3 mt-2 text-xs text-white/50 flex-wrap">
+              <div className="flex items-center gap-2.5 sm:gap-3 mt-2 text-xs text-white/50 flex-wrap">
                 {lead.phone && (
                   <PhoneCell phone={lead.phone} name={lead.name} compact={true} />
                 )}
@@ -300,11 +300,11 @@ export default async function LeadDetailPage({
             </div>
 
             {lead.price_total != null && (
-              <div className="text-right">
+              <div className="text-left sm:text-right w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5">
                 <span className="text-[10px] text-white/40 uppercase tracking-wider block">
                   Total Deal Value
                 </span>
-                <span className="text-2xl font-bold text-[#E8CC7A]">
+                <span className="text-xl sm:text-2xl font-bold text-[#E8CC7A]">
                   ₹{lead.price_total.toLocaleString("en-IN")}
                 </span>
               </div>
@@ -461,7 +461,7 @@ export default async function LeadDetailPage({
 
           {/* Right Column: Telecaller Schedule & Notes */}
           <div className="space-y-6">
-            {/* Follow-up & Callback Schedule */}
+            {/* Follow-up Schedule */}
             <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-5 space-y-4 shadow-lg">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#C9A84C] border-b border-white/[0.06] pb-3">
                 <Clock size={15} /> Telecaller Follow-up
@@ -469,11 +469,11 @@ export default async function LeadDetailPage({
 
               <div className="space-y-3 text-xs">
                 <DetailRow
-                  label="Callback Date"
+                  label="Follow-up Date"
                   value={lead.callback_date || <span className="text-white/30">Not scheduled</span>}
                 />
                 <DetailRow
-                  label="Callback Time"
+                  label="Follow-up Time"
                   value={lead.callback_time || <span className="text-white/30">—</span>}
                 />
                 <DetailRow

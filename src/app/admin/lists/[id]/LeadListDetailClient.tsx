@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo, useRef, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Edit, Plus, Trash2, UploadCloud, RotateCcw, CheckCircle2, MapPin } from "lucide-react";
+import { ArrowLeft, Check, Edit, Plus, Trash2, UploadCloud, RotateCcw, CheckCircle2, MapPin, PhoneCall } from "lucide-react";
 import AdminBackButton from "@/components/AdminBackButton";
 import { useHighlightedLead, markLeadViewed } from "@/lib/useHighlightedLead";
 import LeadStatusControl from "../../LeadStatusControl";
@@ -375,7 +375,7 @@ export default function LeadListDetailClient({
 
       <AdminBackButton
         fallbackHref={isSuperAdmin ? "/admin/lists" : "/admin/my-lists"}
-        label={isSuperAdmin ? "Back to all lists" : "Back to my lists"}
+        label={isSuperAdmin ? "Back to all lists" : "Back to my leads"}
         className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white mb-4"
       />
 
@@ -676,7 +676,118 @@ export default function LeadListDetailClient({
             />
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-white/10">
+          {/* MOBILE CALLING CARDS VIEW (Clean, high-velocity calling on phones) */}
+          <div className="block sm:hidden space-y-3">
+            {paginatedLeads.map((lead, index) => {
+              const isHighlighted = lead.id === highlightedLeadId;
+              const globalIndex = pageSize === "all" ? index + 1 : (currentPage - 1) * pageSize + index + 1;
+              const vehicle = [lead.car_brand, lead.car_model].filter(Boolean).join(" ") || lead.vehicle_type;
+
+              return (
+                <div
+                  key={`mobile-lead-${lead.id}`}
+                  id={`mobile-lead-card-${lead.id}`}
+                  className={`rounded-2xl border p-4 space-y-3 transition-all ${
+                    isHighlighted
+                      ? "bg-[#C9A84C]/15 border-[#C9A84C]/60 shadow-[0_0_15px_rgba(201,168,76,0.2)]"
+                      : "bg-[#071228] border-white/[0.08]"
+                  }`}
+                >
+                  {/* Top Info */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-white/50 shrink-0 font-bold">
+                          #{globalIndex}
+                        </span>
+                        <Link
+                          href={`/admin/${lead.id}?returnTo=${encodeURIComponent(`/admin/lists/${list.id}`)}&fromListName=${encodeURIComponent(list.name)}`}
+                          onClick={() => markLeadViewed(lead.id)}
+                          className="font-bold text-white hover:text-[#E8CC7A] text-sm truncate"
+                        >
+                          {lead.name ?? "(unnamed)"}
+                        </Link>
+                      </div>
+
+                      {(lead.area || lead.service || vehicle) && (
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1.5 text-[11px] text-white/50">
+                          {lead.area && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-[10px] font-medium">
+                              <MapPin size={10} className="shrink-0" />
+                              <span>{lead.area}</span>
+                            </span>
+                          )}
+                          {lead.service && (
+                            <span className="px-1.5 py-0.5 rounded bg-white/5 text-white/70 text-[10px]">
+                              {lead.service}
+                            </span>
+                          )}
+                          {vehicle && (
+                            <span className="text-[10px] text-white/40">
+                              • {vehicle}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveLead(lead.id)}
+                        disabled={pending}
+                        className="grid h-8 w-8 place-items-center rounded-xl bg-white/5 text-white/40 hover:text-red-300 hover:bg-red-500/20 active:bg-red-500/30 transition-colors shrink-0"
+                        title="Remove from list"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 1-Tap Quick Action Buttons */}
+                  {lead.phone && (
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <a
+                        href={`tel:${lead.phone.replace(/\s+/g, "")}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markLeadViewed(lead.id);
+                        }}
+                        className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-500/15 active:scale-98 transition-all min-h-[42px]"
+                      >
+                        <PhoneCall size={14} />
+                        <span>Call Now</span>
+                      </a>
+
+                      <WhatsAppLink
+                        phone={lead.phone}
+                        label="WhatsApp"
+                        size={14}
+                        className="!w-full !h-auto !py-2.5 !px-3 !rounded-xl !bg-emerald-600/20 !border !border-emerald-500/40 !text-emerald-300 !text-xs !font-bold !flex !items-center !justify-center !gap-2 !min-h-[42px]"
+                      />
+                    </div>
+                  )}
+
+                  {/* Status Disposition Picker */}
+                  <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
+                    <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider shrink-0">
+                      Status:
+                    </span>
+                    <LeadStatusControl
+                      id={lead.id}
+                      status={lead.status}
+                      color={statusColorMap[lead.status] || "#C9A84C"}
+                      customStatuses={configuredStatuses}
+                      className="flex-1 max-w-[200px]"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* DESKTOP & TABLET TABLE VIEW */}
+          <div className="hidden sm:block overflow-x-auto rounded-xl border border-white/10">
             <table className="w-full text-sm">
             <thead className="bg-white/[0.03] text-white/50 text-[11px] uppercase tracking-wider">
               <tr>

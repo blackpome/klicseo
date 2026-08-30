@@ -8,6 +8,7 @@ interface AreaFilterSelectProps {
   status?: string;
   q?: string;
   service?: string;
+  assignment?: string;
   folder?: string;
   view?: string;
 }
@@ -18,6 +19,7 @@ export default function AreaFilterSelect({
   status = "all",
   q = "",
   service,
+  assignment,
   folder,
   view,
 }: AreaFilterSelectProps) {
@@ -29,6 +31,7 @@ export default function AreaFilterSelect({
     if (status && status !== "all") params.set("status", status);
     if (q) params.set("q", q);
     if (service && service !== "all") params.set("service", service);
+    if (assignment && assignment !== "all") params.set("assignment", assignment);
     if (newArea && newArea !== "all") params.set("area", newArea);
     if (view && view !== "cards") params.set("view", view);
     params.set("page", "1");

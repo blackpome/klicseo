@@ -21,6 +21,16 @@ export interface StaffDailyMetric {
   // Queue stats
   totalAssignedLeads: number;
   pendingUncalledLeads: number;
+  queueBreakdown?: {
+    total: number;
+    pending: number;        // new + draft
+    completed: number;      // total - pending
+    booked: number;
+    contacted: number;
+    follow_up: number;
+    not_responded: number;
+    cancelled: number;
+  };
   targetCalls: number; // Default daily goal e.g. 35
 }
 
@@ -29,6 +39,7 @@ export interface DailyReportSummary {
   startDate: string;         // Filter start ISO or YYYY-MM-DD
   endDate: string;           // Filter end ISO or YYYY-MM-DD
   isSingleDay: boolean;
+  isAllTime?: boolean;
   totalCalls: number;
   totalBookings: number;
   totalFollowUps: number;
@@ -60,6 +71,7 @@ export interface DailyReportFilter {
   date?: string;             // YYYY-MM-DD for single day
   startDate?: string;        // YYYY-MM-DD for range start
   endDate?: string;          // YYYY-MM-DD for range end
-  preset?: "today" | "yesterday" | "last7days" | "thismonth" | "custom";
+  isAllTime?: boolean;
+  preset?: "today" | "yesterday" | "last7days" | "thismonth" | "all_time" | "custom";
   assignedAdminUserId?: string;
 }

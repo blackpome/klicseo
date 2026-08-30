@@ -19,6 +19,9 @@ import {
   FileSpreadsheet,
   Globe,
   User,
+  Plus,
+  Loader2,
+  Users,
 } from "lucide-react";
 import LeadStatusControl from "./LeadStatusControl";
 import WhatsAppLink from "@/components/WhatsAppLink";
@@ -26,7 +29,7 @@ import PhoneCell from "@/components/PhoneCell";
 import ColumnVisibilityPicker from "@/components/ColumnVisibilityPicker";
 import { useColumnPreferences, type ColumnDefinition } from "@/lib/useColumnPreferences";
 import { formatPhone } from "@/lib/phone-shared";
-import { addLeadsToListAction } from "./lists/actions";
+import { addLeadsToListAction, createListAndAssignLeadsAction } from "./lists/actions";
 import { getLeadSourceInfo, type LeadStatus } from "@/lib/leads-shared";
 import type { CustomLeadStatus } from "@/lib/site-settings-shared";
 import type { LeadListRow } from "@/lib/leadLists-shared";
@@ -75,6 +78,7 @@ const MASTER_LEAD_COLUMNS: ColumnDefinition[] = [
 export default function LeadBulkListTable({
   leads,
   lists,
+  adminUsers = [],
   statusColor,
   canManageLists,
   leadListNames,
@@ -82,6 +86,7 @@ export default function LeadBulkListTable({
 }: {
   leads: LeadForTable[];
   lists: LeadListRow[];
+  adminUsers?: { id: string; email: string; name: string }[];
   statusColor: Record<string, string>;
   canManageLists: boolean;
   leadListNames: Map<string, string[]>;
@@ -89,6 +94,9 @@ export default function LeadBulkListTable({
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [targetListId, setTargetListId] = useState<string>("");
+  const [isCreateListOpen, setIsCreateListOpen] = useState<boolean>(false);
+  const [newListName, setNewListName] = useState<string>("");
+  const [newListStaffId, setNewListStaffId] = useState<string>("");
   const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -161,14 +169,48 @@ export default function LeadBulkListTable({
       const res = await addLeadsToListAction(fd);
 
       if (!res?.error) {
+        const targetList = lists.find((l) => l.id === targetListId);
         setMessage({
           kind: "ok",
-          text: `Added ${leadIds.length} lead${leadIds.length === 1 ? "" : "s"} to list.`,
+          text: `Added ${leadIds.length} lead${leadIds.length === 1 ? "" : "s"} to list "${targetList?.name || "List"}".`,
         });
         setSelected(new Set());
         setTargetListId("");
       } else {
         setMessage({ kind: "err", text: res.error || "Failed to add leads to list." });
+      }
+    });
+  };
+
+  const handleCreateNewList = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newListName.trim() || selected.size === 0) return;
+    const leadIds = Array.from(selected);
+
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.append("name", newListName.trim());
+      if (newListStaffId) {
+        fd.append("assigned_admin_user_id", newListStaffId);
+      }
+      for (const id of leadIds) {
+        fd.append("leadIds", id);
+      }
+
+      const res = await createListAndAssignLeadsAction(fd);
+
+      if (res?.ok) {
+        const assignedStaff = adminUsers.find((u) => u.id === newListStaffId)?.name;
+        setMessage({
+          kind: "ok",
+          text: `Created list "${res.listName}" ${assignedStaff ? `(assigned to ${assignedStaff})` : ""} with ${leadIds.length} leads.`,
+        });
+        setSelected(new Set());
+        setIsCreateListOpen(false);
+        setNewListName("");
+        setNewListStaffId("");
+      } else {
+        setMessage({ kind: "err", text: res?.error || "Failed to create list." });
       }
     });
   };
@@ -441,7 +483,7 @@ export default function LeadBulkListTable({
                     {/* Lead List Tags */}
                     {colPrefs.isVisible("lists") && (
                       <td className="px-4 py-3 min-w-[130px]">
-                        {leadListNames.has(lead.id) ? (
+                        {leadListNames.has(lead.id) && leadListNames.get(lead.id)!.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {leadListNames.get(lead.id)!.map((name) => (
                               <span
@@ -453,7 +495,9 @@ export default function LeadBulkListTable({
                             ))}
                           </div>
                         ) : (
-                          <span className="text-white/20 text-[10px]">—</span>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[10px] font-semibold">
+                            ⚡ Unassigned
+                          </span>
                         )}
                       </td>
                     )}
@@ -493,7 +537,7 @@ export default function LeadBulkListTable({
 
       {/* Floating Bottom Dock for Bulk Actions */}
       {selected.size > 0 && canManageLists && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-[#071228]/95 backdrop-blur-md border border-[#C9A84C]/40 rounded-2xl px-5 py-3 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-[#071228]/95 backdrop-blur-md border border-[#C9A84C]/40 rounded-2xl px-5 py-3 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200 flex-wrap justify-center">
           <div className="flex items-center gap-2 text-xs text-white font-medium pr-2 border-r border-white/10">
             <span className="grid h-5 w-5 place-items-center rounded-full bg-[#C9A84C] text-[#050E21] font-bold text-[10px]">
               {selected.size}
@@ -501,38 +545,146 @@ export default function LeadBulkListTable({
             <span>selected</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <select
               value={targetListId}
               onChange={(e) => setTargetListId(e.target.value)}
-              className="bg-[#050E21] border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#C9A84C]"
+              className="bg-[#050E21] border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#C9A84C] max-w-[220px] truncate cursor-pointer"
             >
-              <option value="">— Assign to List —</option>
-              {lists.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
+              <option value="">— Assign to Existing List —</option>
+              {lists.map((l) => {
+                const staffName = l.assigned_admin_user?.name || l.assigned_admin_user?.email;
+                return (
+                  <option key={l.id} value={l.id}>
+                    {l.name} {staffName ? `(${staffName})` : "(Unassigned)"}
+                  </option>
+                );
+              })}
             </select>
 
             <button
               type="button"
               disabled={!targetListId || isPending}
               onClick={handleAddToList}
-              className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#C9A84C] to-[#E8CC7A] text-[#050E21] text-xs font-bold hover:brightness-105 transition-all disabled:opacity-50 inline-flex items-center gap-1.5 shadow-md shadow-[#C9A84C]/20"
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#C9A84C] to-[#E8CC7A] text-[#050E21] text-xs font-bold hover:brightness-105 transition-all disabled:opacity-50 inline-flex items-center gap-1.5 shadow-md shadow-[#C9A84C]/20 cursor-pointer whitespace-nowrap"
             >
-              <ListPlus size={13} />
+              {isPending ? <Loader2 size={13} className="animate-spin text-[#050E21]" /> : <ListPlus size={13} />}
               <span>{isPending ? "Assigning…" : "Add to List"}</span>
+            </button>
+
+            <div className="h-4 w-px bg-white/15 mx-0.5" />
+
+            <button
+              type="button"
+              onClick={() => {
+                setNewListName(`Leads Batch — ${new Date().toLocaleDateString("en-IN", { month: "short", day: "numeric" })}`);
+                setIsCreateListOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-white text-xs font-semibold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              title="Create a new list assigned to staff and add selected leads to it"
+            >
+              <Plus size={13} className="text-[#C9A84C]" />
+              <span>Create New List</span>
             </button>
 
             <button
               type="button"
               onClick={() => setSelected(new Set())}
-              className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors"
+              className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
               title="Deselect all"
             >
               <X size={14} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Create New List Modal */}
+      {isCreateListOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div
+            className="fixed inset-0"
+            onClick={() => !isPending && setIsCreateListOpen(false)}
+          />
+          <div className="relative w-full max-w-md bg-[#071228] border border-white/15 rounded-3xl p-6 shadow-2xl space-y-4 z-10 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#C9A84C]/15 border border-[#C9A84C]/30 flex items-center justify-center text-[#C9A84C]">
+                  <Plus size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Create List & Assign Leads</h3>
+                  <p className="text-[11px] text-white/50">
+                    Assign {selected.size} selected leads to a new list
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateListOpen(false)}
+                disabled={isPending}
+                className="text-white/40 hover:text-white p-1 rounded-lg hover:bg-white/5"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateNewList} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-white/80 mb-1.5">
+                  List Name <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newListName}
+                  onChange={(e) => setNewListName(e.target.value)}
+                  placeholder="e.g. Velachery Follow-ups"
+                  className="w-full bg-[#050E21] border border-white/15 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#C9A84C]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-white/80 mb-1.5 flex items-center justify-between">
+                  <span>Assign to Staff Member (Telecaller)</span>
+                  <span className="text-[10px] text-white/40 font-normal">Optional</span>
+                </label>
+                <select
+                  value={newListStaffId}
+                  onChange={(e) => setNewListStaffId(e.target.value)}
+                  className="w-full bg-[#050E21] border border-white/15 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#C9A84C] cursor-pointer"
+                >
+                  <option value="">— Leave Unassigned (General Pool) —</option>
+                  {adminUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      👤 {u.name} ({u.email})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-white/40 mt-1">
+                  The selected team member will immediately see this list under their assigned workspace.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-white/[0.08]">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateListOpen(false)}
+                  disabled={isPending}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending || !newListName.trim()}
+                  className="px-4 py-2 rounded-xl bg-[#C9A84C] hover:bg-[#E8CC7A] text-[#050E21] font-bold text-xs transition-all disabled:opacity-50 inline-flex items-center gap-1.5 shadow-lg shadow-[#C9A84C]/25"
+                >
+                  {isPending && <Loader2 size={13} className="animate-spin text-[#050E21]" />}
+                  <span>{isPending ? "Creating & Assigning…" : `Create & Assign (${selected.size} Leads)`}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -376,7 +376,7 @@ export const DEFAULT_LEAD_STATUS_ITEMS: CustomLeadStatus[] = [
   { id: "draft", label: "Draft", color: "#8B5CF6", description: "Incomplete web wizard capture", isSystem: true, enabled: true },
   { id: "new", label: "New", color: "#3B82F6", description: "Uncalled new inbound or uploaded lead", isSystem: true, enabled: true },
   { id: "contacted", label: "Contacted", color: "#C9A84C", description: "Connected and call in progress", isSystem: true, enabled: true },
-  { id: "follow_up", label: "Follow up", color: "#06B6D4", description: "Callback scheduled", isSystem: true, enabled: true },
+  { id: "follow_up", label: "Follow up", color: "#06B6D4", description: "Follow-up scheduled", isSystem: true, enabled: true },
   { id: "call_not_responded", label: "Call not responded", color: "#F97316", description: "Ringing / Busy / No response", isSystem: true, enabled: true },
   { id: "booked", label: "Booked", color: "#10B981", description: "Confirmed customer booking", isSystem: true, enabled: true },
   { id: "cancelled", label: "Cancelled", color: "#EF4444", description: "Not interested / Lost lead", isSystem: true, enabled: true },

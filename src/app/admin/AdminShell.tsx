@@ -32,10 +32,10 @@ export default async function AdminShell({
   const groups: NavGroup[] = [];
 
   const leadsItems = [
-    can("leads.view") && { href: "/admin", label: isSuperAdmin ? "All Leads" : "My Leads", icon: "Inbox" as const, exact: true },
-    can("leads.view") && { href: "/admin/analytics", label: "Analytics", icon: "TrendingUp" as const },
-    isSuperAdmin && can("leads.view") && { href: "/admin/lists", label: "Lead Lists", icon: "ClipboardList" as const },
-    !isSuperAdmin && can("leads.view") && { href: "/admin/my-lists", label: "My Lists", icon: "ClipboardList" as const },
+    canManageAccess && can("leads.view") && { href: "/admin", label: "All Leads", icon: "Inbox" as const, exact: true },
+    canManageAccess && can("leads.view") && { href: "/admin/analytics", label: "Analytics", icon: "TrendingUp" as const },
+    canManageAccess && can("leads.view") && { href: "/admin/lists", label: "Lead Lists", icon: "ClipboardList" as const },
+    !canManageAccess && can("leads.view") && { href: "/admin/my-lists", label: "My Leads", icon: "Inbox" as const },
     can("leads.view") && { href: "/admin/reports", label: "Daily Reports", icon: "BarChart3" as const },
     can("leads.manage") && { href: "/admin/new", label: "Add Lead", icon: "PlusCircle" as const },
     can("leads.manage") && { href: "/admin/upload", label: "Upload Leads", icon: "UploadCloud" as const },
@@ -83,7 +83,7 @@ export default async function AdminShell({
   }
 
   return (
-    <div className="min-h-screen bg-[#050E21] text-white selection:bg-[#C9A84C]/30 selection:text-[#E8CC7A]">
+    <div className="min-h-screen bg-[#050E21] text-white selection:bg-[#C9A84C]/30 selection:text-[#E8CC7A] overflow-x-clip">
       <AuthSessionGuard />
       <Sidebar
         groups={groups}
@@ -93,8 +93,8 @@ export default async function AdminShell({
         showBell={can(bellPermission)}
       />
 
-      <div className="md:pl-64 flex flex-col min-h-screen">
-        <main className="flex-1 px-4 py-6 md:px-8 md:py-8 pt-18 md:pt-8 max-w-7xl w-full mx-auto">
+      <div className="md:pl-64 flex flex-col min-h-screen min-w-0">
+        <main className="flex-1 px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8 pt-18 md:pt-8 max-w-7xl w-full mx-auto min-w-0">
           {denied ? (
             <div className="mx-auto max-w-md text-center py-24 rounded-2xl border border-white/10 bg-[#071228] p-8">
               <h1 className="text-xl font-bold mb-2 text-white" style={{ fontFamily: "var(--font-playfair)" }}>

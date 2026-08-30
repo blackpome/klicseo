@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
 
   const scope = (await resolveScope(me)) ?? { kind: "all" as const };
   const { searchParams } = new URL(req.url);
+  const allTime = searchParams.get("allTime") === "true";
   const date = searchParams.get("date") || undefined;
   const startDate = searchParams.get("startDate") || undefined;
   const endDate = searchParams.get("endDate") || undefined;
@@ -29,6 +30,7 @@ export async function GET(req: NextRequest) {
     date,
     startDate,
     endDate,
+    isAllTime: allTime,
     assignedAdminUserId: scope.kind === "assigned" ? scope.adminUserId : undefined,
   });
 
@@ -50,7 +52,9 @@ export async function GET(req: NextRequest) {
     "Pending Uncalled Leads",
   ];
 
-  const datePeriodLabel = report.isSingleDay
+  const datePeriodLabel = report.isAllTime
+    ? "All-Time"
+    : report.isSingleDay
     ? report.date
     : `${report.startDate} to ${report.endDate}`;
 

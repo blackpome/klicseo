@@ -82,4 +82,16 @@ describe("sidebar active item matcher", () => {
     const active = getActiveSidebarHref("/admin/uuid-lead-id", allHrefs);
     expect(active).toBe("/admin");
   });
+
+  it("selects 'My Leads' (/admin/my-lists) for staff navigation", () => {
+    const staffHrefs = [
+      "/admin/my-lists",
+      "/admin/reports",
+      "/admin/new",
+      "/admin/upload",
+      "/admin/payments",
+    ];
+    const active = getActiveSidebarHref("/admin/my-lists", staffHrefs);
+    expect(active).toBe("/admin/my-lists");
+  });
 });

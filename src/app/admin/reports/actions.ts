@@ -1,7 +1,7 @@
 "use server";
 
 import { requirePermission, resolveScope } from "@/lib/admin-auth";
-import { getDailyStaffReport, getStaffTimelineForDate } from "@/lib/reports";
+import { getDailyStaffReport, getStaffTimeline, getStaffTimelineForDate } from "@/lib/reports";
 import type {
   DailyReportFilter,
   DailyReportSummary,
@@ -30,7 +30,7 @@ export async function fetchDailyReportAction(
 
 export async function fetchStaffTimelineAction(
   email: string,
-  date: string,
+  optionsOrDate: string | { date?: string; startDate?: string; endDate?: string; isAllTime?: boolean },
 ): Promise<{ ok: boolean; events?: StaffTimelineEvent[]; error?: string }> {
   try {
     const me = await requirePermission("leads.view");
@@ -43,7 +43,10 @@ export async function fetchStaffTimelineAction(
       }
     }
 
-    const events = await getStaffTimelineForDate(email, date);
+    const timelineOptions =
+      typeof optionsOrDate === "string" ? { date: optionsOrDate } : optionsOrDate;
+
+    const events = await getStaffTimeline(email, timelineOptions);
     return { ok: true, events };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Failed to load staff timeline." };

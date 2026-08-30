@@ -462,7 +462,7 @@ export default function StaffDatewiseLeadListsView({
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-xs font-semibold text-[#C9A84C] uppercase tracking-wider">
-                {isSuperAdmin && (
+                {isSuperAdmin ? (
                   <>
                     <button
                       type="button"
@@ -472,11 +472,17 @@ export default function StaffDatewiseLeadListsView({
                       <ArrowLeft size={11} /> List of Staffs
                     </button>
                     <span>→</span>
+                    <span>{selectedStaffObj?.staffName}</span>
+                    <span>→</span>
+                    <span>Datewise Assigned Lists</span>
+                  </>
+                ) : (
+                  <>
+                    <span>My Leads</span>
+                    <span>→</span>
+                    <span>Datewise Assigned Batches</span>
                   </>
                 )}
-                <span>{selectedStaffObj?.staffName}</span>
-                <span>→</span>
-                <span>Datewise Assigned Lists</span>
               </div>
 
               <div className="flex items-center gap-3 mt-1">
@@ -495,7 +501,9 @@ export default function StaffDatewiseLeadListsView({
                   className="text-2xl md:text-3xl font-bold tracking-tight text-white"
                   style={{ fontFamily: "var(--font-playfair)" }}
                 >
-                  {selectedStaffObj?.staffName}&apos;s Assigned Lead Lists
+                  {isSuperAdmin
+                    ? `${selectedStaffObj?.staffName}'s Assigned Lead Lists`
+                    : "My Assigned Leads"}
                 </h1>
               </div>
 
@@ -505,30 +513,30 @@ export default function StaffDatewiseLeadListsView({
             </div>
 
             {/* Selected Staff Stats */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
-                <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
+            <div className="grid grid-cols-3 gap-2 w-full sm:w-auto sm:flex sm:items-center sm:gap-3">
+              <div className="px-3 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
+                <span className="block text-[9px] sm:text-[10px] text-white/40 uppercase tracking-wider font-semibold">
                   Pending Calls
                 </span>
-                <span className="text-sm font-bold text-amber-400 tabular-nums">
+                <span className="text-xs sm:text-sm font-bold text-amber-400 tabular-nums">
                   {selectedStaffObj?.pendingLeads || 0}
                 </span>
               </div>
 
-              <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
-                <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
+              <div className="px-3 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
+                <span className="block text-[9px] sm:text-[10px] text-white/40 uppercase tracking-wider font-semibold">
                   Completed
                 </span>
-                <span className="text-sm font-bold text-emerald-400 tabular-nums">
+                <span className="text-xs sm:text-sm font-bold text-emerald-400 tabular-nums">
                   {selectedStaffObj?.completedLeads || 0}
                 </span>
               </div>
 
-              <div className="px-3.5 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
-                <span className="block text-[10px] text-white/40 uppercase tracking-wider font-semibold">
+              <div className="px-3 py-2 rounded-xl bg-[#071228] border border-white/[0.08] text-center">
+                <span className="block text-[9px] sm:text-[10px] text-white/40 uppercase tracking-wider font-semibold">
                   Progress
                 </span>
-                <span className="text-sm font-bold text-sky-400 tabular-nums">
+                <span className="text-xs sm:text-sm font-bold text-sky-400 tabular-nums">
                   {selectedStaffObj?.completionRate || 0}%
                 </span>
               </div>
@@ -537,11 +545,11 @@ export default function StaffDatewiseLeadListsView({
 
           {/* Filter & Search Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-2 rounded-2xl bg-[#071228] border border-white/[0.08]">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-nowrap sm:flex-wrap pb-1 sm:pb-0">
               <button
                 type="button"
                 onClick={() => setStatusFilter("all")}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap min-h-[36px] sm:min-h-0 ${
                   statusFilter === "all"
                     ? "bg-white/15 text-white font-bold"
                     : "text-white/50 hover:text-white hover:bg-white/5"
@@ -553,7 +561,7 @@ export default function StaffDatewiseLeadListsView({
               <button
                 type="button"
                 onClick={() => setStatusFilter("active")}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap min-h-[36px] sm:min-h-0 ${
                   statusFilter === "active"
                     ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold"
                     : "text-white/50 hover:text-white hover:bg-white/5"
@@ -566,7 +574,7 @@ export default function StaffDatewiseLeadListsView({
               <button
                 type="button"
                 onClick={() => setStatusFilter("completed")}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap min-h-[36px] sm:min-h-0 ${
                   statusFilter === "completed"
                     ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold"
                     : "text-white/50 hover:text-white hover:bg-white/5"
@@ -583,7 +591,7 @@ export default function StaffDatewiseLeadListsView({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search batch name..."
-                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#C9A84C]"
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-2 sm:py-1.5 text-base sm:text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#C9A84C]"
               />
             </div>
           </div>
@@ -704,7 +712,7 @@ export default function StaffDatewiseLeadListsView({
                               {bookedOnDate > 0
                                 ? `🏆 Outstanding outcome! ${staffName} converted ${bookedOnDate} confirmed booking${bookedOnDate === 1 ? "" : "s"} with ${callsOnDate} calls completed (${dateGroup.completionRate}% coverage).`
                                 : callsOnDate > 0
-                                ? `📞 ${staffName} completed ${callsOnDate} out of ${dateGroup.totalLeads} calls (${dateGroup.completionRate}% coverage) with ${followUpOnDate} callback${followUpOnDate === 1 ? "" : "s"} scheduled.`
+                                ? `📞 ${staffName} completed ${callsOnDate} out of ${dateGroup.totalLeads} calls (${dateGroup.completionRate}% coverage) with ${followUpOnDate} follow-up${followUpOnDate === 1 ? "" : "s"} scheduled.`
                                 : `⚡ ${dateGroup.totalLeads} fresh leads released across ${dateGroup.lists.length} batch${dateGroup.lists.length === 1 ? "" : "es"} awaiting outreach.`}
                             </p>
 
@@ -739,7 +747,7 @@ export default function StaffDatewiseLeadListsView({
 
                               <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
                                 <span className="block text-[9px] uppercase font-bold tracking-wider text-amber-300">
-                                  🟡 Callbacks
+                                  🟡 Follow Ups
                                 </span>
                                 <span className="text-xs font-bold text-amber-400 tabular-nums">
                                   {followUpOnDate} Scheduled

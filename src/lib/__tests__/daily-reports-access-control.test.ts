@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockSelect = vi.fn();
 const mockFrom = vi.fn();
 const mockEq = vi.fn();
+const mockIlike = vi.fn();
 const mockIn = vi.fn();
 const mockGte = vi.fn();
 const mockLte = vi.fn();
@@ -14,6 +15,7 @@ vi.mock("@/lib/supabase", () => ({
     from: mockFrom.mockReturnThis(),
     select: mockSelect.mockReturnThis(),
     eq: mockEq.mockReturnThis(),
+    ilike: mockIlike.mockReturnThis(),
     in: mockIn.mockReturnThis(),
     gte: mockGte.mockReturnThis(),
     lte: mockLte.mockReturnThis(),
@@ -66,6 +68,14 @@ vi.mock("@/lib/admin-users", () => ({
 describe("Daily Reports Staff Access Control", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFrom.mockReturnThis();
+    mockSelect.mockReturnThis();
+    mockEq.mockReturnThis();
+    mockIlike.mockReturnThis();
+    mockIn.mockReturnThis();
+    mockGte.mockReturnThis();
+    mockLte.mockReturnThis();
+    mockOrder.mockResolvedValue({ data: [], error: null });
   });
 
   it("getDailyStaffReport returns only single staff stats when assignedAdminUserId is provided", async () => {
@@ -128,5 +138,29 @@ describe("Daily Reports Staff Access Control", () => {
 
     const res = await fetchStaffTimelineAction("staff1@klicseo.com", "2026-08-27");
     expect(res.ok).toBe(true);
+  });
+
+  it("fetchDailyReportAction enforces assignedAdminUserId for staff regardless of incoming filter", async () => {
+    mockRequirePermission.mockResolvedValueOnce({
+      email: "staff1@klicseo.com",
+      role: "staff",
+      permissions: ["leads.view"],
+    });
+    mockResolveScope.mockResolvedValueOnce({
+      kind: "assigned",
+      adminUserId: "staff-1",
+    });
+
+    const { fetchDailyReportAction } = await import("@/app/admin/reports/actions");
+
+    // Even if filter tries to pass undefined or another user's id
+    const res = await fetchDailyReportAction({
+      date: "2026-08-27",
+      assignedAdminUserId: "staff-2",
+    });
+
+    expect(res.ok).toBe(true);
+    expect(res.summary?.staffMetrics.length).toBe(1);
+    expect(res.summary?.staffMetrics[0].email).toBe("staff1@klicseo.com");
   });
 });

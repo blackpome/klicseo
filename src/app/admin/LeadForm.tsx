@@ -21,7 +21,7 @@ const SERVICES: { id: ServiceCategory; label: string }[] = [
 const VEHICLE_LABELS = ["Hatchback", "Sedan", "Compact SUV", "SUV", "XUV & Large SUV"];
 
 const fieldCls =
-  "w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C9A84C]";
+  "w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-base sm:text-sm focus:outline-none focus:border-[#C9A84C] transition-colors";
 
 const labelCls = "text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1 block";
 
@@ -218,10 +218,10 @@ export default function LeadForm({
 
       <Section title="Scheduling" icon={Calendar}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Callback date">
+          <Field label="Follow-up date">
             <input name="callback_date" type="date" defaultValue={v("callback_date") as string} className={`${fieldCls} [color-scheme:dark]`} />
           </Field>
-          <Field label="Callback time">
+          <Field label="Follow-up time">
             <input name="callback_time" placeholder="e.g. 10:00 AM" defaultValue={v("callback_time") as string} className={fieldCls} />
           </Field>
         </div>

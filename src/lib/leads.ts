@@ -18,6 +18,7 @@ import {
   type LeadStatus,
   type LeadSource,
 } from "./leads-shared";
+import { getAllAssignedLeadIds } from "./lead-assignments";
 import type { LeadScope } from "./admin-auth";
 
 export * from "./leads-shared";
@@ -98,6 +99,8 @@ export interface LeadRow {
 
   primaryLocality?: string | null;
   assigned_admin_user?: { email: string; employees?: { name: string } | null } | null;
+  year?: string | null;
+  isBulkUpload?: boolean;
 }
 
 export type NewLead = Omit<LeadRow, "id" | "created_at" | "status" | "price_base" | "price_interior_addon" | "add_on_labels" | "client_timezone"> & {
@@ -162,6 +165,7 @@ export interface ListServiceCountsOptions {
   folder?: string;
   year?: string;
   source?: string;
+  assignment?: "all" | "unassigned" | "assigned";
 }
 
 /** Distinct service values + counts for the lead filter pill bar. */
@@ -215,7 +219,26 @@ export async function listServiceCounts(
 
   if (options.area && options.area !== "all") {
     const norm = options.area.trim().toLowerCase();
-    candidateLeads = candidateLeads.filter((l) => l.primaryLocality.toLowerCase() === norm);
+    if (norm === "unspecified / other" || norm === "unspecified") {
+      candidateLeads = candidateLeads.filter(
+        (l) =>
+          !l.primaryLocality ||
+          l.primaryLocality.toLowerCase() === "unspecified" ||
+          l.primaryLocality.toLowerCase() === "unknown" ||
+          l.primaryLocality.toLowerCase() === "unspecified / other",
+      );
+    } else {
+      candidateLeads = candidateLeads.filter((l) => l.primaryLocality.toLowerCase() === norm);
+    }
+  }
+
+  if (options.assignment && options.assignment !== "all") {
+    const assignedSet = await getAllAssignedLeadIds();
+    if (options.assignment === "unassigned") {
+      candidateLeads = candidateLeads.filter((l) => !assignedSet.has(l.id));
+    } else if (options.assignment === "assigned") {
+      candidateLeads = candidateLeads.filter((l) => assignedSet.has(l.id));
+    }
   }
 
   const counts = new Map<string, number>();
@@ -239,6 +262,8 @@ export interface LeadStatusSummary {
   booked: number;
   cancelled: number;
   draft: number;
+  unassigned: number;
+  assigned: number;
 }
 
 export interface ListStatusSummaryOptions {
@@ -250,6 +275,7 @@ export interface ListStatusSummaryOptions {
   folder?: string;
   year?: string;
   source?: string;
+  assignment?: "all" | "unassigned" | "assigned";
   fromIso?: string;
   toIso?: string;
 }
@@ -336,7 +362,17 @@ export async function listLeadStatusSummary(
 
   if (options.area && options.area !== "all") {
     const norm = options.area.trim().toLowerCase();
-    candidateLeads = candidateLeads.filter((l) => l.primaryLocality.toLowerCase() === norm);
+    if (norm === "unspecified / other" || norm === "unspecified") {
+      candidateLeads = candidateLeads.filter(
+        (l) =>
+          !l.primaryLocality ||
+          l.primaryLocality.toLowerCase() === "unspecified" ||
+          l.primaryLocality.toLowerCase() === "unknown" ||
+          l.primaryLocality.toLowerCase() === "unspecified / other",
+      );
+    } else {
+      candidateLeads = candidateLeads.filter((l) => l.primaryLocality.toLowerCase() === norm);
+    }
   }
 
   if (options.service && options.service !== "all") {
@@ -360,6 +396,26 @@ export async function listLeadStatusSummary(
     }
   }
 
+  const assignedSet = await getAllAssignedLeadIds();
+
+  let unassignedCount = 0;
+  let assignedCount = 0;
+  for (const l of candidateLeads) {
+    if (assignedSet.has(l.id)) {
+      assignedCount++;
+    } else {
+      unassignedCount++;
+    }
+  }
+
+  if (options.assignment && options.assignment !== "all") {
+    if (options.assignment === "unassigned") {
+      candidateLeads = candidateLeads.filter((l) => !assignedSet.has(l.id));
+    } else if (options.assignment === "assigned") {
+      candidateLeads = candidateLeads.filter((l) => assignedSet.has(l.id));
+    }
+  }
+
   const summary: LeadStatusSummary = {
     total: candidateLeads.length,
     new: 0,
@@ -369,11 +425,13 @@ export async function listLeadStatusSummary(
     booked: 0,
     cancelled: 0,
     draft: 0,
+    unassigned: unassignedCount,
+    assigned: assignedCount,
   };
 
   for (const l of candidateLeads) {
     const st = (l.status ?? "new") as keyof LeadStatusSummary;
-    if (st in summary && st !== "total") {
+    if (st in summary && st !== "total" && st !== "unassigned" && st !== "assigned") {
       summary[st]++;
     }
   }
@@ -390,6 +448,7 @@ export interface ListLeadsOptions {
   folder?: string;
   year?: string;
   source?: string;
+  assignment?: "all" | "unassigned" | "assigned";
   fromIso?: string;
   toIso?: string;
   excludeStatuses?: LeadStatus[];
@@ -469,11 +528,30 @@ export async function listPaginatedLeads(
 
   if (opts.area && opts.area !== "all") {
     const norm = opts.area.trim().toLowerCase();
-    candidateLeads = candidateLeads.filter((l) => l.primaryLocality.toLowerCase() === norm);
+    if (norm === "unspecified / other" || norm === "unspecified") {
+      candidateLeads = candidateLeads.filter(
+        (l) =>
+          !l.primaryLocality ||
+          l.primaryLocality.toLowerCase() === "unspecified" ||
+          l.primaryLocality.toLowerCase() === "unknown" ||
+          l.primaryLocality.toLowerCase() === "unspecified / other",
+      );
+    } else {
+      candidateLeads = candidateLeads.filter((l) => l.primaryLocality.toLowerCase() === norm);
+    }
   }
 
   if (opts.service && opts.service !== "all") {
     candidateLeads = candidateLeads.filter((l) => l.service === opts.service);
+  }
+
+  if (opts.assignment && opts.assignment !== "all") {
+    const assignedSet = await getAllAssignedLeadIds();
+    if (opts.assignment === "unassigned") {
+      candidateLeads = candidateLeads.filter((l) => !assignedSet.has(l.id));
+    } else if (opts.assignment === "assigned") {
+      candidateLeads = candidateLeads.filter((l) => assignedSet.has(l.id));
+    }
   }
 
   if (opts.search && opts.search.trim()) {

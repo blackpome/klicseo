@@ -42,8 +42,8 @@ const CSV_COLUMNS: { key: string; label: string }[] = [
   { key: "longitude", label: "Lng" },
   { key: "price_total", label: "Price total" },
   { key: "discount_percent", label: "Discount %" },
-  { key: "callback_date", label: "Callback date" },
-  { key: "callback_time", label: "Callback time" },
+  { key: "callback_date", label: "Follow-up date" },
+  { key: "callback_time", label: "Follow-up time" },
   { key: "gate_access_consent", label: "Gate consent" },
   { key: "gate_access_notes", label: "Gate notes" },
   { key: "custom_fields", label: "Custom fields" },
@@ -104,8 +104,8 @@ const PDF_SECTIONS: { label: string; fields: { key: string; label: string }[] }[
     label: "Schedule",
     fields: [
       { key: "shift", label: "Shift" },
-      { key: "callback_date", label: "Callback date" },
-      { key: "callback_time", label: "Callback time" },
+      { key: "callback_date", label: "Follow-up date" },
+      { key: "callback_time", label: "Follow-up time" },
     ],
   },
   {
@@ -134,6 +134,10 @@ export async function GET(req: NextRequest) {
   const qParam = params.get("q") ?? params.get("search");
   const areaParam = params.get("area");
   const serviceParam = params.get("service");
+  const folderParam = params.get("folder");
+  const yearParam = params.get("year");
+  const sourceParam = params.get("source");
+  const assignmentParam = params.get("assignment");
 
   const fromIso = ISO_DAY.test(from) ? `${from}T00:00:00+05:30` : undefined;
   const toIso = ISO_DAY.test(to) ? `${to}T23:59:59+05:30` : undefined;
@@ -151,6 +155,10 @@ export async function GET(req: NextRequest) {
     search: qParam || undefined,
     area: areaParam && areaParam !== "all" ? areaParam : undefined,
     service: serviceParam && serviceParam !== "all" ? serviceParam : undefined,
+    folder: folderParam && folderParam !== "all" ? folderParam : undefined,
+    year: yearParam && yearParam !== "all" ? yearParam : undefined,
+    source: sourceParam && sourceParam !== "all" ? sourceParam : undefined,
+    assignment: (assignmentParam === "unassigned" || assignmentParam === "assigned") ? assignmentParam : undefined,
   });
 
   const stamp = `${from || "all"}_to_${to || "all"}`;

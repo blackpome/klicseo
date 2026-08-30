@@ -73,7 +73,7 @@ describe("Folder-Scoped Area Counts & Strict Hot Leads Consistency", () => {
 
     expect(areaNames).toContain("Velachery");
     expect(areaNames).toContain("Puzhuthivakkam");
-    expect(areaNames).toContain("Adyar");
+    expect(areaNames).not.toContain("Adyar"); // Hot lead isolated into hot_leads folder
     expect(areaNames).not.toContain("Anna Nagar"); // Website wizard lead isolated from year folder
     expect(areaNames).not.toContain("Madipakkam"); // 2025 lead
   });

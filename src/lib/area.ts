@@ -3,6 +3,7 @@ import { cache } from "react";
 import { supabase } from "./supabase";
 import { unseal } from "./crypto";
 import { isWebsiteFormLead, isHotLead, isYearLead } from "./leads-shared";
+import { getAllAssignedLeadIds } from "./lead-assignments";
 
 // Resolve a pincode → locality name via the pincode_areas lookup table. The
 // table is small + stable, so React-cache the full map per-request rather
@@ -600,12 +601,14 @@ export interface ListAreasOptions {
   folder?: string;
   year?: string;
   source?: string;
+  assignment?: "all" | "unassigned" | "assigned";
 }
 
 export interface AreaCountSummary {
   area: string;
   count: number;
   bookedCount: number;
+  unassignedCount?: number;
 }
 
 /** Distinct areas + lead counts scoped to folder, year, or staff for the filter bar on /admin. */
@@ -658,23 +661,49 @@ export async function listAreasWithCounts(
     candidateLeads = candidateLeads.filter((l) => isYearLead(l, targetYear));
   }
 
-  const counts = new Map<string, { count: number; bookedCount: number }>();
+  const assignedSet = await getAllAssignedLeadIds();
 
-  for (const lead of candidateLeads) {
-    if (lead.primaryLocality && lead.primaryLocality !== "Unspecified" && lead.primaryLocality !== "Unknown") {
-      const isBooked = lead.status === "booked";
-      if (!counts.has(lead.primaryLocality)) {
-        counts.set(lead.primaryLocality, { count: 0, bookedCount: 0 });
-      }
-      const stat = counts.get(lead.primaryLocality)!;
-      stat.count++;
-      if (isBooked) stat.bookedCount++;
+  if (options.assignment && options.assignment !== "all") {
+    if (options.assignment === "unassigned") {
+      candidateLeads = candidateLeads.filter((l) => !assignedSet.has(l.id));
+    } else if (options.assignment === "assigned") {
+      candidateLeads = candidateLeads.filter((l) => assignedSet.has(l.id));
     }
   }
 
+  const counts = new Map<string, { count: number; bookedCount: number; unassignedCount: number }>();
+
+  for (const lead of candidateLeads) {
+    const loc =
+      lead.primaryLocality &&
+      lead.primaryLocality !== "Unspecified" &&
+      lead.primaryLocality !== "Unknown"
+        ? lead.primaryLocality
+        : "Unspecified / Other";
+
+    const isBooked = lead.status === "booked";
+    const isUnassigned = !assignedSet.has(lead.id);
+    if (!counts.has(loc)) {
+      counts.set(loc, { count: 0, bookedCount: 0, unassignedCount: 0 });
+    }
+    const stat = counts.get(loc)!;
+    stat.count++;
+    if (isBooked) stat.bookedCount++;
+    if (isUnassigned) stat.unassignedCount++;
+  }
+
   return [...counts.entries()]
-    .map(([area, stat]) => ({ area, count: stat.count, bookedCount: stat.bookedCount }))
-    .sort((a, b) => b.count - a.count || a.area.localeCompare(b.area));
+    .map(([area, stat]) => ({
+      area,
+      count: stat.count,
+      bookedCount: stat.bookedCount,
+      unassignedCount: stat.unassignedCount,
+    }))
+    .sort((a, b) => {
+      if (a.area === "Unspecified / Other") return 1;
+      if (b.area === "Unspecified / Other") return -1;
+      return b.count - a.count || a.area.localeCompare(b.area);
+    });
 }
 
 /**

@@ -33,7 +33,12 @@ export async function setStatusAction(formData: FormData) {
   await assertLeadInScope(id, scope);
 
   await updateLeadStatus(id, status);
-  await logAudit("lead.status", { entity: "lead", entityId: id, summary: `Set lead status → ${status}` });
+  await logAudit("lead.status", {
+    entity: "lead",
+    entityId: id,
+    summary: `Set lead status → ${status}`,
+    metadata: { status },
+  });
   
   // Trigger Serverless Queue Auto-Refill in the background without blocking the UI response
   void processQueueAutoRefills();
@@ -42,6 +47,7 @@ export async function setStatusAction(formData: FormData) {
   revalidatePath(`/admin/${id}`);
   revalidatePath("/admin/lists");
   revalidatePath("/admin/my-lists");
+  revalidatePath("/admin/reports");
 }
 
 export async function deleteLeadAction(formData: FormData) {

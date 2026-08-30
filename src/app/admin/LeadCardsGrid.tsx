@@ -270,17 +270,17 @@ export default function LeadCardsGrid({
                     className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all inline-flex items-center gap-1.5 ${
                       assignedLists.length > 0
                         ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20"
-                        : "bg-white/[0.04] border-white/10 text-white/50 hover:text-white hover:bg-white/[0.08]"
+                        : "bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20"
                     }`}
-                    title="Organize / Move to Folder"
+                    title="Assign to List / Telecaller"
                   >
                     {movingLeadId === lead.id ? (
-                      <Loader2 size={12} className="animate-spin text-emerald-400" />
+                      <Loader2 size={12} className="animate-spin text-amber-400" />
                     ) : (
                       <Folder size={12} />
                     )}
                     <span className="truncate max-w-[90px]">
-                      {assignedLists.length > 0 ? assignedLists[0] : "Folder"}
+                      {assignedLists.length > 0 ? assignedLists[0] : "⚡ Unassigned"}
                     </span>
                     <ChevronDown size={11} className="opacity-50" />
                   </button>

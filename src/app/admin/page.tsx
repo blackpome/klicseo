@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   FileSpreadsheet,
   BarChart3,
+  Zap,
 } from "lucide-react";
 import AdminShell from "./AdminShell";
 import AdminError from "./AdminError";
@@ -57,6 +58,7 @@ function buildLeadsHref(args: {
   q?: string;
   area?: string;
   service?: string;
+  assignment?: string;
   folder?: string;
   view?: string;
   year?: string;
@@ -69,6 +71,7 @@ function buildLeadsHref(args: {
   if (args.q) params.set("q", args.q);
   if (args.area && args.area !== "all") params.set("area", args.area);
   if (args.service && args.service !== "all") params.set("service", args.service);
+  if (args.assignment && args.assignment !== "all") params.set("assignment", args.assignment);
   if (args.folder && args.folder !== "all") params.set("folder", args.folder);
   if (args.view && args.view !== "table") params.set("view", args.view);
   if (args.year && args.year !== "all") params.set("year", args.year);
@@ -87,6 +90,7 @@ export default async function AdminLeadsPage({
     q?: string;
     area?: string;
     service?: string;
+    assignment?: string;
     folder?: string;
     view?: string;
     year?: string;
@@ -99,6 +103,11 @@ export default async function AdminLeadsPage({
   if (me && !me.permissions.includes("leads.view")) {
     if (me.permissions.includes("employees.view")) redirect("/admin/employees");
     if (me.role === "super_admin" || me.role === "admin") redirect("/admin/access");
+  }
+
+  // Staff members should view their assigned lead lists under /admin/my-lists
+  if (me && me.role === "staff") {
+    redirect("/admin/my-lists");
   }
 
   const siteSettings = await getSiteSettings();
@@ -122,6 +131,7 @@ export default async function AdminLeadsPage({
     q,
     area,
     service,
+    assignment,
     folder,
     view,
     year,
@@ -133,6 +143,8 @@ export default async function AdminLeadsPage({
   const filter = statusTabs.find((t) => t.id === status)?.id ?? "all";
   const areaFilter = area && area !== "all" ? area : undefined;
   const serviceFilter = service && service !== "all" ? service : undefined;
+  const assignmentFilter =
+    assignment === "unassigned" || assignment === "assigned" ? assignment : undefined;
   const currentView = view === "cards" ? "cards" : "table";
 
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
@@ -168,6 +180,7 @@ export default async function AdminLeadsPage({
             search: q,
             area: areaFilter,
             service: serviceFilter,
+            assignment: assignmentFilter,
             folder,
             year,
             source,
@@ -187,6 +200,7 @@ export default async function AdminLeadsPage({
         search: q,
         area: areaFilter,
         service: serviceFilter,
+        assignment: assignmentFilter,
         folder,
         year,
         source,
@@ -197,6 +211,7 @@ export default async function AdminLeadsPage({
         folder,
         year,
         source,
+        assignment: assignmentFilter,
       }),
       canManageLists ? listLeadLists({ assignedAdminUserId }) : Promise.resolve([]),
       canManageLists
@@ -206,6 +221,7 @@ export default async function AdminLeadsPage({
             folder,
             year,
             source,
+            assignment: assignmentFilter,
           })
         : Promise.resolve([]),
       canManageLists ? listAssignableAdminUsers() : Promise.resolve([]),
@@ -575,45 +591,131 @@ export default async function AdminLeadsPage({
 
             {/* Unified Filter & Command Bar */}
             <div className="rounded-2xl border border-white/[0.08] bg-[#071228] p-4 space-y-4 shadow-lg">
-              {/* Top Row: Status Tabs Segmented Control */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                {statusTabs.map((t) => {
-                  const active = filter === t.id;
-                  const count =
-                    t.id === "all"
-                      ? statusSummary.total
-                      : statusSummary[t.id as keyof typeof statusSummary] ?? 0;
+              {/* Top Row: Status Tabs & Assignment Filter Segment */}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                {/* Status Tabs Segmented Control */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none flex-1">
+                  {statusTabs.map((t) => {
+                    const active = filter === t.id;
+                    const count =
+                      t.id === "all"
+                        ? statusSummary.total
+                        : statusSummary[t.id as keyof typeof statusSummary] ?? 0;
 
-                  return (
-                    <Link
-                      key={t.id}
-                      href={buildLeadsHref({
-                        status: t.id,
-                        q,
-                        area: areaFilter,
-                        service: serviceFilter,
-                        folder,
-                        view: currentView,
-                      })}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                        active
-                          ? "bg-[#C9A84C] text-[#050E21] shadow-sm font-bold"
-                          : "bg-white/[0.02] text-white/60 hover:text-white hover:bg-white/[0.06]"
-                      }`}
-                    >
-                      <span>{t.label}</span>
-                      <span
-                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    return (
+                      <Link
+                        key={t.id}
+                        href={buildLeadsHref({
+                          status: t.id,
+                          q,
+                          area: areaFilter,
+                          service: serviceFilter,
+                          assignment: assignmentFilter,
+                          folder,
+                          view: currentView,
+                        })}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                           active
-                            ? "bg-[#050E21]/20 text-[#050E21]"
-                            : "bg-white/10 text-white/50"
+                            ? "bg-[#C9A84C] text-[#050E21] shadow-sm font-bold"
+                            : "bg-white/[0.02] text-white/60 hover:text-white hover:bg-white/[0.06]"
                         }`}
                       >
-                        {count.toLocaleString("en-IN")}
-                      </span>
-                    </Link>
-                  );
-                })}
+                        <span>{t.label}</span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                            active
+                              ? "bg-[#050E21]/20 text-[#050E21]"
+                              : "bg-white/10 text-white/50"
+                          }`}
+                        >
+                          {count.toLocaleString("en-IN")}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+
+                {/* Assignment Filter Segment */}
+                <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] shrink-0">
+                  <Link
+                    href={buildLeadsHref({
+                      status: filter,
+                      q,
+                      area: areaFilter,
+                      service: serviceFilter,
+                      assignment: "all",
+                      folder,
+                      view: currentView,
+                    })}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      !assignmentFilter
+                        ? "bg-white/15 text-white"
+                        : "text-white/40 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    All Leads
+                  </Link>
+
+                  <Link
+                    href={buildLeadsHref({
+                      status: filter,
+                      q,
+                      area: areaFilter,
+                      service: serviceFilter,
+                      assignment: "unassigned",
+                      folder,
+                      view: currentView,
+                    })}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
+                      assignmentFilter === "unassigned"
+                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm font-bold"
+                        : "text-amber-400/70 hover:text-amber-300 hover:bg-amber-500/10"
+                    }`}
+                    title="Filter only unassigned leads waiting to be allocated"
+                  >
+                    <Zap size={12} className="text-amber-400 fill-current" />
+                    <span>Unassigned</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        assignmentFilter === "unassigned"
+                          ? "bg-amber-500/30 text-amber-200"
+                          : "bg-amber-500/15 text-amber-400"
+                      }`}
+                    >
+                      {statusSummary.unassigned.toLocaleString("en-IN")}
+                    </span>
+                  </Link>
+
+                  <Link
+                    href={buildLeadsHref({
+                      status: filter,
+                      q,
+                      area: areaFilter,
+                      service: serviceFilter,
+                      assignment: "assigned",
+                      folder,
+                      view: currentView,
+                    })}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
+                      assignmentFilter === "assigned"
+                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm font-bold"
+                        : "text-emerald-400/60 hover:text-emerald-300 hover:bg-emerald-500/10"
+                    }`}
+                    title="Filter only leads already assigned to a list or telecaller"
+                  >
+                    <CheckCircle2 size={12} className="text-emerald-400" />
+                    <span>Assigned</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        assignmentFilter === "assigned"
+                          ? "bg-emerald-500/30 text-emerald-200"
+                          : "bg-emerald-500/15 text-emerald-400"
+                      }`}
+                    >
+                      {statusSummary.assigned.toLocaleString("en-IN")}
+                    </span>
+                  </Link>
+                </div>
               </div>
 
               {/* Search, Area & Service Filters */}
@@ -622,6 +724,7 @@ export default async function AdminLeadsPage({
                   {filter !== "all" && <input type="hidden" name="status" value={filter} />}
                   {areaFilter && <input type="hidden" name="area" value={areaFilter} />}
                   {serviceFilter && <input type="hidden" name="service" value={serviceFilter} />}
+                  {assignmentFilter && <input type="hidden" name="assignment" value={assignmentFilter} />}
                   {folder && <input type="hidden" name="folder" value={folder} />}
                   {currentView !== "cards" && <input type="hidden" name="view" value={currentView} />}
 
@@ -654,7 +757,7 @@ export default async function AdminLeadsPage({
                       <MapPin size={13} className="text-white/40" />
                       <div className="flex gap-1 flex-wrap items-center">
                         <Link
-                          href={buildLeadsHref({ status: filter, q, area: "all", service: serviceFilter, folder, view: currentView })}
+                          href={buildLeadsHref({ status: filter, q, area: "all", service: serviceFilter, assignment: assignmentFilter, folder, view: currentView })}
                           className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
                             !areaFilter
                               ? "bg-white/15 text-white"
@@ -671,6 +774,7 @@ export default async function AdminLeadsPage({
                               q,
                               area: a.area,
                               service: serviceFilter,
+                              assignment: assignmentFilter,
                               folder,
                               view: currentView,
                             })}
@@ -692,6 +796,7 @@ export default async function AdminLeadsPage({
                             status={filter}
                             q={q}
                             service={serviceFilter}
+                            assignment={assignmentFilter}
                             folder={folder}
                             view={currentView}
                           />
@@ -701,7 +806,7 @@ export default async function AdminLeadsPage({
                   )}
 
                   {/* Active Filter Clear Tag */}
-                  {(q || areaFilter || serviceFilter) && (
+                  {(q || areaFilter || serviceFilter || assignmentFilter) && (
                     <Link
                       href={buildLeadsHref({ status: filter, folder, view: currentView })}
                       className="px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-300 text-[11px] font-medium hover:bg-rose-500/20 inline-flex items-center gap-1 transition-colors"
@@ -719,6 +824,8 @@ export default async function AdminLeadsPage({
                       adminUsers={assignableUsers}
                       lists={leadLists}
                       availableAreas={areaCounts.map((a) => a.area)}
+                      initialCount={statusSummary.unassigned}
+                      isUnassignedFilter={assignmentFilter === "unassigned"}
                       allFolders={[
                         ...folderSummaries.systemFolders.map((f) => ({ id: f.id, name: f.name, count: f.count })),
                         ...folderSummaries.customFolders.map((f) => ({ id: f.id, name: f.name, count: f.count })),
@@ -754,6 +861,7 @@ export default async function AdminLeadsPage({
                         q,
                         area: areaFilter,
                         service: serviceFilter,
+                        assignment: assignmentFilter,
                         folder,
                         view: currentView,
                         page: newPage,
@@ -768,6 +876,7 @@ export default async function AdminLeadsPage({
                 <LeadBulkListTable
                   leads={leads}
                   lists={leadLists}
+                  adminUsers={assignableUsers}
                   statusColor={statusColorMap}
                   canManageLists={Boolean(me?.permissions.includes("leads.manage"))}
                   leadListNames={leadListNames}
@@ -786,6 +895,7 @@ export default async function AdminLeadsPage({
                         q,
                         area: areaFilter,
                         service: serviceFilter,
+                        assignment: assignmentFilter,
                         folder,
                         view: currentView,
                         page: newPage,

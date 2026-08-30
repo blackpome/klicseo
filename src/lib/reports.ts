@@ -1,7 +1,7 @@
 import "server-only";
 import { supabase } from "./supabase";
 import { listAdminUsers } from "./admin-users";
-import { unsealFields } from "./crypto";
+import { unsealFields, unseal, isSealed } from "./crypto";
 import { ENCRYPTED_LEAD_FIELDS, type LeadStatus, type LeadRow } from "./leads";
 import type {
   DailyReportFilter,
@@ -54,47 +54,87 @@ export function istRangeToUtcRange(
 }
 
 /**
- * Parses the target lead status from an audit log summary or metadata
+ * Decrypts sealed metadata in audit log rows
  */
-function extractStatusFromAudit(log: { action: string; summary: string | null; metadata: any }): LeadStatus | null {
-  if (log.metadata?.status && typeof log.metadata.status === "string") {
-    return log.metadata.status as LeadStatus;
+export function unsealAuditMetadata<T extends { metadata: any }>(log: T): T {
+  const m = log.metadata as { __sealed?: unknown } | null;
+  if (m && isSealed(m.__sealed)) {
+    try {
+      const json = unseal(m.__sealed as string);
+      const parsed = json ? (JSON.parse(json) as Record<string, unknown>) : null;
+      return { ...log, metadata: parsed };
+    } catch {
+      return log;
+    }
   }
-  if (!log.summary) return null;
+  return log;
+}
 
-  const match = log.summary.match(/→\s*([a-zA-Z_]+)/i);
-  if (match && match[1]) {
-    const raw = match[1].toLowerCase().trim();
-    const valid: LeadStatus[] = [
-      "new",
-      "contacted",
-      "follow_up",
-      "call_not_responded",
-      "booked",
-      "cancelled",
-      "draft",
-    ];
-    if (valid.includes(raw as LeadStatus)) {
-      return raw as LeadStatus;
+/**
+ * Parses the target lead status from an audit log summary, metadata or diff
+ */
+function extractStatusFromAudit(rawLog: { action: string; summary: string | null; metadata: any }): LeadStatus | null {
+  const log = unsealAuditMetadata(rawLog);
+  const valid: LeadStatus[] = [
+    "new",
+    "contacted",
+    "follow_up",
+    "call_not_responded",
+    "booked",
+    "cancelled",
+    "draft",
+  ];
+
+  const meta = log.metadata;
+  if (meta?.status && typeof meta.status === "string") {
+    const s = meta.status.toLowerCase().trim() as LeadStatus;
+    if (valid.includes(s)) return s;
+  }
+  if (meta?.after?.status && typeof meta.after.status === "string") {
+    const s = meta.after.status.toLowerCase().trim() as LeadStatus;
+    if (valid.includes(s)) return s;
+  }
+  if (meta?.diff?.status?.to && typeof meta.diff.status.to === "string") {
+    const s = meta.diff.status.to.toLowerCase().trim() as LeadStatus;
+    if (valid.includes(s)) return s;
+  }
+  if (meta?.diff?.status?.after && typeof meta.diff.status.after === "string") {
+    const s = meta.diff.status.after.toLowerCase().trim() as LeadStatus;
+    if (valid.includes(s)) return s;
+  }
+
+  if (log.summary) {
+    const match =
+      log.summary.match(/→\s*([a-zA-Z_]+)/i) ||
+      log.summary.match(/status\s*:\s*([a-zA-Z_]+)/i) ||
+      log.summary.match(/to\s+([a-zA-Z_]+)/i);
+    if (match && match[1]) {
+      const raw = match[1].toLowerCase().trim() as LeadStatus;
+      if (valid.includes(raw)) {
+        return raw;
+      }
     }
   }
   return null;
 }
 
 /**
- * Get daily progress report for all staff for a specific date or date range.
+ * Get daily progress report for all staff for a specific date, date range, or all-time.
  */
 export async function getDailyStaffReport(
   filter?: DailyReportFilter,
 ): Promise<DailyReportSummary> {
   const today = getTodayIST();
+  const isAllTime = Boolean(filter?.isAllTime || filter?.preset === "all_time");
   let primaryDate = filter?.date || today;
   let startDate = filter?.startDate || primaryDate;
   let endDate = filter?.endDate || primaryDate;
-  const isSingleDay = startDate === endDate;
+  const isSingleDay = !isAllTime && startDate === endDate;
 
-  // Compute UTC timestamp bounds for query
-  const { startUtc, endUtc } = isSingleDay
+  // Compute UTC timestamp bounds for query if not all-time
+  const { startUtc, endUtc } = isAllTime
+    ? { startUtc: "", endUtc: "" }
+    : isSingleDay
     ? istDateToUtcRange(primaryDate)
     : istRangeToUtcRange(startDate, endDate);
 
@@ -110,7 +150,7 @@ export async function getDailyStaffReport(
     staffByEmail.set(s.email.toLowerCase(), s);
   }
 
-  // 2. Fetch queue stats (assigned leads & pending uncalled per staff)
+  // 2. Fetch queue stats & exact status breakdown per staff
   let queueQuery = supabase()
     .from("lead_list_items")
     .select(`
@@ -128,6 +168,18 @@ export async function getDailyStaffReport(
 
   const assignedCountByStaff = new Map<string, number>();
   const pendingCountByStaff = new Map<string, number>();
+  const queueStatusByStaff = new Map<
+    string,
+    {
+      new: number;
+      draft: number;
+      booked: number;
+      contacted: number;
+      follow_up: number;
+      call_not_responded: number;
+      cancelled: number;
+    }
+  >();
 
   for (const item of queueItems ?? []) {
     const adminId = (item.lead_lists as any)?.assigned_admin_user_id;
@@ -135,8 +187,30 @@ export async function getDailyStaffReport(
 
     assignedCountByStaff.set(adminId, (assignedCountByStaff.get(adminId) ?? 0) + 1);
 
+    if (!queueStatusByStaff.has(adminId)) {
+      queueStatusByStaff.set(adminId, {
+        new: 0,
+        draft: 0,
+        booked: 0,
+        contacted: 0,
+        follow_up: 0,
+        call_not_responded: 0,
+        cancelled: 0,
+      });
+    }
+
     const lead: any = Array.isArray(item.leads) ? item.leads[0] : item.leads;
-    const status = lead?.status ?? "new";
+    const status = ((lead?.status ?? "new") as string).toLowerCase().trim() as LeadStatus;
+    const breakdown = queueStatusByStaff.get(adminId)!;
+
+    if (status === "booked") breakdown.booked += 1;
+    else if (status === "contacted") breakdown.contacted += 1;
+    else if (status === "follow_up") breakdown.follow_up += 1;
+    else if (status === "call_not_responded") breakdown.call_not_responded += 1;
+    else if (status === "cancelled") breakdown.cancelled += 1;
+    else if (status === "draft") breakdown.draft += 1;
+    else breakdown.new += 1;
+
     if (status === "new" || status === "draft") {
       pendingCountByStaff.set(adminId, (pendingCountByStaff.get(adminId) ?? 0) + 1);
     }
@@ -146,12 +220,14 @@ export async function getDailyStaffReport(
   let auditQuery = supabase()
     .from("audit_logs")
     .select("id, created_at, actor_email, action, entity, entity_id, summary, metadata")
-    .in("action", ["lead.status", "lead.create", "lead.notes", "lead.update"])
-    .gte("created_at", startUtc)
-    .lte("created_at", endUtc);
+    .in("action", ["lead.status", "lead.create", "lead.notes", "lead.update"]);
+
+  if (!isAllTime && startUtc && endUtc) {
+    auditQuery = auditQuery.gte("created_at", startUtc).lte("created_at", endUtc);
+  }
 
   if (filter?.assignedAdminUserId && activeStaff.length === 1) {
-    auditQuery = auditQuery.eq("actor_email", activeStaff[0].email);
+    auditQuery = auditQuery.ilike("actor_email", activeStaff[0].email);
   }
 
   const { data: logs, error: logsErr } = await auditQuery.order("created_at", { ascending: true });
@@ -193,16 +269,18 @@ export async function getDailyStaffReport(
 
     const acc = activityByEmail.get(email)!;
 
-    if (log.action === "lead.status") {
-      acc.totalCalls += 1;
+    if (log.action === "lead.status" || log.action === "lead.update") {
       const status = extractStatusFromAudit(log);
-      if (status === "booked") acc.bookedCount += 1;
-      else if (status === "contacted") acc.contactedCount += 1;
-      else if (status === "follow_up") acc.followUpCount += 1;
-      else if (status === "call_not_responded") acc.notRespondedCount += 1;
-      else if (status === "cancelled") acc.cancelledCount += 1;
-      else if (status === "draft") acc.draftCount += 1;
-      else if (status === "new") acc.newCount += 1;
+      if (status) {
+        acc.totalCalls += 1;
+        if (status === "booked") acc.bookedCount += 1;
+        else if (status === "contacted") acc.contactedCount += 1;
+        else if (status === "follow_up") acc.followUpCount += 1;
+        else if (status === "call_not_responded") acc.notRespondedCount += 1;
+        else if (status === "cancelled") acc.cancelledCount += 1;
+        else if (status === "draft") acc.draftCount += 1;
+        else if (status === "new") acc.newCount += 1;
+      }
     }
   }
 
@@ -238,6 +316,18 @@ export async function getDailyStaffReport(
       connectedCalls > 0 ? Math.round((act.bookedCount / connectedCalls) * 100) : 0;
 
     const name = staff.employees?.name || staff.email.split("@")[0];
+    const totalAssigned = assignedCountByStaff.get(staff.id) ?? 0;
+    const pendingCount = pendingCountByStaff.get(staff.id) ?? 0;
+    const qb = queueStatusByStaff.get(staff.id) ?? {
+      new: 0,
+      draft: 0,
+      booked: 0,
+      contacted: 0,
+      follow_up: 0,
+      call_not_responded: 0,
+      cancelled: 0,
+    };
+    const completedCount = Math.max(0, totalAssigned - pendingCount);
 
     staffMetrics.push({
       adminUserId: staff.id,
@@ -254,8 +344,18 @@ export async function getDailyStaffReport(
       newCount: act.newCount,
       connectivityRate,
       conversionRate,
-      totalAssignedLeads: assignedCountByStaff.get(staff.id) ?? 0,
-      pendingUncalledLeads: pendingCountByStaff.get(staff.id) ?? 0,
+      totalAssignedLeads: totalAssigned,
+      pendingUncalledLeads: pendingCount,
+      queueBreakdown: {
+        total: totalAssigned,
+        pending: pendingCount,
+        completed: completedCount,
+        booked: qb.booked,
+        contacted: qb.contacted,
+        follow_up: qb.follow_up,
+        not_responded: qb.call_not_responded,
+        cancelled: qb.cancelled,
+      },
       targetCalls: 35, // Daily calling goal benchmark
     });
 
@@ -290,6 +390,7 @@ export async function getDailyStaffReport(
     startDate,
     endDate,
     isSingleDay,
+    isAllTime,
     totalCalls: summaryTotalCalls,
     totalBookings: summaryTotalBooked,
     totalFollowUps: summaryTotalFollowUp,
@@ -304,21 +405,39 @@ export async function getDailyStaffReport(
 }
 
 /**
- * Get detailed chronological call timeline of a staff member for a given date.
+ * Get detailed chronological call timeline of a staff member for a given date, range, or all time.
  */
-export async function getStaffTimelineForDate(
+export async function getStaffTimeline(
   actorEmail: string,
-  dateStr: string,
+  options?: {
+    date?: string;
+    startDate?: string;
+    endDate?: string;
+    isAllTime?: boolean;
+  },
 ): Promise<StaffTimelineEvent[]> {
-  const { startUtc, endUtc } = istDateToUtcRange(dateStr);
+  const isAllTime = Boolean(options?.isAllTime);
+  const primaryDate = options?.date || getTodayIST();
+  const startDate = options?.startDate || primaryDate;
+  const endDate = options?.endDate || primaryDate;
+  const isSingleDay = !isAllTime && startDate === endDate;
 
-  const { data: logs, error } = await supabase()
+  const { startUtc, endUtc } = isAllTime
+    ? { startUtc: "", endUtc: "" }
+    : isSingleDay
+    ? istDateToUtcRange(primaryDate)
+    : istRangeToUtcRange(startDate, endDate);
+
+  let query = supabase()
     .from("audit_logs")
     .select("id, created_at, action, entity, entity_id, summary, metadata")
-    .eq("actor_email", actorEmail)
-    .gte("created_at", startUtc)
-    .lte("created_at", endUtc)
-    .order("created_at", { ascending: false });
+    .ilike("actor_email", actorEmail);
+
+  if (!isAllTime && startUtc && endUtc) {
+    query = query.gte("created_at", startUtc).lte("created_at", endUtc);
+  }
+
+  const { data: logs, error } = await query.order("created_at", { ascending: false });
 
   if (error) throw error;
   if (!logs || logs.length === 0) return [];
@@ -341,7 +460,8 @@ export async function getStaffTimelineForDate(
     }
   }
 
-  const events: StaffTimelineEvent[] = logs.map((l) => {
+  const events: StaffTimelineEvent[] = logs.map((rawLog) => {
+    const l = unsealAuditMetadata(rawLog);
     const lead = l.entity_id ? leadMap.get(l.entity_id) : undefined;
     const statusTo = extractStatusFromAudit(l);
 
@@ -371,4 +491,14 @@ export async function getStaffTimelineForDate(
   });
 
   return events;
+}
+
+/**
+ * Backward compatible alias for single date timeline
+ */
+export async function getStaffTimelineForDate(
+  actorEmail: string,
+  dateStr: string,
+): Promise<StaffTimelineEvent[]> {
+  return getStaffTimeline(actorEmail, { date: dateStr });
 }

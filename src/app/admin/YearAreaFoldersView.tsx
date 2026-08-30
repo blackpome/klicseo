@@ -187,15 +187,16 @@ export default function YearAreaFoldersView({
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between text-[11px]">
-                    <div className="flex items-center gap-2">
+                  <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between text-[11px] gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-emerald-400 font-semibold flex items-center gap-1">
                         <CheckCircle2 size={12} />
                         {a.bookedCount} booked
                       </span>
-                      {convRate > 0 && (
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 text-[10px] font-bold">
-                          {convRate}%
+                      {a.unassignedCount != null && a.unassignedCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 text-[10px] font-bold inline-flex items-center gap-0.5">
+                          <Zap size={9} className="fill-current" />
+                          {a.unassignedCount} unassigned
                         </span>
                       )}
                     </div>

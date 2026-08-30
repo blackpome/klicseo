@@ -13,6 +13,8 @@ interface Props {
   lists: LeadListRow[];
   availableAreas?: string[];
   allFolders?: Array<{ id: string; name: string; count: number }>;
+  initialCount?: number;
+  isUnassignedFilter?: boolean;
   variant?: "primary" | "secondary" | "toolbar";
   className?: string;
 }
@@ -25,6 +27,8 @@ export default function FolderAllocationButton({
   lists,
   availableAreas,
   allFolders,
+  initialCount,
+  isUnassignedFilter,
   variant = "primary",
   className = "",
 }: Props) {
@@ -44,7 +48,11 @@ export default function FolderAllocationButton({
       >
         <Zap size={14} className="fill-current text-[#050E21]" />
         <span>
-          {folder ? `Allocate Leads (${folderName || "Folder"})` : "Allocate & Schedule"}
+          {isUnassignedFilter && initialCount != null && initialCount > 0
+            ? `⚡ Allocate Unassigned (${initialCount.toLocaleString("en-IN")})`
+            : folder
+            ? `Allocate Leads (${folderName || "Folder"})`
+            : "Allocate & Schedule"}
         </span>
       </button>
 
@@ -58,9 +66,10 @@ export default function FolderAllocationButton({
           folderName={folderName}
           allFolders={allFolders}
           initialCount={
-            folder
+            initialCount ??
+            (folder
               ? allFolders?.find((f) => f.id === folder)?.count
-              : allFolders?.reduce((sum, f) => sum + f.count, 0)
+              : allFolders?.reduce((sum, f) => sum + f.count, 0))
           }
           isOpen={isOpen}
           onClose={() => setIsOpen(false)}

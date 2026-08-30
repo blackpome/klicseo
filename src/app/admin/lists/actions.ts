@@ -156,6 +156,76 @@ export async function addLeadsToListAction(formData: FormData): Promise<{ error?
 }
 
 /**
+ * Create a new lead list and immediately assign selected leads to it.
+ * Used when manually selecting leads in the sheet view and clicking "Create New List".
+ */
+export async function createListAndAssignLeadsAction(formData: FormData): Promise<{
+  ok: boolean;
+  listId?: string;
+  listName?: string;
+  count?: number;
+  error?: string;
+}> {
+  const me = await requirePermission("leads.manage");
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) {
+    return { ok: false, error: "List name is required." };
+  }
+
+  const assigned_admin_user_id_raw = String(formData.get("assigned_admin_user_id") ?? "").trim() || null;
+  const adminRow = me.email ? await getAdminUser(me.email) : null;
+  const assigned_admin_user_id = me.role === "staff" ? (adminRow?.id || null) : assigned_admin_user_id_raw;
+
+  if (assigned_admin_user_id && me.role !== "staff") {
+    const adminUsers = await listAssignableAdminUsers();
+    const allowed = adminUsers.some((u) => u.id === assigned_admin_user_id);
+    if (!allowed) {
+      return { ok: false, error: "Cannot assign to a team member without admin panel access." };
+    }
+  }
+
+  const leadIds = formData.getAll("leadIds") as string[];
+  if (!leadIds || leadIds.length === 0) {
+    return { ok: false, error: "No leads selected to assign." };
+  }
+
+  try {
+    const list = await insertLeadList({
+      name,
+      assigned_admin_user_id,
+    });
+
+    await addLeadsToList(list.id, leadIds);
+
+    await logAudit("lead_list.create_with_leads", {
+      entity: "lead_list",
+      entityId: list.id,
+      summary: `Created lead list "${list.name}" with ${leadIds.length} assigned leads`,
+      metadata: {
+        listId: list.id,
+        listName: list.name,
+        assigned_admin_user_id,
+        leadCount: leadIds.length,
+      },
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/lists");
+    revalidatePath("/admin/my-lists");
+    return {
+      ok: true,
+      listId: list.id,
+      listName: list.name,
+      count: leadIds.length,
+    };
+  } catch (err: any) {
+    console.error("createListAndAssignLeadsAction error:", err);
+    return { ok: false, error: err.message || "Failed to create list and assign leads." };
+  }
+}
+
+/**
  * Remove a lead from a list action.
  */
 export async function removeLeadFromListAction(formData: FormData): Promise<{ error?: string }> {

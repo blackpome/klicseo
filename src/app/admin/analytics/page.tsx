@@ -20,6 +20,10 @@ export default async function AdminAnalyticsPage({
   if (!me || !me.permissions.includes("leads.view")) {
     redirect("/admin");
   }
+  // Staff are restricted from viewing company-wide analytics; redirect to their personal daily reports
+  if (me.role === "staff") {
+    redirect("/admin/reports");
+  }
 
   const { year, area, staff, service, folder, source } = await searchParams;
   const scope = (await resolveScope(me)) ?? { kind: "all" as const };

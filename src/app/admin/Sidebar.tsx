@@ -147,24 +147,24 @@ export default function Sidebar({
                     <Link
                       href={item.href}
                       onClick={() => setOpen(false)}
-                      className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs transition-all ${
+                      className={`group relative flex items-center gap-3 rounded-xl px-3.5 py-3 md:py-2.5 text-xs transition-all min-h-[44px] md:min-h-[38px] ${
                         active
                           ? "bg-gradient-to-r from-[#C9A84C]/20 to-[#C9A84C]/5 text-[#E8CC7A] font-semibold border border-[#C9A84C]/30 shadow-sm"
-                          : "text-white/60 hover:text-white hover:bg-white/[0.04]"
+                          : "text-white/60 hover:text-white hover:bg-white/[0.04] active:bg-white/[0.08]"
                       }`}
                     >
                       {active && (
                         <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[#C9A84C]" />
                       )}
                       <Icon
-                        size={16}
-                        className={`transition-colors ${
+                        size={17}
+                        className={`transition-colors shrink-0 ${
                           active
                             ? "text-[#C9A84C]"
                             : "text-white/40 group-hover:text-white/80"
                         }`}
                       />
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate font-medium">{item.label}</span>
                     </Link>
                   </li>
                 );
@@ -175,7 +175,7 @@ export default function Sidebar({
       </nav>
 
       {/* User Card Footer */}
-      <div className="border-t border-white/[0.08] p-3 bg-white/[0.01]">
+      <div className="border-t border-white/[0.08] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white/[0.01]">
         <div className="flex items-center gap-3 rounded-xl p-2 bg-white/[0.02] border border-white/5">
           <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[10px] font-bold text-[#050E21] bg-gradient-to-br from-[#9C7A2A] via-[#C9A84C] to-[#E8CC7A]">
             {initials}
@@ -190,15 +190,17 @@ export default function Sidebar({
             <button
               type="submit"
               title="Sign out"
-              className="grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:bg-white/10 hover:text-rose-400 transition-colors"
+              className="grid h-8 w-8 place-items-center rounded-lg text-white/40 hover:bg-white/10 hover:text-rose-400 transition-colors"
             >
-              <LogOut size={13} />
+              <LogOut size={14} />
             </button>
           </form>
         </div>
       </div>
     </div>
   );
+
+  const homeHref = role === "staff" ? "/admin/my-lists" : "/admin";
 
   return (
     <>
@@ -207,13 +209,14 @@ export default function Sidebar({
         <button
           onClick={() => setOpen(true)}
           type="button"
-          className="grid h-9 w-9 place-items-center rounded-lg bg-white/5 text-white/70 hover:bg-white/10"
+          aria-label="Open Navigation Menu"
+          className="grid h-9 w-9 place-items-center rounded-xl bg-white/5 text-white/70 hover:bg-white/10 active:scale-95 transition-all"
         >
-          <Menu size={18} />
+          <Menu size={19} />
         </button>
 
         <Link
-          href="/admin"
+          href={homeHref}
           className="text-xs font-bold tracking-[0.2em] uppercase"
           style={{ fontFamily: "var(--font-playfair)" }}
         >
@@ -225,12 +228,14 @@ export default function Sidebar({
 
       {/* Mobile Drawer Overlay */}
       {open && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="relative z-10 w-72 max-w-[80vw] h-full shadow-2xl">
+        <div className="md:hidden fixed inset-0 z-50 flex animate-in fade-in duration-200">
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <div className="relative z-10 w-72 max-w-[85vw] h-full shadow-2xl animate-in slide-in-from-left duration-250">
             <button
               onClick={() => setOpen(false)}
-              className="absolute top-4 right-4 z-20 grid h-8 w-8 place-items-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20"
+              type="button"
+              aria-label="Close menu"
+              className="absolute top-4 right-4 z-20 grid h-8 w-8 place-items-center rounded-xl bg-white/10 text-white/70 hover:bg-white/20 active:scale-95 transition-all"
             >
               <X size={16} />
             </button>

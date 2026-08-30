@@ -5,6 +5,7 @@ import { getAdminUser } from "./admin-users";
 import type { LeadListRow, NewLeadList, LeadListItem } from "./leadLists-shared";
 import type { LeadRow } from "./leads";
 import { sealFields, unsealFields } from "./crypto";
+import { markLeadsAsAssigned, invalidateAssignedLeadsCache } from "./lead-assignments";
 
 interface LeadListsCacheEntry {
   data: LeadListRow[];
@@ -293,6 +294,8 @@ export async function addLeadsToList(listId: string, leadIds: string[]): Promise
     .insert(items);
 
   if (error) throw error;
+
+  markLeadsAsAssigned(uniqueLeadIds);
 }
 
 /**
@@ -302,6 +305,7 @@ export async function addLeadsToList(listId: string, leadIds: string[]): Promise
  */
 export async function removeLeadFromList(listId: string, leadId: string): Promise<void> {
   invalidateLeadListCache();
+  invalidateAssignedLeadsCache();
   const { error } = await supabase()
     .from("lead_list_items")
     .delete()
@@ -403,6 +407,7 @@ export async function updateLeadList(listId: string, updates: Partial<NewLeadLis
  */
 export async function deleteLeadList(listId: string): Promise<void> {
   invalidateLeadListCache();
+  invalidateAssignedLeadsCache();
   // 1. Delete junction table entries
   await supabase()
     .from("lead_list_items")

@@ -3,6 +3,7 @@ import {
   getTodayIST,
   istDateToUtcRange,
   istRangeToUtcRange,
+  unsealAuditMetadata,
 } from "../reports";
 
 describe("Daily Reports Date & Timezone Utilities", () => {
@@ -40,5 +41,40 @@ describe("Daily Reports Date & Timezone Utilities", () => {
     expect(connectedCalls).toBe(30);
     expect(connectivityRate).toBe(75);
     expect(conversionRate).toBe(27);
+  });
+
+  it("calculates queueBreakdown accurately when some leads are pending and some completed", () => {
+    const totalAssigned = 10;
+    const pendingCount = 8; // new + draft
+    const booked = 1;
+    const contacted = 1;
+    const followUp = 0;
+    const notResponded = 0;
+    const cancelled = 0;
+
+    const completedCount = totalAssigned - pendingCount;
+    expect(completedCount).toBe(2);
+
+    const queueBreakdown = {
+      total: totalAssigned,
+      pending: pendingCount,
+      completed: completedCount,
+      booked,
+      contacted,
+      follow_up: followUp,
+      not_responded: notResponded,
+      cancelled,
+    };
+
+    expect(queueBreakdown.completed).toBe(2);
+    expect(queueBreakdown.booked + queueBreakdown.contacted).toBe(2);
+  });
+
+  it("unseals encrypted audit log metadata properly", () => {
+    const rawPlainMeta = { status: "cancelled", notes: "Customer changed mind" };
+    // unsealAuditMetadata should pass through plaintext objects gracefully
+    const unsealed = unsealAuditMetadata({ action: "lead.status", summary: "Set lead status → cancelled", metadata: rawPlainMeta });
+    expect(unsealed.metadata.status).toBe("cancelled");
+    expect(unsealed.metadata.notes).toBe("Customer changed mind");
   });
 });

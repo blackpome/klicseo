@@ -10,11 +10,13 @@ export default function LeadStatusControl({
   status,
   color,
   customStatuses,
+  className = "",
 }: {
   id: string;
   status: LeadStatus;
   color?: string;
   customStatuses?: CustomLeadStatus[];
+  className?: string;
 }) {
   const [pending, start] = useTransition();
   const [currentStatus, setCurrentStatus] = useState<LeadStatus>(status);
@@ -57,9 +59,9 @@ export default function LeadStatusControl({
           }
         });
       }}
-      className={`text-xs font-semibold rounded-md px-2 py-1 bg-transparent border focus:outline-none cursor-pointer transition-opacity ${
+      className={`text-sm sm:text-xs font-semibold rounded-xl sm:rounded-md px-3 sm:px-2 py-2 sm:py-1 min-h-[38px] sm:min-h-[28px] bg-transparent border focus:outline-none cursor-pointer transition-opacity ${
         pending ? "opacity-60" : "opacity-100"
-      }`}
+      } ${className}`}
       style={{ borderColor: `${activeColor}80`, color: activeColor }}
     >
       {options.map((s) => (

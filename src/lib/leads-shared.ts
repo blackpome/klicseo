@@ -140,12 +140,16 @@ export function isHotLead(lead: {
 export function isYearLead(
   lead: {
     source?: string | null;
+    isBulkUpload?: boolean | null;
+    notes?: string | null;
+    custom_fields?: Record<string, any> | null;
     year?: string | null;
     created_at?: string | null;
   },
   targetYear?: string | null
 ): boolean {
   if (isWebsiteFormLead(lead)) return false;
+  if (isHotLead(lead)) return false;
   const yr = lead.year || (lead.created_at ? new Date(lead.created_at).getFullYear().toString() : "2026");
   if (!targetYear || targetYear === "all") return true;
   return yr === targetYear;

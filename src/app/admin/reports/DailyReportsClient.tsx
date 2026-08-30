@@ -36,6 +36,8 @@ interface Props {
   currentUserEmail?: string;
 }
 
+type ReportPreset = "today" | "yesterday" | "last7days" | "thismonth" | "all_time" | "custom";
+
 export default function DailyReportsClient({
   initialSummary,
   currentUserRole = "super_admin",
@@ -53,9 +55,6 @@ export default function DailyReportsClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  // Selected staff for timeline drilldown modal
-  const [selectedStaff, setSelectedStaff] = useState<StaffDailyMetric | null>(null);
-
   // Helper for today in IST
   const todayIST = useMemo(() => {
     const now = new Date();
@@ -69,6 +68,20 @@ export default function DailyReportsClient({
     const y = new Date(now.getTime() + istOffset - 24 * 60 * 60 * 1000);
     return y.toISOString().slice(0, 10);
   }, []);
+
+  // Explicit Preset State
+  const [activePreset, setActivePreset] = useState<ReportPreset>(() => {
+    if (initialSummary.isAllTime) return "all_time";
+    if (initialSummary.isSingleDay) {
+      if (initialSummary.date === todayIST) return "today";
+      if (initialSummary.date === yesterdayIST) return "yesterday";
+      return "custom";
+    }
+    return "custom";
+  });
+
+  // Selected staff for timeline drilldown modal
+  const [selectedStaff, setSelectedStaff] = useState<StaffDailyMetric | null>(null);
 
   // Update report data
   const applyFilter = (filter: DailyReportFilter) => {
@@ -86,6 +99,13 @@ export default function DailyReportsClient({
     setStartDate(newDate);
     setEndDate(newDate);
     setFilterMode("single");
+    if (newDate === todayIST) {
+      setActivePreset("today");
+    } else if (newDate === yesterdayIST) {
+      setActivePreset("yesterday");
+    } else {
+      setActivePreset("custom");
+    }
     applyFilter({ date: newDate, startDate: newDate, endDate: newDate });
   };
 
@@ -93,11 +113,14 @@ export default function DailyReportsClient({
     const curr = new Date(selectedDate + "T00:00:00");
     curr.setDate(curr.getDate() + deltaDays);
     const newDateStr = curr.toISOString().slice(0, 10);
-    handleDateChange(newDateStr);
+    if (newDateStr <= todayIST) {
+      handleDateChange(newDateStr);
+    }
   };
 
   // Quick Preset Handlers
-  const handlePreset = (preset: "today" | "yesterday" | "last7days" | "thismonth") => {
+  const handlePreset = (preset: ReportPreset) => {
+    setActivePreset(preset);
     if (preset === "today") {
       handleDateChange(todayIST);
     } else if (preset === "yesterday") {
@@ -110,7 +133,7 @@ export default function DailyReportsClient({
       setStartDate(s);
       setEndDate(todayIST);
       setFilterMode("range");
-      applyFilter({ startDate: s, endDate: todayIST });
+      applyFilter({ startDate: s, endDate: todayIST, preset: "last7days" });
     } else if (preset === "thismonth") {
       const now = new Date();
       const istOffset = 5.5 * 60 * 60 * 1000;
@@ -122,7 +145,10 @@ export default function DailyReportsClient({
       setStartDate(s);
       setEndDate(todayIST);
       setFilterMode("range");
-      applyFilter({ startDate: s, endDate: todayIST });
+      applyFilter({ startDate: s, endDate: todayIST, preset: "thismonth" });
+    } else if (preset === "all_time") {
+      setFilterMode("range");
+      applyFilter({ isAllTime: true, preset: "all_time" });
     }
   };
 
@@ -130,12 +156,15 @@ export default function DailyReportsClient({
   const handleCustomRangeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!startDate || !endDate) return;
+    setActivePreset("custom");
     setFilterMode("range");
     applyFilter({ startDate, endDate });
   };
 
   // CSV Export URL
-  const exportUrl = summary.isSingleDay
+  const exportUrl = summary.isAllTime
+    ? `/api/admin/reports-export?allTime=true`
+    : summary.isSingleDay
     ? `/api/admin/reports-export?date=${summary.date}`
     : `/api/admin/reports-export?startDate=${summary.startDate}&endDate=${summary.endDate}`;
 
@@ -149,6 +178,9 @@ export default function DailyReportsClient({
   }, [summary.staffMetrics, searchQuery]);
 
   const displayDateLabel = useMemo(() => {
+    if (summary.isAllTime || activePreset === "all_time") {
+      return "All-Time Progress Summary";
+    }
     if (summary.isSingleDay) {
       if (summary.date === todayIST) return "Today's Progress";
       if (summary.date === yesterdayIST) return "Yesterday's Progress";
@@ -159,8 +191,10 @@ export default function DailyReportsClient({
         year: "numeric",
       });
     }
+    if (activePreset === "last7days") return `Last 7 Days (${summary.startDate} to ${summary.endDate})`;
+    if (activePreset === "thismonth") return `This Month (${summary.startDate} to ${summary.endDate})`;
     return `${summary.startDate} to ${summary.endDate}`;
-  }, [summary, todayIST, yesterdayIST]);
+  }, [summary, activePreset, todayIST, yesterdayIST]);
 
   const myMetric = isScopedStaff ? summary.staffMetrics[0] : null;
 
@@ -202,13 +236,13 @@ export default function DailyReportsClient({
       <div className="p-4 sm:p-5 rounded-3xl bg-[#071228] border border-white/10 space-y-4 shadow-xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Quick Presets */}
-          <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
+          <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-white/[0.04] border border-white/[0.08] overflow-x-auto no-scrollbar flex-nowrap sm:flex-wrap max-w-full">
             <button
               type="button"
               onClick={() => handlePreset("today")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                summary.isSingleDay && summary.date === todayIST
-                  ? "bg-[#C9A84C] text-black shadow-md"
+              className={`px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap min-h-[36px] sm:min-h-0 ${
+                activePreset === "today"
+                  ? "bg-[#C9A84C] text-black shadow-md font-bold"
                   : "text-white/60 hover:text-white hover:bg-white/5"
               }`}
             >
@@ -217,9 +251,9 @@ export default function DailyReportsClient({
             <button
               type="button"
               onClick={() => handlePreset("yesterday")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                summary.isSingleDay && summary.date === yesterdayIST
-                  ? "bg-[#C9A84C] text-black shadow-md"
+              className={`px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap min-h-[36px] sm:min-h-0 ${
+                activePreset === "yesterday"
+                  ? "bg-[#C9A84C] text-black shadow-md font-bold"
                   : "text-white/60 hover:text-white hover:bg-white/5"
               }`}
             >
@@ -228,9 +262,9 @@ export default function DailyReportsClient({
             <button
               type="button"
               onClick={() => handlePreset("last7days")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                !summary.isSingleDay && summary.endDate === todayIST && filterMode === "range"
-                  ? "bg-[#C9A84C] text-black shadow-md"
+              className={`px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap min-h-[36px] sm:min-h-0 ${
+                activePreset === "last7days"
+                  ? "bg-[#C9A84C] text-black shadow-md font-bold"
                   : "text-white/60 hover:text-white hover:bg-white/5"
               }`}
             >
@@ -239,13 +273,24 @@ export default function DailyReportsClient({
             <button
               type="button"
               onClick={() => handlePreset("thismonth")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                filterMode === "range" && summary.startDate.endsWith("-01")
-                  ? "bg-[#C9A84C] text-black shadow-md"
+              className={`px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap min-h-[36px] sm:min-h-0 ${
+                activePreset === "thismonth"
+                  ? "bg-[#C9A84C] text-black shadow-md font-bold"
                   : "text-white/60 hover:text-white hover:bg-white/5"
               }`}
             >
               This Month
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePreset("all_time")}
+              className={`px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap min-h-[36px] sm:min-h-0 ${
+                activePreset === "all_time"
+                  ? "bg-[#C9A84C] text-black shadow-md font-bold"
+                  : "text-white/60 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              All Time
             </button>
           </div>
 
@@ -255,7 +300,7 @@ export default function DailyReportsClient({
               type="button"
               onClick={() => shiftDay(-1)}
               title="Previous Day"
-              className="p-2 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+              className="p-2 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/10 text-white/80 hover:text-white transition-colors cursor-pointer"
             >
               <ChevronLeft size={16} />
             </button>
@@ -263,11 +308,12 @@ export default function DailyReportsClient({
             <div className="relative flex items-center">
               <input
                 type="date"
-                value={summary.isSingleDay ? selectedDate : startDate}
+                value={selectedDate}
+                max={todayIST}
                 onChange={(e) => {
                   if (e.target.value) handleDateChange(e.target.value);
                 }}
-                className="px-3.5 py-1.5 rounded-xl bg-white/[0.06] border border-white/15 text-xs text-white font-medium focus:outline-none focus:border-[#C9A84C] [color-scheme:dark]"
+                className="px-3.5 py-1.5 rounded-xl bg-white/[0.06] border border-white/15 text-xs text-white font-medium focus:outline-none focus:border-[#C9A84C] [color-scheme:dark] cursor-pointer"
               />
             </div>
 
@@ -276,7 +322,7 @@ export default function DailyReportsClient({
               onClick={() => shiftDay(1)}
               disabled={selectedDate >= todayIST}
               title="Next Day"
-              className="p-2 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/10 text-white/80 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-2 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/10 text-white/80 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
             >
               <ChevronRight size={16} />
             </button>
@@ -284,7 +330,7 @@ export default function DailyReportsClient({
         </div>
 
         {/* Custom Range Bar (if range mode active) */}
-        {filterMode === "range" && (
+        {filterMode === "range" && activePreset !== "all_time" && (
           <form
             onSubmit={handleCustomRangeSubmit}
             className="flex flex-wrap items-center gap-3 pt-3 border-t border-white/[0.06]"
@@ -293,6 +339,7 @@ export default function DailyReportsClient({
             <input
               type="date"
               value={startDate}
+              max={todayIST}
               onChange={(e) => setStartDate(e.target.value)}
               className="px-3 py-1.5 rounded-xl bg-white/[0.06] border border-white/15 text-xs text-white [color-scheme:dark]"
             />
@@ -300,12 +347,13 @@ export default function DailyReportsClient({
             <input
               type="date"
               value={endDate}
+              max={todayIST}
               onChange={(e) => setEndDate(e.target.value)}
               className="px-3 py-1.5 rounded-xl bg-white/[0.06] border border-white/15 text-xs text-white [color-scheme:dark]"
             />
             <button
               type="submit"
-              className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-colors"
+              className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-colors cursor-pointer"
             >
               Apply Range
             </button>
@@ -368,7 +416,7 @@ export default function DailyReportsClient({
           <div className="text-2xl sm:text-3xl font-extrabold text-white tabular-nums">
             {summary.totalFollowUps}
           </div>
-          <div className="text-[11px] text-amber-400/80 font-medium">Scheduled callbacks</div>
+          <div className="text-[11px] text-amber-400/80 font-medium">Scheduled follow-ups</div>
         </div>
 
         {/* Call Not Responded */}
@@ -386,12 +434,15 @@ export default function DailyReportsClient({
         {/* Active Staff / My Queue */}
         <div className="p-4 rounded-3xl bg-gradient-to-br from-indigo-500/15 via-indigo-500/5 to-transparent border border-indigo-500/30 space-y-1">
           <div className="flex items-center justify-between text-indigo-300">
-            <span className="text-[11px] font-bold uppercase tracking-wider">{isScopedStaff ? "My Queue" : "Active Staff"}</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider">{isScopedStaff ? "My Assigned Queue" : "Active Staff"}</span>
             <UserCheck size={16} />
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-white tabular-nums">
             {isScopedStaff ? (
-              myMetric?.pendingUncalledLeads ?? 0
+              <>
+                <span className="text-amber-400">{myMetric?.pendingUncalledLeads ?? 0}</span>{" "}
+                <span className="text-sm font-normal text-white/40">/ {myMetric?.totalAssignedLeads ?? 0}</span>
+              </>
             ) : (
               <>
                 {summary.activeStaffCount}{" "}
@@ -401,7 +452,15 @@ export default function DailyReportsClient({
           </div>
           <div className="text-[11px] text-indigo-400/80 font-medium">
             {isScopedStaff
-              ? `of ${myMetric?.totalAssignedLeads ?? 0} assigned leads`
+              ? myMetric?.queueBreakdown && myMetric.queueBreakdown.completed > 0
+                ? `${myMetric.queueBreakdown.completed} processed (${[
+                    myMetric.queueBreakdown.booked > 0 ? `${myMetric.queueBreakdown.booked} Booked` : null,
+                    myMetric.queueBreakdown.contacted > 0 ? `${myMetric.queueBreakdown.contacted} Contacted` : null,
+                    myMetric.queueBreakdown.follow_up > 0 ? `${myMetric.queueBreakdown.follow_up} Follow-up` : null,
+                    myMetric.queueBreakdown.not_responded > 0 ? `${myMetric.queueBreakdown.not_responded} No Answer` : null,
+                    myMetric.queueBreakdown.cancelled > 0 ? `${myMetric.queueBreakdown.cancelled} Cancelled` : null,
+                  ].filter(Boolean).join(", ")})`
+                : `${myMetric?.pendingUncalledLeads ?? 0} fresh leads awaiting call`
               : "Calling on this date"}
           </div>
         </div>
@@ -417,7 +476,13 @@ export default function DailyReportsClient({
               {isPending && <RefreshCw size={14} className="animate-spin text-amber-400" />}
             </h2>
             <p className="text-xs text-white/40">
-              {isScopedStaff ? "Your personal performance metrics for this period" : "Ranked by Bookings closed and Call volume"}
+              {isScopedStaff
+                ? activePreset === "all_time"
+                  ? "Your lifetime calling performance and disposition history"
+                  : "Your personal calling activity for this date window (Assigned Queue reflects live status)"
+                : activePreset === "all_time"
+                ? "Team lifetime performance ranked by Bookings closed and Call volume"
+                : "Team calling activity for this date window (Assigned Queue reflects live status)"}
             </p>
           </div>
 
@@ -440,7 +505,9 @@ export default function DailyReportsClient({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-white/[0.08] bg-white/[0.02] text-white/40 font-bold text-[10px] uppercase tracking-wider">
-                <th className="sticky left-0 bg-[#071228] z-20 py-3.5 pl-6 pr-3 min-w-[200px] border-r border-white/[0.04]">Staff / Telecaller</th>
+                <th className="sticky left-0 bg-[#071228] z-20 py-3.5 pl-6 pr-3 min-w-[200px] border-r border-white/[0.04]">
+                  {isScopedStaff ? "Staff Member" : "Staff / Telecaller"}
+                </th>
                 <th className="py-3.5 px-3">Calls Made</th>
                 <th className="py-3.5 px-3 text-emerald-300">🏆 Booked</th>
                 <th className="py-3.5 px-3 text-sky-300">🔄 Contacted</th>
@@ -449,7 +516,7 @@ export default function DailyReportsClient({
                 <th className="py-3.5 px-3 text-purple-300">🔴 Cancelled</th>
                 <th className="py-3.5 px-3 text-right">Pickup %</th>
                 <th className="py-3.5 px-3 text-right">Conv %</th>
-                <th className="py-3.5 px-3">Assigned Queue</th>
+                <th className="py-3.5 px-3 min-w-[180px]">Assigned Queue</th>
                 <th className="py-3.5 pr-6 pl-3 text-right">Action</th>
               </tr>
             </thead>
@@ -548,11 +615,23 @@ export default function DailyReportsClient({
                         {staff.conversionRate}%
                       </td>
 
-                      {/* Queue Stats */}
+                      {/* Queue Stats with Completed Breakdown */}
                       <td className="py-4 px-3">
-                        <div className="text-[11px] text-white/70 tabular-nums">
-                          <span className="font-bold text-white">{staff.pendingUncalledLeads}</span> pending
-                          <span className="text-white/30"> / {staff.totalAssignedLeads}</span>
+                        <div className="space-y-1">
+                          <div className="text-[11px] font-bold text-white tabular-nums flex items-center gap-1">
+                            <span className="text-amber-400">{staff.pendingUncalledLeads} Pending</span>
+                            <span className="text-white/30">/ {staff.totalAssignedLeads} Total</span>
+                          </div>
+                          {staff.queueBreakdown && staff.queueBreakdown.completed > 0 && (
+                            <div className="text-[10px] text-white/50 flex flex-wrap gap-1 items-center">
+                              <span className="text-emerald-400 font-semibold">{staff.queueBreakdown.completed} Done:</span>
+                              {staff.queueBreakdown.booked > 0 && <span className="text-emerald-300 font-medium">{staff.queueBreakdown.booked} Booked</span>}
+                              {staff.queueBreakdown.contacted > 0 && <span className="text-sky-300 font-medium">{staff.queueBreakdown.contacted} Contacted</span>}
+                              {staff.queueBreakdown.follow_up > 0 && <span className="text-amber-300 font-medium">{staff.queueBreakdown.follow_up} Follow-up</span>}
+                              {staff.queueBreakdown.not_responded > 0 && <span className="text-rose-300 font-medium">{staff.queueBreakdown.not_responded} No Answer</span>}
+                              {staff.queueBreakdown.cancelled > 0 && <span className="text-purple-300 font-medium">{staff.queueBreakdown.cancelled} Cancelled</span>}
+                            </div>
+                          )}
                         </div>
                       </td>
 
@@ -564,7 +643,7 @@ export default function DailyReportsClient({
                             e.stopPropagation();
                             setSelectedStaff(staff);
                           }}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-semibold transition-all group-hover:border-amber-400/40"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-semibold transition-all group-hover:border-amber-400/40 cursor-pointer"
                         >
                           <span>Timeline</span>
                           <ArrowUpRight size={12} className="text-amber-400" />
@@ -585,7 +664,11 @@ export default function DailyReportsClient({
           isOpen={Boolean(selectedStaff)}
           onClose={() => setSelectedStaff(null)}
           staff={selectedStaff}
-          date={summary.isSingleDay ? summary.date : summary.endDate}
+          date={summary.isSingleDay ? summary.date : undefined}
+          startDate={summary.startDate}
+          endDate={summary.endDate}
+          isAllTime={summary.isAllTime}
+          displayLabel={displayDateLabel}
         />
       )}
     </div>
